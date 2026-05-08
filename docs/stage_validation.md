@@ -135,6 +135,11 @@ mkdir -p ~/test-whizzard-rw ~/test-whizzard-ro
 echo "writable test data" > ~/test-whizzard-rw/hello.txt
 echo "read-only test data" > ~/test-whizzard-ro/hello.txt
 
+# Ensure the whizzard config directory exists. (ensure_warlock_home()
+# only runs on `whizzard run`, not on `mounts list`, so on a fresh
+# install this directory may not exist yet.)
+mkdir -p ~/.whizzard/config
+
 cat > ~/.whizzard/config/mounts.json <<'JSON'
 {
   "schema_version": 1,
