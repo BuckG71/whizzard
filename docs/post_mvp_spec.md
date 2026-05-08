@@ -425,13 +425,32 @@ Alternative execution environments:
 - Apple Virtualization Framework
 - lightweight microVMs
 
-### Credential Mediation Layer
+### Vault-Mediated Credentials
 
-Instead of exposing raw secrets:
-- scoped credential grants
-- operation-limited credentials
-- temporary tokens
-- approval-gated secrets
+Adopt the OneCLI Agent Vault pattern, as implemented by [NanoClaw](https://docs.nanoclaw.dev/introduction). Real API credentials never enter the container; outbound HTTPS is routed through a host-side gateway that matches requests by host and path, injects the real credential at request time, and forwards. The agent never holds, sees, or can exfiltrate the credential — it is absent from env vars, files, stdin, and `/proc`.
+
+Architecture:
+
+```text
+Agent (in container)
+  ↓ outbound HTTPS request with placeholder/no credential
+Vault Gateway (on host)
+  ↓ matches request, looks up real credential, applies per-agent policy
+External service
+```
+
+Properties:
+- credentials never enter the container, even when access is granted
+- per-agent policy at the gateway (allowed hosts/paths, rate limits, scopes)
+- credential rotation is gateway-only — containers never need updating
+- every credential use is logged at the gateway, independent of agent log
+- pairs with the Phase 4 Shadow Home (vision_and_strategy.md): shadow-test new agents before exposure, then run them in production with vault-mediated credentials. They solve different problems — Shadow Home is observational ("we'd have caught this"), the vault is architectural ("the agent literally cannot exfiltrate").
+
+Implementation direction: integrate with an existing vault implementation (OneCLI, HashiCorp Vault, or similar) rather than build from scratch. Whizzard/Airlock's job is to wire the container's network through the vault; the credential storage and policy engine are someone else's well-tested problem.
+
+Reference implementations:
+- [NanoClaw Agent Vault blog post](https://nanoclaw.dev/blog/nanoclaw-agent-vault/)
+- [NanoClaw security model](https://github.com/qwibitai/nanoclaw/blob/main/docs/SECURITY.md)
 
 ### Session Replay / Audit Visualization
 
