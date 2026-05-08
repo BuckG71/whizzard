@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import Annotated
 
 import typer
@@ -16,9 +15,19 @@ from warlock.config import (
 )
 from warlock.docker_cmd import (
     WARLOCK_IMAGE,
+    _docker_env,
     docker_available,
     image_exists,
     run_shell,
+)
+from warlock.mounts import (
+    MOUNTS_FILE,
+    Mount,
+    MountMode,
+    MountRegistryError,
+    basic_path_sanity_check,
+    load_mounts,
+    resolve_mount_spec,
 )
 
 
@@ -30,8 +39,10 @@ app = typer.Typer(
 )
 profiles_app = typer.Typer(help="Inspect available profiles.")
 image_app = typer.Typer(help="Manage the execution image.")
+mounts_app = typer.Typer(help="Inspect the mount registry.")
 app.add_typer(profiles_app, name="profiles")
 app.add_typer(image_app, name="image")
+app.add_typer(mounts_app, name="mounts")
 
 console = Console()
 
@@ -42,6 +53,14 @@ def run_cmd(
         str,
         typer.Option("--profile", "-p", help="Profile name (e.g. default, build)."),
     ] = "default",
+    mount: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mount", "-m",
+            help="Registered mount name, optionally with mode "
+                 "(e.g. project-alpha or project-alpha:ro). Repeatable.",
+        ),
+    ] = None,
     image: Annotated[
         str,
         typer.Option("--image", help="Container image to use."),
@@ -56,14 +75,36 @@ def run_cmd(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2)
 
+    resolved: list[tuple[Mount, MountMode]] = []
+    if mount:
+        try:
+            registry = load_mounts()
+        except MountRegistryError as e:
+            console.print(f"[red]error loading mounts.json: {e}[/red]")
+            raise typer.Exit(code=2)
+        try:
+            for spec in mount:
+                m, mode = resolve_mount_spec(spec, registry)
+                basic_path_sanity_check(m.host_path)
+                resolved.append((m, mode))
+        except MountRegistryError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=2)
+
     duration = "unlimited" if prof.duration_seconds is None else f"{prof.duration_seconds // 60} min"
     console.print(f"[bold]Airlock Profile:[/bold] {prof.name.upper()}")
     console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Image:[/bold] {image}")
+    if resolved:
+        console.print("[bold]Mounts:[/bold]")
+        for m, mode in resolved:
+            console.print(f"  {m.name} ({mode}): {m.host_path} → {m.container_path()}")
+    else:
+        console.print("[bold]Mounts:[/bold] none")
     console.print()
 
-    result = run_shell(prof, image=image)
+    result = run_shell(prof, image=image, resolved_mounts=resolved)
     raise typer.Exit(code=result.exit_code)
 
 
@@ -86,6 +127,34 @@ def profiles_list_cmd() -> None:
             "allowed" if p.allow_broad_mount else "blocked",
             p.description,
         )
+    console.print(table)
+
+
+@mounts_app.command("list")
+def mounts_list_cmd() -> None:
+    """List registered mounts."""
+    try:
+        registry = load_mounts()
+    except MountRegistryError as e:
+        console.print(f"[red]error loading mounts.json: {e}[/red]")
+        raise typer.Exit(code=2)
+
+    if not registry:
+        console.print(
+            "[yellow]no mounts registered[/yellow]\n"
+            f"create [bold]{MOUNTS_FILE}[/bold] to register named host paths.\n"
+            "see [bold]config/mounts.json.example[/bold] in the repo for the schema."
+        )
+        return
+
+    table = Table(title="Registered Mounts")
+    table.add_column("Name")
+    table.add_column("Host path")
+    table.add_column("Default mode")
+    table.add_column("Description")
+
+    for m in sorted(registry.values(), key=lambda x: x.name):
+        table.add_row(m.name, str(m.host_path), m.default_mode, m.description)
     console.print(table)
 
 
@@ -125,6 +194,7 @@ def image_build_cmd(
     console.print(f"building [bold]{image}[/bold] from {dockerfile} ...")
     completed = subprocess.run(
         ["docker", "build", "-t", image, "-f", str(dockerfile), str(dockerfile.parent)],
+        env=_docker_env(),
     )
     raise typer.Exit(code=completed.returncode)
 

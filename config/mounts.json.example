@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "mounts": {
+    "project-alpha": {
+      "host_path": "~/projects/alpha",
+      "default_mode": "rw",
+      "description": "Alpha project workspace"
+    },
+    "research-notes": {
+      "host_path": "~/research",
+      "default_mode": "ro",
+      "description": "Research notes and references (read-only)"
+    },
+    "shared-data": {
+      "host_path": "/Users/Shared/AgentShared",
+      "default_mode": "rw",
+      "description": "Cross-agent shared workspace"
+    }
+  }
+}

@@ -1,7 +1,10 @@
-"""Stage 1: docker run argv construction."""
+"""Stage 1 + Stage 2: docker run argv construction."""
+
+from pathlib import Path
 
 from warlock.config import get_profile
 from warlock.docker_cmd import build_run_argv
+from warlock.mounts import Mount
 
 
 def test_argv_drops_capabilities_and_blocks_root():
@@ -51,3 +54,42 @@ def test_argv_labels_profile_name():
     argv = build_run_argv(get_profile("build"))
     joined = " ".join(argv)
     assert "warlock.profile=build" in joined
+
+
+# Stage 2 — mount argv
+
+def test_argv_includes_volume_flag_for_each_resolved_mount():
+    m = Mount(name="project-alpha", host_path=Path("/host/alpha"), default_mode="rw")
+    argv = build_run_argv(
+        get_profile("build"),
+        resolved_mounts=[(m, "rw")],
+    )
+    assert "-v" in argv
+    idx = argv.index("-v")
+    assert argv[idx + 1] == "/host/alpha:/mounts/project-alpha:rw"
+
+
+def test_argv_emits_mount_label_with_mode():
+    m = Mount(name="research", host_path=Path("/host/research"), default_mode="ro")
+    argv = build_run_argv(
+        get_profile("default"),
+        resolved_mounts=[(m, "ro")],
+    )
+    assert "warlock.mount.research=ro" in " ".join(argv)
+
+
+def test_argv_handles_multiple_mounts():
+    a = Mount(name="alpha", host_path=Path("/host/a"), default_mode="rw")
+    b = Mount(name="beta", host_path=Path("/host/b"), default_mode="ro")
+    argv = build_run_argv(
+        get_profile("build"),
+        resolved_mounts=[(a, "rw"), (b, "ro")],
+    )
+    joined = " ".join(argv)
+    assert "/host/a:/mounts/alpha:rw" in joined
+    assert "/host/b:/mounts/beta:ro" in joined
+
+
+def test_argv_no_volume_flag_when_no_mounts():
+    argv = build_run_argv(get_profile("default"))
+    assert "-v" not in argv

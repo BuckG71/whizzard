@@ -107,7 +107,147 @@ All of the following must be true:
 
 ## Stage 2 — Mount Registry
 
-*(To be added once Stage 2 lands.)*
+### Setup
+
+Update the install (in-place editable install picks up new modules automatically, but pytest needs a fresh collect):
+
+```sh
+cd /Users/USER/ai-sandbox/airlock-warlock
+source .venv/bin/activate
+git pull
+pytest -v
+```
+
+Expected: previous 13 tests still pass plus 19 new tests (14 in `test_mounts.py` plus 5 mount-aware tests in `test_docker_cmd.py`). 32 total green.
+
+### Step 1: List mounts before any are registered
+
+```sh
+warlock mounts list
+```
+
+Expected: yellow message saying no mounts are registered, with a pointer to `~/.warlock/config/mounts.json` and `config/mounts.json.example`.
+
+### Step 2: Register a couple of test mounts
+
+```sh
+mkdir -p ~/test-warlock-rw ~/test-warlock-ro
+echo "writable test data" > ~/test-warlock-rw/hello.txt
+echo "read-only test data" > ~/test-warlock-ro/hello.txt
+
+cat > ~/.warlock/config/mounts.json <<'JSON'
+{
+  "schema_version": 1,
+  "mounts": {
+    "rw-test": {
+      "host_path": "~/test-warlock-rw",
+      "default_mode": "rw",
+      "description": "writable test mount"
+    },
+    "ro-test": {
+      "host_path": "~/test-warlock-ro",
+      "default_mode": "ro",
+      "description": "read-only test mount"
+    }
+  }
+}
+JSON
+```
+
+### Step 3: Verify the registry is loaded
+
+```sh
+warlock mounts list
+```
+
+Expected: a Rich table showing both `rw-test` and `ro-test` with their resolved host paths and modes.
+
+### Step 4: Run with a single rw mount
+
+```sh
+warlock run --profile build --mount rw-test
+```
+
+Banner should now include a `Mounts:` line. Inside the container:
+
+```sh
+ls /mounts/                       # expected: rw-test
+cat /mounts/rw-test/hello.txt     # expected: writable test data
+echo "agent wrote this" > /mounts/rw-test/agent-output.txt
+exit
+```
+
+Then on the host:
+
+```sh
+cat ~/test-warlock-rw/agent-output.txt   # should show: agent wrote this
+```
+
+### Step 5: Run with a read-only mount
+
+```sh
+warlock run --profile build --mount ro-test
+```
+
+Inside:
+
+```sh
+cat /mounts/ro-test/hello.txt     # expected: read-only test data
+echo "should fail" > /mounts/ro-test/should-fail.txt   # expected: Read-only file system
+exit
+```
+
+### Step 6: Verify the ro→rw cap
+
+```sh
+warlock run --profile build --mount ro-test:rw
+```
+
+Expected: command fails with `mount 'ro-test' is registered as 'ro'; cannot request 'rw'`. Container is NOT launched.
+
+### Step 7: Multiple mounts in one session
+
+```sh
+warlock run --profile build --mount rw-test --mount ro-test
+```
+
+Inside:
+
+```sh
+ls /mounts/                       # expected: ro-test  rw-test
+exit
+```
+
+### Step 8: Unknown mount is rejected
+
+```sh
+warlock run --profile build --mount does-not-exist
+```
+
+Expected: `unknown mount 'does-not-exist'. Available: ro-test, rw-test`. Container is NOT launched.
+
+### Step 9: Confirm Docker hint is suppressed
+
+After any clean `warlock run` exit, the misleading `What's next: Debug this container error with Gordon ...` line should NO LONGER appear.
+
+### Cleanup
+
+```sh
+rm -rf ~/test-warlock-rw ~/test-warlock-ro
+rm ~/.warlock/config/mounts.json    # or keep it for future stages
+```
+
+### Pass criteria
+
+- [ ] All 32 unit tests pass
+- [ ] `warlock mounts list` shows registered entries from `~/.warlock/config/mounts.json`
+- [ ] Mounts appear at `/mounts/<name>` inside the container
+- [ ] `rw` mounts allow writes that persist on the host
+- [ ] `ro` mounts reject writes
+- [ ] Requesting `rw` against an `ro`-default mount is rejected before launch
+- [ ] Unknown mount names are rejected before launch
+- [ ] Multiple `--mount` flags work in a single invocation
+- [ ] No more "Gordon" / "container error" hints from Docker
 
 ---
 
