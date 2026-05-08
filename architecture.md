@@ -73,6 +73,11 @@ Responsibilities:
 - identify agents at the harness boundary
 - route tool execution through Airlock
 - expose capability boundaries
+- **wrap up the harness gracefully before container termination, using harness-native means**
+
+The wrap-up step is required from MVP, not deferred to v1. When a session is about to end (duration expiry, user-initiated stop, or safety termination), Airlock invokes `adapter.wrap_up(grace_seconds)` *before* sending SIGTERM. The adapter's job is to give the harness a chance to finalize its own state via whatever mechanism that harness provides — for example, Hermes has a wrap-up slash command. The grace period is bounded so wrap-up cannot block termination indefinitely.
+
+The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
 Initial adapters:
 - generic shell adapter (MVP)
@@ -177,6 +182,8 @@ The override mechanism is intentional friction. Warnings are not used because th
       "type": "agent",
       "start_command": "hermes start",
       "stop_command": "hermes stop",
+      "wrap_up_command": "/quit",
+      "wrap_up_grace_seconds": 30,
       "working_dir": "~/.hermes",
       "health_check": "hermes status",
       "startup_timeout_seconds": 30,
@@ -199,7 +206,9 @@ The override mechanism is intentional friction. Warnings are not used because th
 
 Required fields: `type`, `start_command`.
 
-Optional fields: `stop_command`, `working_dir`, `health_check`, `startup_timeout_seconds`, `env`.
+Optional fields: `stop_command`, `wrap_up_command`, `wrap_up_grace_seconds`, `working_dir`, `health_check`, `startup_timeout_seconds`, `env`.
+
+The `wrap_up_command` is the string the adapter sends to the harness's interactive interface to trigger graceful wind-down (e.g., a slash command). `wrap_up_grace_seconds` bounds how long Airlock waits for the harness to finish before proceeding to SIGTERM. Adapters whose harnesses do not have a native wrap-up mechanism omit these fields; their `wrap_up()` is a no-op.
 
 The schema is versioned (`schema_version`) so it can be extended without breaking existing configs. The MVP can ship with only `type` and `start_command` populated, but the parser must accept and ignore the optional fields from day one to avoid a breaking config change later.
 

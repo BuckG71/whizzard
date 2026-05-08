@@ -103,9 +103,23 @@ Log:
 - session duration limit (if set)
 - actual session duration
 - expiry reason (user exit / timeout / safety termination)
+- wrap-up event: command sent, response received or timeout, duration consumed
+- whether SIGTERM was sufficient or SIGKILL was required
 - exit status
 
 Session duration is a first-class field. Time-bounded sessions are a primary safety primitive and must be enforced, not advisory.
+
+Termination flow:
+
+```text
+1. T-minus wrap_up_grace_seconds: adapter.wrap_up() invoked
+2. Adapter sends harness-native wrap-up signal, waits for confirmation (bounded by grace)
+3. SIGTERM sent to container
+4. Short final grace (5s) for clean shutdown
+5. SIGKILL if still running
+```
+
+Each step is logged with timestamps so a session's wind-down is fully auditable.
 
 ### Stage 6 — Safety Validation
 
@@ -122,6 +136,14 @@ Specifically:
 First adapter: generic shell adapter.
 
 This proves the harness abstraction architecture before any harness-specific integration. The adapter contract and `harnesses.json` schema are defined in [architecture.md](architecture.md).
+
+The MVP adapter interface includes:
+- `launch(workspace, config)` — start the harness inside the container
+- `stop()` — clean shutdown
+- `wrap_up(grace_seconds)` — invoke the harness's native graceful-shutdown mechanism (no-op for generic shell)
+- `health_check()` — confirm harness is ready
+
+The wrap_up method must exist from MVP so the Hermes adapter (Stage 8) can implement it without an interface change.
 
 ### Stage 8 — Hermes Integration
 

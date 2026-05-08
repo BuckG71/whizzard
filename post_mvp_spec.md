@@ -266,6 +266,18 @@ session flag (--duration) overrides
 
 Unlimited sessions must be explicit, not the silent default for misconfigured policies.
 
+### v1 Additions to Duration Handling
+
+The MVP ships with enforced expiry plus harness-native wrap-up via `adapter.wrap_up()` (see [architecture.md](architecture.md) and [mvp_build_plan.md](mvp_build_plan.md)). v1 extends the surrounding UX:
+
+- **Extend-session prompt**: at N minutes before expiry (default 5), prompt the user — terminal locally, Discord remotely — with "extend by X?" Default extension X is configurable per profile.
+- **Maximum-extension cap**: each profile declares a hard ceiling on total session duration so extensions cannot accumulate indefinitely.
+- **`/warlock extend <session-id> <duration>`**: Discord command to extend an active session from mobile.
+- **Adapter `pre_terminate` hook**: a richer adapter callback (distinct from `wrap_up`) that runs before wrap_up and lets the adapter perform structured state checkpointing — e.g., serializing the harness's conversation history to a mounted volume so a follow-up session can resume.
+- **Auto-extend on user activity**: optional per-profile setting to extend automatically when the user is actively interacting (vs idle). Off by default; opt-in only.
+
+Session checkpointing (full serialize/resume across sessions) is v2 work; v1 only provides the hooks for it.
+
 ---
 
 ## 6. Image Management at Runtime
