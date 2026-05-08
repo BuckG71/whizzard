@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "harnesses": {
+    "generic": {
+      "type": "shell",
+      "start_command": "/bin/bash",
+      "description": "plain interactive bash shell — the default harness"
+    },
+    "bash-login": {
+      "type": "shell",
+      "start_command": "/bin/bash -l",
+      "working_dir": "/home/whizzard",
+      "env": {
+        "EXAMPLE": "1"
+      },
+      "description": "login shell variant with example env injection"
+    },
+    "hermes": {
+      "type": "agent",
+      "start_command": "hermes chat",
+      "stop_command": "hermes stop",
+      "wrap_up_command": "/quit",
+      "wrap_up_grace_seconds": 30,
+      "working_dir": "/home/whizzard",
+      "health_check": "hermes status",
+      "startup_timeout_seconds": 30,
+      "env": {
+        "HERMES_HOME": "/home/whizzard/.hermes"
+      },
+      "description": "Hermes adapter (lands in Stage 8; type=agent not yet wired)"
+    }
+  }
+}

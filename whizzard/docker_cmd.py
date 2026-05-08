@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from whizzard.adapters import GenericShellAdapter, HarnessAdapter
 from whizzard.config import Profile, STATE_DIR
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
@@ -83,14 +84,25 @@ def build_run_argv(
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
     session_id: str | None = None,
     cidfile: Path | None = None,
+    adapter: HarnessAdapter | None = None,
 ) -> list[str]:
-    """Build the `docker run` argv applying baseline + profile + mounts.
+    """Build the `docker run` argv applying baseline + profile + mounts + adapter.
 
     Stage 5 additions:
       - --cidfile writes the container ID for end-of-session logging
       - --label whizzard.session_id=<uuid> ties container metadata back to
         the JSONL session log
+
+    Stage 7 additions:
+      - adapter chooses the in-container start_command (defaults to
+        GenericShellAdapter / /bin/bash)
+      - adapter.container_env() vars passed via -e
+      - adapter.working_dir() passed via -w
+      - whizzard.harness=<name> label for traceability
     """
+    if adapter is None:
+        adapter = GenericShellAdapter()
+
     argv = [
         "docker", "run",
         "--rm",
@@ -108,6 +120,7 @@ def build_run_argv(
         argv += ["--network", "none"]
 
     argv += ["--label", f"whizzard.profile={profile.name}"]
+    argv += ["--label", f"whizzard.harness={adapter.name}"]
 
     if session_id:
         argv += ["--label", f"whizzard.session_id={session_id}"]
@@ -119,7 +132,16 @@ def build_run_argv(
         argv += ["-v", mount.docker_volume_arg(mode)]
         argv += ["--label", f"whizzard.mount.{mount.name}={mode}"]
 
-    argv += [image, "/bin/bash"]
+    # Adapter-driven env injection. Sorted for deterministic argv (helps tests).
+    for k, v in sorted(adapter.container_env().items()):
+        argv += ["-e", f"{k}={v}"]
+
+    wd = adapter.working_dir()
+    if wd:
+        argv += ["-w", wd]
+
+    argv += [image]
+    argv += adapter.start_command()
     return argv
 
 
@@ -143,6 +165,7 @@ def run_shell(
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
     session_id: str | None = None,
     overrides_used: list[dict] | None = None,
+    adapter: HarnessAdapter | None = None,
 ) -> RunResult:
     """Launch a contained interactive shell. Blocks until the shell exits.
 
@@ -171,12 +194,16 @@ def run_shell(
     if cidfile.exists():
         cidfile.unlink()
 
+    if adapter is None:
+        adapter = GenericShellAdapter()
+
     argv = build_run_argv(
         profile,
         image,
         resolved_mounts=resolved_mounts,
         session_id=session_id,
         cidfile=cidfile,
+        adapter=adapter,
     )
 
     image_id = get_image_id(image)

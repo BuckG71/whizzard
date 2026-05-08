@@ -1,7 +1,8 @@
-"""Stage 1 + Stage 2: docker run argv construction."""
+"""Stages 1, 2, 5, 7: docker run argv construction."""
 
 from pathlib import Path
 
+from whizzard.adapters import GenericShellAdapter
 from whizzard.config import get_profile
 from whizzard.docker_cmd import build_run_argv
 from whizzard.mounts import Mount
@@ -118,3 +119,55 @@ def test_argv_omits_cidfile_when_not_provided():
 def test_argv_omits_session_label_when_no_session_id():
     argv = build_run_argv(get_profile("default"))
     assert "whizzard.session_id" not in " ".join(argv)
+
+
+# Stage 7 — adapter-driven argv
+
+def test_argv_default_adapter_runs_bash():
+    argv = build_run_argv(get_profile("default"))
+    # Image followed by start_command at the end of argv
+    assert argv[-1] == "/bin/bash"
+
+
+def test_argv_uses_adapter_start_command():
+    adapter = GenericShellAdapter(config={"start_command": "/bin/zsh"})
+    argv = build_run_argv(get_profile("default"), adapter=adapter)
+    assert argv[-1] == "/bin/zsh"
+
+
+def test_argv_uses_adapter_multi_arg_start_command():
+    adapter = GenericShellAdapter(config={"start_command": "/bin/bash -l"})
+    argv = build_run_argv(get_profile("default"), adapter=adapter)
+    # Last two argv entries should be the split command
+    assert argv[-2:] == ["/bin/bash", "-l"]
+
+
+def test_argv_includes_adapter_env_vars():
+    adapter = GenericShellAdapter(config={"env": {"K": "v"}})
+    argv = build_run_argv(get_profile("default"), adapter=adapter)
+    assert "-e" in argv
+    assert "K=v" in argv
+
+
+def test_argv_includes_adapter_working_dir():
+    adapter = GenericShellAdapter(config={"working_dir": "/home/whizzard"})
+    argv = build_run_argv(get_profile("default"), adapter=adapter)
+    assert "-w" in argv
+    idx = argv.index("-w")
+    assert argv[idx + 1] == "/home/whizzard"
+
+
+def test_argv_omits_w_flag_when_no_working_dir():
+    argv = build_run_argv(get_profile("default"))
+    assert "-w" not in argv
+
+
+def test_argv_includes_harness_label():
+    adapter = GenericShellAdapter(name="custom-harness")
+    argv = build_run_argv(get_profile("default"), adapter=adapter)
+    assert "whizzard.harness=custom-harness" in " ".join(argv)
+
+
+def test_argv_default_harness_label_is_generic():
+    argv = build_run_argv(get_profile("default"))
+    assert "whizzard.harness=generic" in " ".join(argv)

@@ -8,6 +8,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from whizzard.adapters import (
+    HarnessAdapter,
+    UnknownHarnessTypeError,
+    build_adapter,
+)
 from whizzard.config import (
     PROFILES_FILE,
     ProfileConfigError,
@@ -23,6 +28,13 @@ from whizzard.docker_cmd import (
     docker_available,
     image_exists,
     run_shell,
+)
+from whizzard.harness_config import (
+    HARNESSES_FILE,
+    HarnessConfigError,
+    default_harnesses,
+    get_harness_config,
+    load_harnesses,
 )
 from whizzard.mounts import (
     MOUNTS_FILE,
@@ -46,10 +58,12 @@ profiles_app = typer.Typer(help="Inspect available profiles.")
 image_app = typer.Typer(help="Manage the execution image.")
 mounts_app = typer.Typer(help="Inspect the mount registry.")
 sessions_app = typer.Typer(help="Inspect the session log.")
+harnesses_app = typer.Typer(help="Inspect the harness registry.")
 app.add_typer(profiles_app, name="profiles")
 app.add_typer(image_app, name="image")
 app.add_typer(mounts_app, name="mounts")
 app.add_typer(sessions_app, name="sessions")
+app.add_typer(harnesses_app, name="harnesses")
 
 console = Console()
 
@@ -93,6 +107,13 @@ def run_cmd(
                  "registered mounts. Requires a profile that permits this.",
         ),
     ] = False,
+    harness: Annotated[
+        str,
+        typer.Option(
+            "--harness",
+            help="Named harness from harnesses.json (default: generic shell).",
+        ),
+    ] = "generic",
 ) -> None:
     """Launch a contained shell session under the given profile."""
     try:
@@ -102,6 +123,18 @@ def run_cmd(
         raise typer.Exit(code=2)
     except ProfileConfigError as e:
         console.print(f"[red]error loading profiles.json: {e}[/red]")
+        raise typer.Exit(code=2)
+
+    # Resolve the harness adapter from harnesses.json.
+    try:
+        harness_cfg = get_harness_config(harness)
+    except HarnessConfigError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=2)
+    try:
+        adapter = build_adapter(harness, harness_cfg)
+    except UnknownHarnessTypeError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2)
 
     resolved: list[tuple[Mount, MountMode]] = []
@@ -145,6 +178,7 @@ def run_cmd(
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")
     console.print(f"[bold]Image:[/bold] {image}")
+    console.print(f"[bold]Harness:[/bold] {adapter.name}")
     console.print(f"[bold]Session ID:[/bold] {session_id}")
     if resolved:
         console.print("[bold]Mounts:[/bold]")
@@ -161,7 +195,11 @@ def run_cmd(
     if dry_run:
         import shlex
         argv = build_run_argv(
-            prof, image=image, resolved_mounts=resolved, session_id=session_id,
+            prof,
+            image=image,
+            resolved_mounts=resolved,
+            session_id=session_id,
+            adapter=adapter,
         )
         console.print("[bold]docker invocation that would run:[/bold]")
         console.print("  " + " ".join(shlex.quote(a) for a in argv))
@@ -188,6 +226,7 @@ def run_cmd(
         resolved_mounts=resolved,
         session_id=session_id,
         overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
+        adapter=adapter,
     )
     raise typer.Exit(code=result.exit_code)
 
@@ -349,6 +388,62 @@ def sessions_tail_cmd(
 def sessions_path_cmd() -> None:
     """Print the path to the session log."""
     console.print(str(SESSIONS_LOG))
+
+
+@harnesses_app.command("list")
+def harnesses_list_cmd() -> None:
+    """List configured harnesses (from harnesses.json or bundled defaults)."""
+    try:
+        harnesses = load_harnesses()
+    except HarnessConfigError as e:
+        console.print(f"[red]error loading harnesses.json: {e}[/red]")
+        raise typer.Exit(code=2)
+
+    source = "user config" if HARNESSES_FILE.exists() else "bundled defaults"
+    title = f"Harnesses ({source})"
+    table = Table(title=title)
+    table.add_column("Name")
+    table.add_column("Type")
+    table.add_column("Start command")
+    table.add_column("Wrap-up command")
+    table.add_column("Description")
+
+    for name in sorted(harnesses):
+        spec = harnesses[name]
+        table.add_row(
+            name,
+            spec.get("type", ""),
+            spec.get("start_command", ""),
+            spec.get("wrap_up_command", "—"),
+            spec.get("description", ""),
+        )
+    console.print(table)
+
+
+@harnesses_app.command("init")
+def harnesses_init_cmd(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing harnesses.json."),
+    ] = False,
+) -> None:
+    """Write the bundled default harnesses to ~/.whizzard/config/harnesses.json."""
+    import json
+
+    if HARNESSES_FILE.exists() and not force:
+        console.print(
+            f"[yellow]{HARNESSES_FILE} already exists.[/yellow] "
+            "use [bold]--force[/bold] to overwrite."
+        )
+        raise typer.Exit(code=1)
+
+    payload = {"schema_version": 1, "harnesses": default_harnesses()}
+    HARNESSES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    console.print(f"[green]wrote[/green] {HARNESSES_FILE}")
+    console.print(
+        "edit it to add new harnesses. "
+        "select one at run time with [bold]whizzard run --harness <name>[/bold]."
+    )
 
 
 if __name__ == "__main__":
