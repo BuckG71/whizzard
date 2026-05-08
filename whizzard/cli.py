@@ -19,6 +19,7 @@ from whizzard.config import (
 from whizzard.docker_cmd import (
     WHIZZARD_IMAGE,
     _docker_env,
+    build_run_argv,
     docker_available,
     image_exists,
     run_shell,
@@ -74,6 +75,13 @@ def run_cmd(
         str,
         typer.Option("--image", help="Container image to use."),
     ] = WHIZZARD_IMAGE,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show what would happen without launching the container.",
+        ),
+    ] = False,
 ) -> None:
     """Launch a contained shell session under the given profile."""
     try:
@@ -102,9 +110,12 @@ def run_cmd(
             raise typer.Exit(code=2)
 
     duration = "unlimited" if prof.duration_seconds is None else f"{prof.duration_seconds // 60} min"
+    if dry_run:
+        console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
     console.print(f"[bold]Airlock Profile:[/bold] {prof.name.upper()}")
     console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
     console.print(f"[bold]Duration:[/bold] {duration}")
+    console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")
     console.print(f"[bold]Image:[/bold] {image}")
     if resolved:
         console.print("[bold]Mounts:[/bold]")
@@ -113,6 +124,15 @@ def run_cmd(
     else:
         console.print("[bold]Mounts:[/bold] none")
     console.print()
+
+    if dry_run:
+        import shlex
+        argv = build_run_argv(prof, image=image, resolved_mounts=resolved)
+        console.print("[bold]docker invocation that would run:[/bold]")
+        console.print("  " + " ".join(shlex.quote(a) for a in argv))
+        # Note: image existence is NOT checked here — dry-run reports intent.
+        # If the image is missing, an actual `whizzard run` would surface that.
+        raise typer.Exit(code=0)
 
     result = run_shell(prof, image=image, resolved_mounts=resolved)
     raise typer.Exit(code=result.exit_code)

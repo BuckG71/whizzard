@@ -413,7 +413,105 @@ whizzard profiles init --force
 
 ## Stage 4 — Dry Run
 
-*(To be added once Stage 4 lands.)*
+### Setup
+
+```sh
+cd /Users/bg1971/ai-sandbox/airlock-warlock
+source venv/bin/activate
+pytest -v
+```
+
+Expected: 55 tests pass (46 prior + 9 new in `test_cli_dry_run.py`).
+
+### Step 1: Basic dry-run
+
+```sh
+whizzard run --profile default --dry-run
+```
+
+Expected:
+- Yellow `DRY RUN — no container will be launched.` banner at the top
+- The standard profile summary (Airlock Profile, Network, Duration, Broad-mount override, Image, Mounts)
+- A `docker invocation that would run:` block showing the full docker command, copy-pasteable
+- Exits cleanly with code 0
+- **No container launches** — your shell prompt returns immediately, no bash session inside
+
+### Step 2: Dry-run with a mount
+
+Assuming you still have `rw-test` registered from Stage 2:
+
+```sh
+whizzard run --profile build --mount rw-test --dry-run
+```
+
+Expected:
+- Mounts section shows `rw-test (rw): /Users/bg1971/test-whizzard-rw → /mounts/rw-test`
+- The docker argv includes `-v '/Users/bg1971/test-whizzard-rw:/mounts/rw-test:rw'`
+- Still no container launched
+
+### Step 3: Dry-run surfaces all profiles
+
+Run dry-run for each profile and confirm the duration / network / broad-mount fields update accordingly:
+
+```sh
+whizzard run --profile safe --dry-run        # Network: disabled, Duration: 30 min
+whizzard run --profile default --dry-run     # Network: enabled, Duration: unlimited
+whizzard run --profile build --dry-run       # Network: enabled, Duration: 120 min
+whizzard run --profile power --dry-run       # Broad-mount override: allowed
+whizzard run --profile quarantine --dry-run  # Network: disabled
+```
+
+Each should produce a complete preview without launching anything.
+
+### Step 4: Dry-run errors are still caught
+
+```sh
+whizzard run --profile nope --dry-run
+```
+
+Expected: red `Unknown profile: 'nope'` error, exit code 2. No banner printed.
+
+```sh
+whizzard run --profile default --mount does-not-exist --dry-run
+```
+
+Expected: red `unknown mount 'does-not-exist'` error, exit code 2.
+
+### Step 5: Image existence is NOT checked in dry-run
+
+Dry-run shows intent regardless of whether the image is built:
+
+```sh
+whizzard run --profile default --image bogus-image:does-not-exist --dry-run
+```
+
+Expected: full preview prints, including `Image: bogus-image:does-not-exist` in the summary and in the docker argv. Exit code 0. Without `--dry-run`, the same command would fail with an "image not found" error — but dry-run is for previewing intent, so it doesn't gate on the image.
+
+### Step 6: Sanity — without dry-run, container still launches
+
+```sh
+whizzard run --profile default
+```
+
+Inside the container:
+
+```sh
+exit
+```
+
+Expected: container actually runs, prompt returns. Confirms dry-run flag wasn't accidentally stuck on.
+
+### Pass criteria
+
+- [ ] All 55 unit tests pass
+- [ ] `--dry-run` prints the DRY RUN banner and full profile/mount summary
+- [ ] `--dry-run` prints the full docker argv that *would* run
+- [ ] `--dry-run` does NOT launch a container (no shell prompt inside one)
+- [ ] Mounts in the summary match `-v` lines in the argv
+- [ ] Profile resolution errors still produce clean messages under `--dry-run`
+- [ ] Mount registry errors still produce clean messages under `--dry-run`
+- [ ] Image absence is NOT a dry-run failure
+- [ ] Without `--dry-run`, `whizzard run` still launches normally
 
 ---
 
