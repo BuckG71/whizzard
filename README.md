@@ -1,4 +1,4 @@
-# Airlock / Warlock
+# Airlock / Whizzard
 
 Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
 
@@ -8,7 +8,7 @@ Local capability governance for AI agents. Run powerful agent harnesses inside e
 
 ## What this is
 
-See [docs/vision_and_strategy.md](docs/vision_and_strategy.md). In one sentence: Warlock is the orchestrator, Airlock is the containment layer it operates inside.
+See [docs/vision_and_strategy.md](docs/vision_and_strategy.md). In one sentence: Whizzard is the orchestrator, Airlock is the containment layer it operates inside.
 
 The core invariant:
 
@@ -28,7 +28,7 @@ Agents do not grant themselves capabilities.
 
 ```sh
 git clone <this-repo>
-cd airlock-warlock
+cd airlock-whizzard
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -39,21 +39,21 @@ pip install -e .
 Build the execution image:
 
 ```sh
-warlock image build
-warlock image status
+whizzard image build
+whizzard image status
 ```
 
 Launch a contained shell under the default profile:
 
 ```sh
-warlock run --profile default
+whizzard run --profile default
 ```
 
 You should see an `Airlock Profile: DEFAULT` banner followed by a bash prompt inside the container. Confirm containment by trying to access the host home directory:
 
 ```sh
 ls /Users/$USER   # should fail or show nothing — host home is not mounted
-whoami            # should print "warlock", not your host user
+whoami            # should print "whizzard", not your host user
 ```
 
 Exit with `exit` or `Ctrl-D`.
@@ -61,7 +61,7 @@ Exit with `exit` or `Ctrl-D`.
 ## Available profiles
 
 ```sh
-warlock profiles list
+whizzard profiles list
 ```
 
 Profiles available in Stage 1: `safe`, `default`, `build`, `power`, `quarantine`. The `default` profile is the always-on baseline (network enabled, no mounts, no expiry); other profiles add or remove capabilities.
@@ -69,8 +69,8 @@ Profiles available in Stage 1: `safe`, `default`, `build`, `power`, `quarantine`
 ## Repository layout
 
 ```
-airlock-warlock/
-  warlock/         # Python package
+airlock-whizzard/
+  whizzard/         # Python package
   docker/          # execution image
   config/          # JSON configs (populated in later stages)
   scripts/         # profile wrapper scripts (populated in later stages)

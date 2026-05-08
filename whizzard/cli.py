@@ -1,4 +1,4 @@
-"""Airlock/Warlock CLI entry point."""
+"""Airlock/Whizzard CLI entry point."""
 
 from __future__ import annotations
 
@@ -8,19 +8,19 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from warlock.config import (
-    ensure_warlock_home,
+from whizzard.config import (
+    ensure_whizzard_home,
     get_profile,
     list_profiles,
 )
-from warlock.docker_cmd import (
-    WARLOCK_IMAGE,
+from whizzard.docker_cmd import (
+    WHIZZARD_IMAGE,
     _docker_env,
     docker_available,
     image_exists,
     run_shell,
 )
-from warlock.mounts import (
+from whizzard.mounts import (
     MOUNTS_FILE,
     Mount,
     MountMode,
@@ -32,8 +32,8 @@ from warlock.mounts import (
 
 
 app = typer.Typer(
-    name="warlock",
-    help="Airlock/Warlock — local capability governance for AI agents.",
+    name="whizzard",
+    help="Airlock/Whizzard — local capability governance for AI agents.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -64,10 +64,10 @@ def run_cmd(
     image: Annotated[
         str,
         typer.Option("--image", help="Container image to use."),
-    ] = WARLOCK_IMAGE,
+    ] = WHIZZARD_IMAGE,
 ) -> None:
     """Launch a contained shell session under the given profile."""
-    ensure_warlock_home()
+    ensure_whizzard_home()
 
     try:
         prof = get_profile(profile)
@@ -162,7 +162,7 @@ def mounts_list_cmd() -> None:
 def image_status_cmd(
     image: Annotated[
         str, typer.Option("--image", help="Image name.")
-    ] = WARLOCK_IMAGE,
+    ] = WHIZZARD_IMAGE,
 ) -> None:
     """Show current execution image status."""
     if not docker_available():
@@ -173,16 +173,16 @@ def image_status_cmd(
         console.print(f"[green]image[/green] {image} is present")
     else:
         console.print(f"[yellow]image[/yellow] {image} is NOT present")
-        console.print("build it with: [bold]warlock image build[/bold]")
+        console.print("build it with: [bold]whizzard image build[/bold]")
 
 
 @image_app.command("build")
 def image_build_cmd(
     image: Annotated[
         str, typer.Option("--image", help="Image tag to build.")
-    ] = WARLOCK_IMAGE,
+    ] = WHIZZARD_IMAGE,
 ) -> None:
-    """Build the Warlock execution image from docker/Dockerfile."""
+    """Build the Whizzard execution image from docker/Dockerfile."""
     import subprocess
     from pathlib import Path
 

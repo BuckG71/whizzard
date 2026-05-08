@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "warlock"
+name = "whizzard"
 version = "0.1.0"
-description = "Airlock/Warlock — local capability governance layer for AI agents"
+description = "Airlock/Whizzard — local capability governance layer for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -22,10 +22,10 @@ dev = [
 ]
 
 [project.scripts]
-warlock = "warlock.cli:app"
+whizzard = "whizzard.cli:app"
 
 [tool.setuptools.packages.find]
-include = ["warlock*"]
+include = ["whizzard*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

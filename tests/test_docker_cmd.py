@@ -2,16 +2,16 @@
 
 from pathlib import Path
 
-from warlock.config import get_profile
-from warlock.docker_cmd import build_run_argv
-from warlock.mounts import Mount
+from whizzard.config import get_profile
+from whizzard.docker_cmd import build_run_argv
+from whizzard.mounts import Mount
 
 
 def test_argv_drops_capabilities_and_blocks_root():
     argv = build_run_argv(get_profile("default"))
     joined = " ".join(argv)
     assert "--cap-drop=ALL" in argv
-    assert "--user" in argv and "warlock" in argv
+    assert "--user" in argv and "whizzard" in argv
     assert "--security-opt" in argv and "no-new-privileges" in joined
     assert "--read-only" in argv
 
@@ -26,7 +26,7 @@ def test_argv_no_host_home_mount():
     joined = " ".join(argv)
     # No bind mount of typical host paths
     assert "/Users/" not in joined
-    assert "/home/" not in joined or "/home/warlock" in joined  # only the in-container home is allowed
+    assert "/home/" not in joined or "/home/whizzard" in joined  # only the in-container home is allowed
 
 
 def test_network_disabled_for_safe_profile():
@@ -53,7 +53,7 @@ def test_argv_includes_init_and_rm():
 def test_argv_labels_profile_name():
     argv = build_run_argv(get_profile("build"))
     joined = " ".join(argv)
-    assert "warlock.profile=build" in joined
+    assert "whizzard.profile=build" in joined
 
 
 # Stage 2 — mount argv
@@ -75,7 +75,7 @@ def test_argv_emits_mount_label_with_mode():
         get_profile("default"),
         resolved_mounts=[(m, "ro")],
     )
-    assert "warlock.mount.research=ro" in " ".join(argv)
+    assert "whizzard.mount.research=ro" in " ".join(argv)
 
 
 def test_argv_handles_multiple_mounts():

@@ -1,12 +1,12 @@
-# Airlock / Warlock — Vision & Strategy
+# Airlock / Whizzard — Vision & Strategy
 
-This document is the single source of truth for what Airlock/Warlock is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
+This document is the single source of truth for what Airlock/Whizzard is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
 
 ---
 
 ## Core Thesis
 
-Airlock/Warlock is a local-first capability governance layer for running powerful AI agents with explicit, temporary, human-readable permission boundaries.
+Airlock/Whizzard is a local-first capability governance layer for running powerful AI agents with explicit, temporary, human-readable permission boundaries.
 
 The system exists to prove:
 
@@ -20,7 +20,7 @@ Useful autonomous agents can coexist with practical local security boundaries.
 
 | Component  | Role                                              |
 |------------|---------------------------------------------------|
-| Warlock    | Agent runtime / orchestrator                      |
+| Whizzard    | Agent runtime / orchestrator                      |
 | Airlock    | Permission and containment layer                  |
 | Breaker    | Behavioral interruption engine (post-MVP)         |
 | Quarantine | High-risk execution mode                          |
@@ -28,14 +28,14 @@ Useful autonomous agents can coexist with practical local security boundaries.
 Verbal framing:
 
 ```text
-Warlock operates.
+Whizzard operates.
 Airlock governs.
 ```
 
 or:
 
 ```text
-Warlock executes inside Airlock.
+Whizzard executes inside Airlock.
 ```
 
 ---
@@ -70,7 +70,7 @@ Useful autonomous agents without unrestricted machine access.
 
 ### Competitive Framing
 
-Airlock/Warlock is NOT intended to compete with:
+Airlock/Whizzard is NOT intended to compete with:
 - Claude Code
 - Codex
 - Cursor
@@ -85,7 +85,7 @@ It targets:
 Tagline:
 
 ```text
-Airlock/Warlock corrals local AI agent harnesses.
+Airlock/Whizzard corrals local AI agent harnesses.
 ```
 
 ---
@@ -115,7 +115,7 @@ The terminology should map directly to the operational model.
 Example:
 
 ```zsh
-warlock run --profile coding --mount project-alpha
+whizzard run --profile coding --mount project-alpha
 ```
 
 Output:
@@ -144,7 +144,7 @@ Approval required
 
 ### The Mount List IS the Permission Model
 
-Capability grants in Airlock/Warlock are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
+Capability grants in Airlock/Whizzard are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
 
 - visible permissions
 - temporary capability grants
@@ -273,7 +273,7 @@ Most current agent systems focus on:
 - container isolation
 - permission prompts
 
-Airlock/Warlock instead focuses on:
+Airlock/Whizzard instead focuses on:
 
 ```text
 dynamic capability governance
@@ -281,7 +281,7 @@ dynamic capability governance
 
 As autonomous local agents become more capable, users will increasingly need practical capability governance — rather than unrestricted trust or unusably restrictive sandboxes.
 
-Airlock/Warlock attempts to occupy the middle ground:
+Airlock/Whizzard attempts to occupy the middle ground:
 - useful enough to matter
 - controlled enough to trust
 - simple enough to use daily
