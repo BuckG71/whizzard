@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,16 +149,12 @@ def run_shell(
     around the subprocess call. Container ID is captured via --cidfile;
     image ID via `docker image inspect`.
     """
+    # Defensive: callers (cli.py) should pre-flight these and surface red
+    # errors. If we land here without docker or the image, return an error
+    # exit code silently — no stderr writes — so we don't double-report.
     if not docker_available():
-        print("error: docker not found on PATH", file=sys.stderr)
         return RunResult(container_id=None, exit_code=127)
-
     if not image_exists(image):
-        print(
-            f"error: image {image!r} not found.\n"
-            f"build it with:  whizzard image build",
-            file=sys.stderr,
-        )
         return RunResult(container_id=None, exit_code=125)
 
     if session_id is None:

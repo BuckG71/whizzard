@@ -148,3 +148,34 @@ def test_dry_run_does_not_write_session_log(tmp_path: Path, monkeypatch):
     result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert not log_path.exists()
+
+
+# Pre-flight error formatting (red, in CLI not in run_shell)
+
+def test_missing_image_shows_red_error_via_cli(monkeypatch):
+    """Image-not-found error must come from the CLI red-error path,
+    not from a plain stderr print in docker_cmd."""
+    from whizzard import cli
+    monkeypatch.setattr(cli, "docker_available", lambda: True)
+    monkeypatch.setattr(cli, "image_exists", lambda img: False)
+    # If run_shell got called, that's a regression — pre-flight should stop us.
+    def _should_not_be_called(*a, **kw):
+        raise AssertionError("run_shell should not be reached when image is missing")
+    monkeypatch.setattr(cli, "run_shell", _should_not_be_called)
+
+    result = runner.invoke(app, ["run", "--profile", "default", "--image", "bogus:nope"])
+    assert result.exit_code == 125
+    assert "error: image" in result.output
+    assert "bogus:nope" in result.output
+
+
+def test_missing_docker_shows_red_error_via_cli(monkeypatch):
+    from whizzard import cli
+    monkeypatch.setattr(cli, "docker_available", lambda: False)
+    def _should_not_be_called(*a, **kw):
+        raise AssertionError("run_shell should not be reached when docker is missing")
+    monkeypatch.setattr(cli, "run_shell", _should_not_be_called)
+
+    result = runner.invoke(app, ["run", "--profile", "default"])
+    assert result.exit_code == 127
+    assert "docker not found" in result.output
