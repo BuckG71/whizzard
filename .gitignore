@@ -25,3 +25,4 @@ env/
 # Project local
 ~/.warlock/
 *.log
+.claude/worktrees/
