@@ -55,6 +55,7 @@ def log_session_start(
     mounts: list[dict[str, Any]],
     argv: list[str],
     start_time: float,
+    overrides_used: list[dict[str, Any]] | None = None,
     path: Path | None = None,
 ) -> None:
     append_event(
@@ -70,6 +71,7 @@ def log_session_start(
             "image_id": image_id,
             "mounts": mounts,
             "argv": argv,
+            "overrides_used": overrides_used or [],
             "start_time": _iso(start_time),
         },
         path=path,

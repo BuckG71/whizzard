@@ -142,12 +142,17 @@ def run_shell(
     image: str = WHIZZARD_IMAGE,
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
     session_id: str | None = None,
+    overrides_used: list[dict] | None = None,
 ) -> RunResult:
     """Launch a contained interactive shell. Blocks until the shell exits.
 
     Stage 5: writes session_start and session_end events to the JSONL log
     around the subprocess call. Container ID is captured via --cidfile;
     image ID via `docker image inspect`.
+
+    Stage 6: any safety overrides the user opted into (--allow-broad-mount)
+    are recorded in the session_start event so audits can see what was
+    overridden.
     """
     # Defensive: callers (cli.py) should pre-flight these and surface red
     # errors. If we land here without docker or the image, return an error
@@ -187,6 +192,7 @@ def run_shell(
         mounts=_mounts_for_log(resolved_mounts),
         argv=argv,
         start_time=start_time,
+        overrides_used=overrides_used or [],
     )
 
     completed = subprocess.run(argv, env=_docker_env())

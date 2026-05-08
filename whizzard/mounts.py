@@ -130,14 +130,6 @@ def resolve_mount_spec(
     return mount, requested
 
 
-def basic_path_sanity_check(host_path: Path) -> None:
-    """Minimum checks for Stage 2. The full safety policy lands in Stage 6.
-
-    Stage 2 only rejects the most obvious mistakes: nonexistent paths and
-    bare root mounts.
-    """
-    p = host_path.resolve()
-    if str(p) == "/":
-        raise MountRegistryError(f"refusing to mount filesystem root: {p}")
-    if not p.exists():
-        raise MountRegistryError(f"mount source does not exist: {p}")
+# Stage 2 had `basic_path_sanity_check` here; superseded by the full policy
+# in `whizzard.safety` as of Stage 6. Path-existence and root-mount rejection
+# are now part of `whizzard.safety.check_mount_path`.

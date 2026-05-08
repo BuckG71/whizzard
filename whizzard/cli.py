@@ -29,10 +29,10 @@ from whizzard.mounts import (
     Mount,
     MountMode,
     MountRegistryError,
-    basic_path_sanity_check,
     load_mounts,
     resolve_mount_spec,
 )
+from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
 from whizzard.session_log import SESSIONS_LOG, new_session_id
 
 
@@ -85,6 +85,14 @@ def run_cmd(
             help="Show what would happen without launching the container.",
         ),
     ] = False,
+    allow_broad_mount: Annotated[
+        bool,
+        typer.Option(
+            "--allow-broad-mount",
+            help="Opt in to mounting broad folders / cloud sync / parents of "
+                 "registered mounts. Requires a profile that permits this.",
+        ),
+    ] = False,
 ) -> None:
     """Launch a contained shell session under the given profile."""
     try:
@@ -97,6 +105,7 @@ def run_cmd(
         raise typer.Exit(code=2)
 
     resolved: list[tuple[Mount, MountMode]] = []
+    overrides_used: list[OverrideRecord] = []
     if mount:
         try:
             registry = load_mounts()
@@ -106,10 +115,25 @@ def run_cmd(
         try:
             for spec in mount:
                 m, mode = resolve_mount_spec(spec, registry)
-                basic_path_sanity_check(m.host_path)
+                # Other registered mounts (excluding the one being checked)
+                # supply the "parent of registered mount" rule context.
+                other_paths = [
+                    other.host_path for name, other in registry.items()
+                    if name != m.name
+                ]
+                overrides = check_mount_path(
+                    m.host_path,
+                    prof,
+                    allow_broad_mount,
+                    other_registered_paths=other_paths,
+                )
+                overrides_used.extend(overrides)
                 resolved.append((m, mode))
         except MountRegistryError as e:
             console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=2)
+        except SafetyViolation as e:
+            console.print(f"[red]safety policy: {e}[/red]")
             raise typer.Exit(code=2)
 
     duration = "unlimited" if prof.duration_seconds is None else f"{prof.duration_seconds // 60} min"
@@ -128,6 +152,10 @@ def run_cmd(
             console.print(f"  {m.name} ({mode}): {m.host_path} → {m.container_path()}")
     else:
         console.print("[bold]Mounts:[/bold] none")
+    if overrides_used:
+        console.print("[bold yellow]Broad-mount overrides applied:[/bold yellow]")
+        for o in overrides_used:
+            console.print(f"  - {o.path} ({o.reason})")
     console.print()
 
     if dry_run:
@@ -155,7 +183,11 @@ def run_cmd(
         raise typer.Exit(code=125)
 
     result = run_shell(
-        prof, image=image, resolved_mounts=resolved, session_id=session_id,
+        prof,
+        image=image,
+        resolved_mounts=resolved,
+        session_id=session_id,
+        overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
     )
     raise typer.Exit(code=result.exit_code)
 
