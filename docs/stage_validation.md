@@ -9,7 +9,7 @@ Manual validation steps for each MVP stage. Update this file as new stages land.
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-whizzard
+cd /Users/bg1971/ai-sandbox/airlock-warlock
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -112,7 +112,7 @@ All of the following must be true:
 Update the install (in-place editable install picks up new modules automatically, but pytest needs a fresh collect):
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-whizzard
+cd /Users/bg1971/ai-sandbox/airlock-warlock
 source .venv/bin/activate
 git pull
 pytest -v
