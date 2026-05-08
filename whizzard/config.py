@@ -1,7 +1,7 @@
 """Profile and config resolution.
 
 Stage 1 ships hardcoded profiles. Stage 3 will replace this with JSON-driven
-loading from ~/.warlock/config/profiles.json.
+loading from ~/.whizzard/config/profiles.json.
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-WARLOCK_HOME = Path(os.environ.get("WARLOCK_HOME", Path.home() / ".warlock"))
-CONFIG_DIR = WARLOCK_HOME / "config"
-LOGS_DIR = WARLOCK_HOME / "logs"
-STATE_DIR = WARLOCK_HOME / "state"
+WHIZZARD_HOME = Path(os.environ.get("WHIZZARD_HOME", Path.home() / ".whizzard"))
+CONFIG_DIR = WHIZZARD_HOME / "config"
+LOGS_DIR = WHIZZARD_HOME / "logs"
+STATE_DIR = WHIZZARD_HOME / "state"
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,7 @@ def list_profiles() -> list[Profile]:
     return list(_BUILTIN_PROFILES.values())
 
 
-def ensure_warlock_home() -> None:
-    """Create ~/.warlock/ scaffold on first run."""
-    for d in (WARLOCK_HOME, CONFIG_DIR, LOGS_DIR, STATE_DIR):
+def ensure_whizzard_home() -> None:
+    """Create ~/.whizzard/ scaffold on first run."""
+    for d in (WHIZZARD_HOME, CONFIG_DIR, LOGS_DIR, STATE_DIR):
         d.mkdir(parents=True, exist_ok=True)

@@ -2,7 +2,7 @@
 
 import pytest
 
-from warlock.config import get_profile, list_profiles
+from whizzard.config import get_profile, list_profiles
 
 
 def test_default_profile_is_unlimited():

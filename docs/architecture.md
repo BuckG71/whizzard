@@ -1,13 +1,13 @@
-# Airlock / Warlock — System Architecture
+# Airlock / Whizzard — System Architecture
 
-This document defines the system architecture, security invariants, and adapter contract for Airlock/Warlock. It applies across all phases of the project — MVP, v1, and beyond.
+This document defines the system architecture, security invariants, and adapter contract for Airlock/Whizzard. It applies across all phases of the project — MVP, v1, and beyond.
 
 ---
 
 ## Core Architectural Principle
 
 ```text
-Warlock controls capabilities.
+Whizzard controls capabilities.
 Agents request capabilities.
 Agents do not grant themselves capabilities.
 ```
@@ -19,7 +19,7 @@ This is the foundational trust model. It applies to profiles, mounts, harness ad
 ## System Components
 
 ```text
-Warlock         = local orchestrator / launcher
+Whizzard         = local orchestrator / launcher
 Airlock         = policy and containment layer
 Execution Cell  = the contained execution environment (Docker container in MVP)
 Harness Adapter = integration layer for Hermes / OpenClaw / etc.
@@ -28,14 +28,14 @@ Harness Adapter = integration layer for Hermes / OpenClaw / etc.
 Verbal framing:
 
 ```text
-Warlock operates.
+Whizzard operates.
 Airlock governs.
 ```
 
 or:
 
 ```text
-Warlock executes inside Airlock.
+Whizzard executes inside Airlock.
 ```
 
 ---
@@ -111,7 +111,7 @@ Container    = execution plane
 ```
 
 Runs on host:
-- Warlock daemon
+- Whizzard daemon
 - Airlock policy engine
 - config registry
 - logs
@@ -129,7 +129,7 @@ This separation is mandatory for maintaining the security model.
 
 ## Config Write-Protection Invariant
 
-The Warlock config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `agents.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.
+The Whizzard config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `agents.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.
 
 This is enforced at the safety validation layer, not the policy layer. An agent that can write files Airlock reads can influence its own policies — violating the foundational trust model. This rule cannot be overridden by profiles or presets.
 
@@ -148,7 +148,7 @@ Safety validation classifies mount targets into three tiers:
 - Keychains
 - browser profiles
 - Docker socket
-- Warlock config directory
+- Whizzard config directory
 
 ### Hard block with explicit override
 
@@ -228,7 +228,7 @@ Initial approach: the adapter tags tool execution with agent identity at the har
 
 These rules apply to all phases and cannot be relaxed by future work:
 
-- **Capability flow is one-way.** Agents request; Warlock grants; agents never self-grant.
+- **Capability flow is one-way.** Agents request; Whizzard grants; agents never self-grant.
 - **Airlock core stays harness-neutral.** Harness behavior lives in adapters.
 - **The mount list IS the permission model.** Visible, named, scoped capability grants are the system's primary affordance.
 - **Config integrity is non-negotiable.** Agent-reachable paths cannot include the config directory.

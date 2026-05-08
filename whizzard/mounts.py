@@ -5,7 +5,7 @@ docker -v arguments, and reject unregistered names. The full safety policy
 (blocklist of dangerous paths, broad-mount overrides, config write-protection)
 lands in Stage 6.
 
-Schema for ~/.warlock/config/mounts.json:
+Schema for ~/.whizzard/config/mounts.json:
 
     {
       "schema_version": 1,
@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from warlock.config import CONFIG_DIR
+from whizzard.config import CONFIG_DIR
 
 
 MountMode = Literal["ro", "rw"]

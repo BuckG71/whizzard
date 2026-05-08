@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from warlock.mounts import (
+from whizzard.mounts import (
     CONTAINER_MOUNT_ROOT,
     Mount,
     MountRegistryError,

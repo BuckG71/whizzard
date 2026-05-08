@@ -1,4 +1,4 @@
-# Airlock / Warlock — MVP Build Plan
+# Airlock / Whizzard — MVP Build Plan
 
 This document is the tactical plan for the MVP. It assumes context from:
 
@@ -34,7 +34,7 @@ Goal: prove contained execution.
 Deliverable:
 
 ```zsh
-warlock run --profile default
+whizzard run --profile default
 ```
 
 Requirements:
@@ -50,7 +50,7 @@ Goal: human-readable named capabilities.
 Example:
 
 ```zsh
-warlock run --profile build --mount project-alpha
+whizzard run --profile build --mount project-alpha
 ```
 
 Rules:
@@ -79,7 +79,7 @@ Goal: visible permissions before execution.
 Example:
 
 ```zsh
-warlock run --dry-run --profile build --mount project-alpha
+whizzard run --dry-run --profile build --mount project-alpha
 ```
 
 Dry-run output must include:
@@ -128,8 +128,8 @@ Implement the safety policy defined in [architecture.md](architecture.md).
 Specifically:
 - enforce the hard-block list (no override)
 - enforce the override-required list (`--allow-broad-mount`, logged)
-- enforce config write-protection (the Warlock config directory must never be reachable from any agent-writable mount, regardless of `mounts.json`)
-- reject any mount path that resolves into the Warlock config directory
+- enforce config write-protection (the Whizzard config directory must never be reachable from any agent-writable mount, regardless of `mounts.json`)
+- reject any mount path that resolves into the Whizzard config directory
 
 ### Stage 7 — Generic Adapter
 
@@ -165,8 +165,8 @@ Goal: prevent stale or unknown images from undermining containment.
 
 Requirements:
 - base image digest pinned in `Dockerfile` (not floating tag)
-- `warlock image build` to build/rebuild the local image
-- `warlock image status` to show current image id, build date, base digest
+- `whizzard image build` to build/rebuild the local image
+- `whizzard image status` to show current image id, build date, base digest
 - session log records the image id for each session
 
 Stale images are a silent risk: a compromised or outdated base image defeats the containment model regardless of policy correctness. Image provenance must be visible and auditable from day one.
@@ -176,11 +176,11 @@ Stale images are a silent risk: a compromised or outdated base image defeats the
 ## Repository Structure
 
 ```text
-airlock-warlock/
+airlock-whizzard/
   README.md
   pyproject.toml
 
-  warlock/
+  whizzard/
     cli.py
     config.py
     docker_cmd.py
@@ -199,10 +199,10 @@ airlock-warlock/
     Dockerfile
 
   scripts/
-    warlock-safe
-    warlock-default
-    warlock-build
-    warlock-power
+    whizzard-safe
+    whizzard-default
+    whizzard-build
+    whizzard-power
 
   docs/
     vision_and_strategy.md
@@ -220,14 +220,14 @@ airlock-warlock/
 The MVP passes if these commands behave as specified:
 
 ```zsh
-warlock run --profile safe
-warlock run --profile default
-warlock run --profile build --mount project-alpha
-warlock run --dry-run --profile build
-warlock adapters list
-warlock profiles list
-warlock mounts list
-warlock image status
+whizzard run --profile safe
+whizzard run --profile default
+whizzard run --profile build --mount project-alpha
+whizzard run --dry-run --profile build
+whizzard adapters list
+whizzard profiles list
+whizzard mounts list
+whizzard image status
 ```
 
 And:

@@ -12,12 +12,12 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from warlock.config import Profile
-from warlock.mounts import Mount, MountMode
+from whizzard.config import Profile
+from whizzard.mounts import Mount, MountMode
 
 
-WARLOCK_IMAGE = os.environ.get("WARLOCK_IMAGE", "warlock-base:latest")
-CONTAINER_USER = "warlock"  # non-root, defined in docker/Dockerfile
+WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
+CONTAINER_USER = "whizzard"  # non-root, defined in docker/Dockerfile
 
 
 @dataclass
@@ -43,7 +43,7 @@ def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
-def image_exists(image: str = WARLOCK_IMAGE) -> bool:
+def image_exists(image: str = WHIZZARD_IMAGE) -> bool:
     if not docker_available():
         return False
     result = subprocess.run(
@@ -57,7 +57,7 @@ def image_exists(image: str = WARLOCK_IMAGE) -> bool:
 
 def build_run_argv(
     profile: Profile,
-    image: str = WARLOCK_IMAGE,
+    image: str = WHIZZARD_IMAGE,
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
 ) -> list[str]:
     """Build the `docker run` argv applying baseline + profile + mounts.
@@ -69,7 +69,7 @@ def build_run_argv(
       - --rm so the container is reaped on exit
       - --init so PID 1 reaps zombies and forwards signals
       - --cap-drop=ALL; nothing reacquired by default
-      - --read-only root with tmpfs for /tmp and /home/warlock
+      - --read-only root with tmpfs for /tmp and /home/whizzard
       - no-new-privileges
 
     Profile-driven:
@@ -94,11 +94,11 @@ def build_run_argv(
     if not profile.network_enabled:
         argv += ["--network", "none"]
 
-    argv += ["--label", f"warlock.profile={profile.name}"]
+    argv += ["--label", f"whizzard.profile={profile.name}"]
 
     for mount, mode in resolved_mounts or []:
         argv += ["-v", mount.docker_volume_arg(mode)]
-        argv += ["--label", f"warlock.mount.{mount.name}={mode}"]
+        argv += ["--label", f"whizzard.mount.{mount.name}={mode}"]
 
     argv += [image, "/bin/bash"]
     return argv
@@ -106,7 +106,7 @@ def build_run_argv(
 
 def run_shell(
     profile: Profile,
-    image: str = WARLOCK_IMAGE,
+    image: str = WHIZZARD_IMAGE,
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
 ) -> RunResult:
     """Launch a contained interactive shell. Blocks until shell exits."""
@@ -117,7 +117,7 @@ def run_shell(
     if not image_exists(image):
         print(
             f"error: image {image!r} not found.\n"
-            f"build it with:  warlock image build",
+            f"build it with:  whizzard image build",
             file=sys.stderr,
         )
         return RunResult(container_id=None, exit_code=125)

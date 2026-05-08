@@ -1,4 +1,4 @@
-# Airlock/Warlock execution cell — Stage 1 baseline image
+# Airlock/Whizzard execution cell — Stage 1 baseline image
 #
 # A minimal Debian-based image with a non-root user. Stage 9 will pin the
 # base image by digest. For Stage 1 we use a tag and the build will be
@@ -20,14 +20,14 @@ RUN apt-get update && \
 
 # Non-root user. UID 1000 chosen so that mounted host files owned by the
 # typical default macOS/Linux user UID are accessible without a chown dance.
-ARG WARLOCK_UID=1000
-ARG WARLOCK_GID=1000
-RUN groupadd --gid ${WARLOCK_GID} warlock && \
-    useradd --uid ${WARLOCK_UID} --gid ${WARLOCK_GID} \
-            --create-home --shell /bin/bash warlock
+ARG WHIZZARD_UID=1000
+ARG WHIZZARD_GID=1000
+RUN groupadd --gid ${WHIZZARD_GID} whizzard && \
+    useradd --uid ${WHIZZARD_UID} --gid ${WHIZZARD_GID} \
+            --create-home --shell /bin/bash whizzard
 
-USER warlock
-WORKDIR /home/warlock
+USER whizzard
+WORKDIR /home/whizzard
 
 # tini is included via --init at docker run time; CMD is set by the caller.
 CMD ["/bin/bash"]

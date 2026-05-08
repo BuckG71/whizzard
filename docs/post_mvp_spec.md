@@ -1,4 +1,4 @@
-# Airlock / Warlock — Post-MVP Specification (v1.0)
+# Airlock / Whizzard — Post-MVP Specification (v1.0)
 
 This document is the tactical plan for v1.0, the first major evolution following the MVP. It assumes context from:
 
@@ -71,7 +71,7 @@ Do NOT implement full autonomous multi-agent orchestration initially. Instead:
 Example:
 
 ```zsh
-warlock run --agent coder
+whizzard run --agent coder
 ```
 
 Agent identity resolution is the responsibility of the harness adapter — see [architecture.md](architecture.md).
@@ -103,9 +103,9 @@ Discord
   │      └── Hermes/OpenClaw/etc
   │
   └── Airlock Control Channel
-         └── Warlock Control Bot
+         └── Whizzard Control Bot
                  ↓
-            Local Warlock Daemon
+            Local Whizzard Daemon
                  ↓
             Airlock Policy Engine
                  ↓
@@ -116,7 +116,7 @@ The Airlock control channel must be separate from the agent interaction channel.
 
 ### Control Plane Responsibilities
 
-Warlock bot may:
+Whizzard bot may:
 - start sessions
 - stop sessions
 - revoke sessions
@@ -126,7 +126,7 @@ Warlock bot may:
 - switch profiles
 - launch named presets
 
-Warlock bot may NOT:
+Whizzard bot may NOT:
 - execute arbitrary shell commands
 - mount arbitrary paths
 - grant unrestricted permissions
@@ -148,24 +148,24 @@ Preferred direction: slash commands. Reasons:
 ### Example Commands
 
 ```text
-/warlock start
-/warlock stop
-/warlock status
-/warlock revoke
-/warlock preset launch
+/whizzard start
+/whizzard stop
+/whizzard status
+/whizzard revoke
+/whizzard preset launch
 ```
 
 ### Example Approval Flow
 
 ```text
-/warlock start
+/whizzard start
 Agent: coder
 Profile: power
 Mount: project-alpha
 Duration: 1h
 ```
 
-Warlock replies:
+Whizzard replies:
 
 ```text
 Approval Required
@@ -249,7 +249,7 @@ Make time-bounded sessions a first-class, enforced capability primitive — not 
 ### Behavior
 
 - duration is set per-session, per-preset, or per-agent policy
-- Warlock enforces termination at expiry: the container is stopped, not just warned
+- Whizzard enforces termination at expiry: the container is stopped, not just warned
 - a configurable warning is issued N minutes before expiry (default: 5 min)
 - the session log records: configured duration, actual duration, expiry reason
 - dry-run output must always show the effective duration limit
@@ -272,7 +272,7 @@ The MVP ships with enforced expiry plus harness-native wrap-up via `adapter.wrap
 
 - **Extend-session prompt**: at N minutes before expiry (default 5), prompt the user — terminal locally, Discord remotely — with "extend by X?" Default extension X is configurable per profile.
 - **Maximum-extension cap**: each profile declares a hard ceiling on total session duration so extensions cannot accumulate indefinitely.
-- **`/warlock extend <session-id> <duration>`**: Discord command to extend an active session from mobile.
+- **`/whizzard extend <session-id> <duration>`**: Discord command to extend an active session from mobile.
 - **Adapter `pre_terminate` hook**: a richer adapter callback (distinct from `wrap_up`) that runs before wrap_up and lets the adapter perform structured state checkpointing — e.g., serializing the harness's conversation history to a mounted volume so a follow-up session can resume.
 - **Auto-extend on user activity**: optional per-profile setting to extend automatically when the user is actively interacting (vs idle). Off by default; opt-in only.
 
@@ -288,9 +288,9 @@ Ensure execution images remain known, current, and auditable past the MVP.
 
 ### Requirements
 
-The MVP introduces `warlock image build`, `warlock image status`, and image-id logging (see [mvp_build_plan.md](mvp_build_plan.md)). v1 extends this with:
+The MVP introduces `whizzard image build`, `whizzard image status`, and image-id logging (see [mvp_build_plan.md](mvp_build_plan.md)). v1 extends this with:
 
-- `warlock image check` to compare current image age against a configurable staleness threshold
+- `whizzard image check` to compare current image age against a configurable staleness threshold
 - staleness warnings shown at session start when image is older than threshold
 - optional auto-rebuild policy per profile
 
@@ -322,13 +322,13 @@ quarantine-review
 ### Example Commands
 
 ```zsh
-warlock preset launch coding-session
+whizzard preset launch coding-session
 ```
 
 or:
 
 ```text
-/warlock preset launch coding-session
+/whizzard preset launch coding-session
 ```
 
 ### Example Preset Config
@@ -353,14 +353,14 @@ or:
 
 ### Objective
 
-Ensure that anyone cloning the public repo can get a working Airlock/Warlock environment without friction or guesswork.
+Ensure that anyone cloning the public repo can get a working Airlock/Whizzard environment without friction or guesswork.
 
 ### Requirements
 
 The repo must ship with:
 - a getting-started guide covering prerequisites (Docker, Python version, supported platforms)
 - a setup script or Makefile target that handles environment creation, dependency installation, and initial config scaffolding
-- a worked example showing a complete session from `warlock run` through to session log output
+- a worked example showing a complete session from `whizzard run` through to session log output
 - clear documentation of the default security posture and what each profile does
 - a note on what is and isn't protected by the containment model (sets accurate expectations)
 

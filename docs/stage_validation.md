@@ -9,7 +9,7 @@ Manual validation steps for each MVP stage. Update this file as new stages land.
 ### Setup
 
 ```sh
-cd /Users/USER/ai-sandbox/airlock-warlock
+cd /Users/USER/ai-sandbox/airlock-whizzard
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -27,18 +27,18 @@ Expected: all tests in `tests/test_config.py` and `tests/test_docker_cmd.py` pas
 ### Step 2: Build the execution image
 
 ```sh
-warlock image build
-warlock image status
+whizzard image build
+whizzard image status
 ```
 
 Expected:
 - Build completes without errors
-- `image status` reports `warlock-base:latest` is present
+- `image status` reports `whizzard-base:latest` is present
 
 ### Step 3: Launch a contained shell under the default profile
 
 ```sh
-warlock run --profile default
+whizzard run --profile default
 ```
 
 Expected: see `Airlock Profile: DEFAULT` banner followed by a bash prompt inside the container.
@@ -48,8 +48,8 @@ Expected: see `Airlock Profile: DEFAULT` banner followed by a bash prompt inside
 Run these inside the container shell:
 
 ```sh
-whoami                     # expected: warlock
-id                         # expected: uid=1000(warlock) gid=1000(warlock)
+whoami                     # expected: whizzard
+id                         # expected: uid=1000(whizzard) gid=1000(whizzard)
 ls /Users 2>&1 | head -3   # expected: fail or empty — host home not mounted
 ls / | head -20            # see contained rootfs
 touch /testfile            # expected: fail — root fs is read-only
@@ -60,7 +60,7 @@ exit
 ### Step 5: Verify offline profile
 
 ```sh
-warlock run --profile safe
+whizzard run --profile safe
 ```
 
 Inside the container:
@@ -73,11 +73,11 @@ exit
 ### Step 6: CLI surface check
 
 ```sh
-warlock --help                  # shows command tree
-warlock profiles list           # displays all five profiles
-warlock run --profile build     # network on, rw allowed
-warlock run --profile power     # network on, allow_broad_mount=true
-warlock run --profile quarantine  # network off, ro only
+whizzard --help                  # shows command tree
+whizzard profiles list           # displays all five profiles
+whizzard run --profile build     # network on, rw allowed
+whizzard run --profile power     # network on, allow_broad_mount=true
+whizzard run --profile quarantine  # network off, ro only
 ```
 
 ### Pass criteria
@@ -86,13 +86,13 @@ All of the following must be true:
 
 - [ ] All unit tests pass
 - [ ] Image builds and shows in `image status`
-- [ ] `whoami` inside container reports `warlock`, not host user
+- [ ] `whoami` inside container reports `whizzard`, not host user
 - [ ] Host home directory inaccessible from inside container
 - [ ] Root filesystem is read-only; `/tmp` is writable
 - [ ] `safe` profile has network disabled (curl fails)
 - [ ] `default` profile has network enabled (curl succeeds)
-- [ ] `warlock profiles list` shows all five profiles
-- [ ] `warlock --help` shows expected command tree
+- [ ] `whizzard profiles list` shows all five profiles
+- [ ] `whizzard --help` shows expected command tree
 
 ### Report any of these as bugs
 
@@ -112,7 +112,7 @@ All of the following must be true:
 Update the install (in-place editable install picks up new modules automatically, but pytest needs a fresh collect):
 
 ```sh
-cd /Users/USER/ai-sandbox/airlock-warlock
+cd /Users/USER/ai-sandbox/airlock-whizzard
 source .venv/bin/activate
 git pull
 pytest -v
@@ -123,29 +123,29 @@ Expected: previous 13 tests still pass plus 19 new tests (14 in `test_mounts.py`
 ### Step 1: List mounts before any are registered
 
 ```sh
-warlock mounts list
+whizzard mounts list
 ```
 
-Expected: yellow message saying no mounts are registered, with a pointer to `~/.warlock/config/mounts.json` and `config/mounts.json.example`.
+Expected: yellow message saying no mounts are registered, with a pointer to `~/.whizzard/config/mounts.json` and `config/mounts.json.example`.
 
 ### Step 2: Register a couple of test mounts
 
 ```sh
-mkdir -p ~/test-warlock-rw ~/test-warlock-ro
-echo "writable test data" > ~/test-warlock-rw/hello.txt
-echo "read-only test data" > ~/test-warlock-ro/hello.txt
+mkdir -p ~/test-whizzard-rw ~/test-whizzard-ro
+echo "writable test data" > ~/test-whizzard-rw/hello.txt
+echo "read-only test data" > ~/test-whizzard-ro/hello.txt
 
-cat > ~/.warlock/config/mounts.json <<'JSON'
+cat > ~/.whizzard/config/mounts.json <<'JSON'
 {
   "schema_version": 1,
   "mounts": {
     "rw-test": {
-      "host_path": "~/test-warlock-rw",
+      "host_path": "~/test-whizzard-rw",
       "default_mode": "rw",
       "description": "writable test mount"
     },
     "ro-test": {
-      "host_path": "~/test-warlock-ro",
+      "host_path": "~/test-whizzard-ro",
       "default_mode": "ro",
       "description": "read-only test mount"
     }
@@ -157,7 +157,7 @@ JSON
 ### Step 3: Verify the registry is loaded
 
 ```sh
-warlock mounts list
+whizzard mounts list
 ```
 
 Expected: a Rich table showing both `rw-test` and `ro-test` with their resolved host paths and modes.
@@ -165,7 +165,7 @@ Expected: a Rich table showing both `rw-test` and `ro-test` with their resolved 
 ### Step 4: Run with a single rw mount
 
 ```sh
-warlock run --profile build --mount rw-test
+whizzard run --profile build --mount rw-test
 ```
 
 Banner should now include a `Mounts:` line. Inside the container:
@@ -180,13 +180,13 @@ exit
 Then on the host:
 
 ```sh
-cat ~/test-warlock-rw/agent-output.txt   # should show: agent wrote this
+cat ~/test-whizzard-rw/agent-output.txt   # should show: agent wrote this
 ```
 
 ### Step 5: Run with a read-only mount
 
 ```sh
-warlock run --profile build --mount ro-test
+whizzard run --profile build --mount ro-test
 ```
 
 Inside:
@@ -200,7 +200,7 @@ exit
 ### Step 6: Verify the ro→rw cap
 
 ```sh
-warlock run --profile build --mount ro-test:rw
+whizzard run --profile build --mount ro-test:rw
 ```
 
 Expected: command fails with `mount 'ro-test' is registered as 'ro'; cannot request 'rw'`. Container is NOT launched.
@@ -208,7 +208,7 @@ Expected: command fails with `mount 'ro-test' is registered as 'ro'; cannot requ
 ### Step 7: Multiple mounts in one session
 
 ```sh
-warlock run --profile build --mount rw-test --mount ro-test
+whizzard run --profile build --mount rw-test --mount ro-test
 ```
 
 Inside:
@@ -221,26 +221,26 @@ exit
 ### Step 8: Unknown mount is rejected
 
 ```sh
-warlock run --profile build --mount does-not-exist
+whizzard run --profile build --mount does-not-exist
 ```
 
 Expected: `unknown mount 'does-not-exist'. Available: ro-test, rw-test`. Container is NOT launched.
 
 ### Step 9: Confirm Docker hint is suppressed
 
-After any clean `warlock run` exit, the misleading `What's next: Debug this container error with Gordon ...` line should NO LONGER appear.
+After any clean `whizzard run` exit, the misleading `What's next: Debug this container error with Gordon ...` line should NO LONGER appear.
 
 ### Cleanup
 
 ```sh
-rm -rf ~/test-warlock-rw ~/test-warlock-ro
-rm ~/.warlock/config/mounts.json    # or keep it for future stages
+rm -rf ~/test-whizzard-rw ~/test-whizzard-ro
+rm ~/.whizzard/config/mounts.json    # or keep it for future stages
 ```
 
 ### Pass criteria
 
 - [ ] All 32 unit tests pass
-- [ ] `warlock mounts list` shows registered entries from `~/.warlock/config/mounts.json`
+- [ ] `whizzard mounts list` shows registered entries from `~/.whizzard/config/mounts.json`
 - [ ] Mounts appear at `/mounts/<name>` inside the container
 - [ ] `rw` mounts allow writes that persist on the host
 - [ ] `ro` mounts reject writes
