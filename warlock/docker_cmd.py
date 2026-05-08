@@ -1,7 +1,7 @@
 """Docker invocation for the execution cell.
 
-Stage 1 builds the `docker run` argv with baseline restrictions and launches
-an interactive shell. Later stages add mounts, image management, adapters.
+Stage 1 baseline restrictions plus Stage 2 mount handling.
+Later stages add image management, adapters, full safety validation.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass
 
 from warlock.config import Profile
+from warlock.mounts import Mount, MountMode
 
 
 WARLOCK_IMAGE = os.environ.get("WARLOCK_IMAGE", "warlock-base:latest")
@@ -23,6 +24,19 @@ CONTAINER_USER = "warlock"  # non-root, defined in docker/Dockerfile
 class RunResult:
     container_id: str | None
     exit_code: int
+
+
+def _docker_env() -> dict[str, str]:
+    """Environment for docker subprocess calls.
+
+    DOCKER_CLI_HINTS=false suppresses Docker Desktop's "Gordon" suggestion
+    banner that prints a misleading 'container error' message after every
+    run. Disabling external AI suggestions is also on-brand for a tool
+    whose entire purpose is constraining what AI agents can see.
+    """
+    env = os.environ.copy()
+    env["DOCKER_CLI_HINTS"] = "false"
+    return env
 
 
 def docker_available() -> bool:
@@ -36,25 +50,33 @@ def image_exists(image: str = WARLOCK_IMAGE) -> bool:
         ["docker", "image", "inspect", image],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=_docker_env(),
     )
     return result.returncode == 0
 
 
-def build_run_argv(profile: Profile, image: str = WARLOCK_IMAGE) -> list[str]:
-    """Build the `docker run` argv applying baseline + profile restrictions.
+def build_run_argv(
+    profile: Profile,
+    image: str = WARLOCK_IMAGE,
+    resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
+) -> list[str]:
+    """Build the `docker run` argv applying baseline + profile + mounts.
 
-    Baseline (Stage 1):
+    Baseline:
       - non-root user
       - no host home mount
       - no Docker socket
       - --rm so the container is reaped on exit
       - --init so PID 1 reaps zombies and forwards signals
-      - drop all Linux capabilities; reacquire only what's strictly needed
-      - read-only root filesystem with tmpfs for /tmp
+      - --cap-drop=ALL; nothing reacquired by default
+      - --read-only root with tmpfs for /tmp and /home/warlock
       - no-new-privileges
 
     Profile-driven:
       - network on/off
+
+    Stage 2:
+      - registered named mounts via -v, with mode capped by registry default
     """
     argv = [
         "docker", "run",
@@ -72,16 +94,21 @@ def build_run_argv(profile: Profile, image: str = WARLOCK_IMAGE) -> list[str]:
     if not profile.network_enabled:
         argv += ["--network", "none"]
 
-    # Container name and labels for traceability
-    argv += [
-        "--label", f"warlock.profile={profile.name}",
-    ]
+    argv += ["--label", f"warlock.profile={profile.name}"]
+
+    for mount, mode in resolved_mounts or []:
+        argv += ["-v", mount.docker_volume_arg(mode)]
+        argv += ["--label", f"warlock.mount.{mount.name}={mode}"]
 
     argv += [image, "/bin/bash"]
     return argv
 
 
-def run_shell(profile: Profile, image: str = WARLOCK_IMAGE) -> RunResult:
+def run_shell(
+    profile: Profile,
+    image: str = WARLOCK_IMAGE,
+    resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
+) -> RunResult:
     """Launch a contained interactive shell. Blocks until shell exits."""
     if not docker_available():
         print("error: docker not found on PATH", file=sys.stderr)
@@ -95,6 +122,6 @@ def run_shell(profile: Profile, image: str = WARLOCK_IMAGE) -> RunResult:
         )
         return RunResult(container_id=None, exit_code=125)
 
-    argv = build_run_argv(profile, image)
-    completed = subprocess.run(argv)
+    argv = build_run_argv(profile, image, resolved_mounts=resolved_mounts)
+    completed = subprocess.run(argv, env=_docker_env())
     return RunResult(container_id=None, exit_code=completed.returncode)
