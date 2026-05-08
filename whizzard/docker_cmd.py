@@ -109,7 +109,18 @@ def run_shell(
     image: str = WHIZZARD_IMAGE,
     resolved_mounts: list[tuple[Mount, MountMode]] | None = None,
 ) -> RunResult:
-    """Launch a contained interactive shell. Blocks until shell exits."""
+    """Launch a contained interactive shell.
+
+    On success this function does NOT return: the current Python process is
+    replaced by docker via os.execvpe(). When docker exits, control passes
+    directly to the parent shell with no Python intermediary to mishandle
+    TTY release or SIGHUP propagation — sidesteps a known macOS Terminal.app
+    issue where `subprocess.run` + `docker run -it` leaves the parent shell
+    wedged ("[Process completed]") after container exit.
+
+    Pre-flight failures (docker missing, image missing) still return a
+    RunResult so the caller can render an error and exit cleanly.
+    """
     if not docker_available():
         print("error: docker not found on PATH", file=sys.stderr)
         return RunResult(container_id=None, exit_code=127)
@@ -123,5 +134,8 @@ def run_shell(
         return RunResult(container_id=None, exit_code=125)
 
     argv = build_run_argv(profile, image, resolved_mounts=resolved_mounts)
+    # Replace this process with docker. Unreachable past this line on success.
+    os.execvpe(argv[0], argv, _docker_env())
+    # Defensive: should never get here. If exec fails, fall back to subprocess.
     completed = subprocess.run(argv, env=_docker_env())
     return RunResult(container_id=None, exit_code=completed.returncode)
