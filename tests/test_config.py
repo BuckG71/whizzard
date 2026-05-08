@@ -1,9 +1,20 @@
-"""Stage 1: profile configuration sanity checks."""
+"""Stage 1 + Stage 3: profile configuration tests."""
+
+import json
+from pathlib import Path
 
 import pytest
 
-from whizzard.config import get_profile, list_profiles
+from whizzard.config import (
+    ProfileConfigError,
+    default_profiles,
+    get_profile,
+    list_profiles,
+    load_profiles,
+)
 
+
+# Stage 1 — bundled defaults
 
 def test_default_profile_is_unlimited():
     """Default profile must have no expiry — productive baseline."""
@@ -40,3 +51,135 @@ def test_unknown_profile_raises():
 def test_all_five_profiles_present():
     names = {p.name for p in list_profiles()}
     assert names == {"safe", "default", "build", "power", "quarantine"}
+
+
+def test_default_profiles_helper_returns_copy():
+    """default_profiles() must return a fresh dict so callers can mutate it."""
+    a = default_profiles()
+    b = default_profiles()
+    assert a == b
+    assert a is not b
+
+
+# Stage 3 — JSON loading
+
+def _write_profiles_json(path: Path, profiles: dict) -> Path:
+    payload = {"schema_version": 1, "profiles": profiles}
+    path.write_text(json.dumps(payload))
+    return path
+
+
+def test_load_returns_defaults_when_file_absent(tmp_path: Path):
+    profiles = load_profiles(tmp_path / "missing.json")
+    names = {p.name for p in profiles.values()}
+    assert names == {"safe", "default", "build", "power", "quarantine"}
+
+
+def test_load_parses_user_overrides(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "custom": {
+            "network_enabled": True,
+            "duration_seconds": 600,
+            "allow_broad_mount": True,
+            "description": "test profile",
+        },
+    })
+    profiles = load_profiles(f)
+    assert set(profiles.keys()) == {"custom"}
+    assert profiles["custom"].duration_seconds == 600
+    assert profiles["custom"].allow_broad_mount is True
+    assert profiles["custom"].description == "test profile"
+
+
+def test_load_accepts_null_duration_as_unlimited(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "always-on": {
+            "network_enabled": True,
+            "duration_seconds": None,
+            "description": "no expiry",
+        },
+    })
+    profiles = load_profiles(f)
+    assert profiles["always-on"].duration_seconds is None
+
+
+def test_load_rejects_invalid_json(tmp_path: Path):
+    bad = tmp_path / "profiles.json"
+    bad.write_text("{not valid json")
+    with pytest.raises(ProfileConfigError):
+        load_profiles(bad)
+
+
+def test_load_rejects_missing_network_enabled(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"duration_seconds": 60},
+    })
+    with pytest.raises(ProfileConfigError, match="network_enabled"):
+        load_profiles(f)
+
+
+def test_load_rejects_missing_duration_seconds(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"network_enabled": True},
+    })
+    with pytest.raises(ProfileConfigError, match="duration_seconds"):
+        load_profiles(f)
+
+
+def test_load_rejects_negative_duration(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"network_enabled": True, "duration_seconds": -10},
+    })
+    with pytest.raises(ProfileConfigError, match="positive"):
+        load_profiles(f)
+
+
+def test_load_rejects_non_int_duration(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"network_enabled": True, "duration_seconds": "forever"},
+    })
+    with pytest.raises(ProfileConfigError, match="integer or null"):
+        load_profiles(f)
+
+
+def test_load_rejects_bool_duration(tmp_path: Path):
+    """Python booleans are technically ints; reject them explicitly."""
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"network_enabled": True, "duration_seconds": True},
+    })
+    with pytest.raises(ProfileConfigError, match="integer or null"):
+        load_profiles(f)
+
+
+def test_load_rejects_non_bool_network_enabled(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "x": {"network_enabled": "yes", "duration_seconds": 60},
+    })
+    with pytest.raises(ProfileConfigError, match="network_enabled"):
+        load_profiles(f)
+
+
+def test_load_rejects_empty_profiles(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {})
+    with pytest.raises(ProfileConfigError, match="at least one"):
+        load_profiles(f)
+
+
+def test_load_uses_default_for_optional_fields(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "minimal": {"network_enabled": True, "duration_seconds": 60},
+    })
+    profiles = load_profiles(f)
+    assert profiles["minimal"].allow_broad_mount is False
+    assert profiles["minimal"].description == ""
+
+
+def test_bundled_example_file_parses_cleanly(tmp_path: Path):
+    """The repo's profiles.json.example must be a valid config."""
+    example = Path(__file__).resolve().parent.parent / "config" / "profiles.json.example"
+    assert example.exists(), f"missing template at {example}"
+    profiles = load_profiles(example)
+    assert {"safe", "default", "build", "power", "quarantine"} == set(profiles.keys())
+    # Same semantics as bundled defaults
+    assert profiles["default"].duration_seconds is None
+    assert profiles["power"].allow_broad_mount is True

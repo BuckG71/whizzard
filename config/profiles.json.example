@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "safe": {
+      "network_enabled": false,
+      "duration_seconds": 1800,
+      "allow_broad_mount": false,
+      "description": "Most restrictive. Network off, no mounts by default."
+    },
+    "default": {
+      "network_enabled": true,
+      "duration_seconds": null,
+      "allow_broad_mount": false,
+      "description": "SAFE-NET baseline. Network on, mounts opt-in. Always-on."
+    },
+    "build": {
+      "network_enabled": true,
+      "duration_seconds": 7200,
+      "allow_broad_mount": false,
+      "description": "Development work. Network on, rw mounts allowed."
+    },
+    "power": {
+      "network_enabled": true,
+      "duration_seconds": 3600,
+      "allow_broad_mount": true,
+      "description": "Capability-heavy. Shorter duration intentional."
+    },
+    "quarantine": {
+      "network_enabled": false,
+      "duration_seconds": 1800,
+      "allow_broad_mount": false,
+      "description": "Untrusted execution. Network off, ro mounts only."
+    }
+  }
+}
