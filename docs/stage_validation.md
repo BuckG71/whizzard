@@ -258,7 +258,156 @@ rm ~/.whizzard/config/mounts.json    # or keep it for future stages
 
 ## Stage 3 — Profiles (JSON-driven)
 
-*(To be added once Stage 3 lands.)*
+### Setup
+
+```sh
+cd /Users/bg1971/ai-sandbox/airlock-warlock
+source venv/bin/activate
+git pull
+pytest -v
+```
+
+Expected: 46 tests pass (32 prior + 14 new in `test_config.py`).
+
+### Step 1: Confirm bundled defaults still work
+
+With NO `~/.whizzard/config/profiles.json` present:
+
+```sh
+rm -f ~/.whizzard/config/profiles.json   # safe to run; -f swallows missing
+whizzard profiles list
+```
+
+Expected: a Rich table titled `Profiles (bundled defaults: whizzard.config._DEFAULT_PROFILES)` showing all five profiles with their original values (default unlimited, power 60 min < build 120 min, etc.).
+
+### Step 2: Seed user config from defaults
+
+```sh
+whizzard profiles init
+```
+
+Expected: writes `~/.whizzard/config/profiles.json` with the bundled defaults serialized as JSON. Prints a green `wrote ...` message and an instruction to edit.
+
+```sh
+cat ~/.whizzard/config/profiles.json
+whizzard profiles list
+```
+
+Expected: same five profiles, but the table title now shows `Profiles (user config: /Users/bg1971/.whizzard/config/profiles.json)`.
+
+### Step 3: Init refuses to clobber
+
+```sh
+whizzard profiles init
+```
+
+Expected: yellow warning that the file already exists, telling you to use `--force`. Exit code 1, file unchanged.
+
+```sh
+whizzard profiles init --force
+```
+
+Expected: overwrites silently with green `wrote ...` confirmation.
+
+### Step 4: Edit the user config and verify it takes effect
+
+```sh
+# add a new custom profile via a quick Python edit
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/profiles.json"
+data = json.loads(p.read_text())
+data["profiles"]["sandbox"] = {
+    "network_enabled": False,
+    "duration_seconds": 600,
+    "allow_broad_mount": False,
+    "description": "10-minute offline scratch session"
+}
+p.write_text(json.dumps(data, indent=2))
+PY
+
+whizzard profiles list
+```
+
+Expected: the new `sandbox` profile appears in the table with 10 min duration, network off.
+
+```sh
+whizzard run --profile sandbox
+```
+
+Inside the container:
+
+```sh
+curl -m 5 https://example.com   # expected: fail (no network)
+exit
+```
+
+The banner should report `Duration: 10 min` and `Network: disabled`, confirming the user config was honored.
+
+### Step 5: Malformed JSON is caught with a clear error
+
+```sh
+echo "not json" > ~/.whizzard/config/profiles.json
+whizzard profiles list
+```
+
+Expected: red error message starting with `error loading profiles.json:` followed by the parse-error detail. Exit code 2. No traceback.
+
+```sh
+whizzard run --profile default
+```
+
+Expected: same red error from `run`, no container launched.
+
+### Step 6: Schema violation is caught
+
+```sh
+cat > ~/.whizzard/config/profiles.json <<'JSON'
+{
+  "schema_version": 1,
+  "profiles": {
+    "broken": {
+      "network_enabled": "maybe",
+      "duration_seconds": -1
+    }
+  }
+}
+JSON
+
+whizzard profiles list
+```
+
+Expected: red error like `profile 'broken': network_enabled must be true/false`. (Specific field that fails first depends on parse order, but it must be a clear schema-violation message rather than a Python traceback.)
+
+### Step 7: Empty profiles object is rejected
+
+```sh
+echo '{"schema_version": 1, "profiles": {}}' > ~/.whizzard/config/profiles.json
+whizzard profiles list
+```
+
+Expected: red error mentioning "at least one profile is required."
+
+### Cleanup
+
+```sh
+# Restore a known-good config from bundled defaults
+whizzard profiles init --force
+# Or remove entirely to fall back to defaults
+# rm ~/.whizzard/config/profiles.json
+```
+
+### Pass criteria
+
+- [ ] All 46 tests pass
+- [ ] `whizzard profiles list` works with no user config (bundled defaults)
+- [ ] `whizzard profiles init` writes a JSON file matching the defaults
+- [ ] `whizzard profiles init` without `--force` refuses to clobber
+- [ ] `whizzard profiles init --force` overwrites
+- [ ] Adding a custom profile in JSON makes it appear in `profiles list` and usable in `whizzard run`
+- [ ] Invalid JSON produces a clean error message, no traceback
+- [ ] Schema violations (wrong type, missing field, bad value) produce clean errors
+- [ ] Empty profiles object is rejected with a helpful message
 
 ---
 

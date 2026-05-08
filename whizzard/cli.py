@@ -9,6 +9,9 @@ from rich.console import Console
 from rich.table import Table
 
 from whizzard.config import (
+    PROFILES_FILE,
+    ProfileConfigError,
+    default_profiles,
     ensure_whizzard_home,
     get_profile,
     list_profiles,
@@ -47,6 +50,12 @@ app.add_typer(mounts_app, name="mounts")
 console = Console()
 
 
+@app.callback()
+def _bootstrap() -> None:
+    """Runs before every subcommand. Ensures ~/.whizzard/ scaffold exists."""
+    ensure_whizzard_home()
+
+
 @app.command("run")
 def run_cmd(
     profile: Annotated[
@@ -67,12 +76,13 @@ def run_cmd(
     ] = WHIZZARD_IMAGE,
 ) -> None:
     """Launch a contained shell session under the given profile."""
-    ensure_whizzard_home()
-
     try:
         prof = get_profile(profile)
     except KeyError as e:
         console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=2)
+    except ProfileConfigError as e:
+        console.print(f"[red]error loading profiles.json: {e}[/red]")
         raise typer.Exit(code=2)
 
     resolved: list[tuple[Mount, MountMode]] = []
@@ -111,14 +121,22 @@ def run_cmd(
 @profiles_app.command("list")
 def profiles_list_cmd() -> None:
     """List available profiles."""
-    table = Table(title="Profiles")
+    try:
+        profiles = list_profiles()
+    except ProfileConfigError as e:
+        console.print(f"[red]error loading profiles.json: {e}[/red]")
+        raise typer.Exit(code=2)
+
+    source = "user config" if PROFILES_FILE.exists() else "bundled defaults"
+    title = f"Profiles ({source}: {PROFILES_FILE if PROFILES_FILE.exists() else 'whizzard.config._DEFAULT_PROFILES'})"
+    table = Table(title=title)
     table.add_column("Name")
     table.add_column("Network")
     table.add_column("Duration")
     table.add_column("Broad-mount override")
     table.add_column("Description")
 
-    for p in list_profiles():
+    for p in profiles:
         duration = "unlimited" if p.duration_seconds is None else f"{p.duration_seconds // 60} min"
         table.add_row(
             p.name,
@@ -128,6 +146,43 @@ def profiles_list_cmd() -> None:
             p.description,
         )
     console.print(table)
+
+
+@profiles_app.command("init")
+def profiles_init_cmd(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing profiles.json."),
+    ] = False,
+) -> None:
+    """Write the bundled default profiles to ~/.whizzard/config/profiles.json.
+
+    Useful for starting customization — copy the defaults, then edit.
+    """
+    import json
+
+    if PROFILES_FILE.exists() and not force:
+        console.print(
+            f"[yellow]{PROFILES_FILE} already exists.[/yellow] "
+            "use [bold]--force[/bold] to overwrite."
+        )
+        raise typer.Exit(code=1)
+
+    payload = {
+        "schema_version": 1,
+        "profiles": {
+            p.name: {
+                "network_enabled": p.network_enabled,
+                "duration_seconds": p.duration_seconds,
+                "allow_broad_mount": p.allow_broad_mount,
+                "description": p.description,
+            }
+            for p in default_profiles().values()
+        },
+    }
+    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    console.print(f"[green]wrote[/green] {PROFILES_FILE}")
+    console.print("edit it to customize. existing profile names are recognized by `whizzard run --profile <name>`.")
 
 
 @mounts_app.command("list")
