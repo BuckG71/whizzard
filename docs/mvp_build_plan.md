@@ -204,6 +204,12 @@ airlock-warlock/
     warlock-build
     warlock-power
 
+  docs/
+    vision_and_strategy.md
+    architecture.md
+    mvp_build_plan.md
+    post_mvp_spec.md
+
   tests/
 ```
 

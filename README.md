@@ -2,13 +2,13 @@
 
 Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
 
-> **Status:** MVP under construction. Stage 1 (contained shell launch) is working; subsequent stages add mounts, profiles, dry-run, logging, safety validation, adapters, Hermes integration, and image management. See [mvp_build_plan.md](mvp_build_plan.md).
+> **Status:** MVP under construction. Stage 1 (contained shell launch) is working; subsequent stages add mounts, profiles, dry-run, logging, safety validation, adapters, Hermes integration, and image management. See [docs/mvp_build_plan.md](docs/mvp_build_plan.md).
 
 ---
 
 ## What this is
 
-See [vision_and_strategy.md](vision_and_strategy.md). In one sentence: Warlock is the orchestrator, Airlock is the containment layer it operates inside.
+See [docs/vision_and_strategy.md](docs/vision_and_strategy.md). In one sentence: Warlock is the orchestrator, Airlock is the containment layer it operates inside.
 
 The core invariant:
 
@@ -72,14 +72,17 @@ Profiles available in Stage 1: `safe`, `default`, `build`, `power`, `quarantine`
 airlock-warlock/
   warlock/         # Python package
   docker/          # execution image
-  config/          # JSON configs (added in later stages)
+  config/          # JSON configs (populated in later stages)
+  scripts/         # profile wrapper scripts (populated in later stages)
+  docs/            # design docs (vision, architecture, build plans)
   tests/           # tests
-  *.md             # design docs
+  README.md
+  pyproject.toml
 ```
 
 ## Documentation
 
-- [vision_and_strategy.md](vision_and_strategy.md) — what this is, who it's for, where it's going
-- [architecture.md](architecture.md) — system structure, safety policy, adapter contract
-- [mvp_build_plan.md](mvp_build_plan.md) — tactical MVP plan
-- [post_mvp_spec.md](post_mvp_spec.md) — v1.0 features and backlog
+- [docs/vision_and_strategy.md](docs/vision_and_strategy.md) — what this is, who it's for, where it's going
+- [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract
+- [docs/mvp_build_plan.md](docs/mvp_build_plan.md) — tactical MVP plan
+- [docs/post_mvp_spec.md](docs/post_mvp_spec.md) — v1.0 features and backlog
