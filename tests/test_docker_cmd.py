@@ -93,3 +93,28 @@ def test_argv_handles_multiple_mounts():
 def test_argv_no_volume_flag_when_no_mounts():
     argv = build_run_argv(get_profile("default"))
     assert "-v" not in argv
+
+
+# Stage 5 — session id and cidfile
+
+def test_argv_includes_session_id_label():
+    argv = build_run_argv(get_profile("default"), session_id="sess-abc")
+    assert "whizzard.session_id=sess-abc" in " ".join(argv)
+
+
+def test_argv_includes_cidfile_when_provided(tmp_path: Path):
+    cid = tmp_path / "cid.txt"
+    argv = build_run_argv(get_profile("default"), cidfile=cid)
+    assert "--cidfile" in argv
+    idx = argv.index("--cidfile")
+    assert argv[idx + 1] == str(cid)
+
+
+def test_argv_omits_cidfile_when_not_provided():
+    argv = build_run_argv(get_profile("default"))
+    assert "--cidfile" not in argv
+
+
+def test_argv_omits_session_label_when_no_session_id():
+    argv = build_run_argv(get_profile("default"))
+    assert "whizzard.session_id" not in " ".join(argv)

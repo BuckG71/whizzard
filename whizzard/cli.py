@@ -33,6 +33,7 @@ from whizzard.mounts import (
     load_mounts,
     resolve_mount_spec,
 )
+from whizzard.session_log import SESSIONS_LOG, new_session_id
 
 
 app = typer.Typer(
@@ -44,9 +45,11 @@ app = typer.Typer(
 profiles_app = typer.Typer(help="Inspect available profiles.")
 image_app = typer.Typer(help="Manage the execution image.")
 mounts_app = typer.Typer(help="Inspect the mount registry.")
+sessions_app = typer.Typer(help="Inspect the session log.")
 app.add_typer(profiles_app, name="profiles")
 app.add_typer(image_app, name="image")
 app.add_typer(mounts_app, name="mounts")
+app.add_typer(sessions_app, name="sessions")
 
 console = Console()
 
@@ -110,6 +113,7 @@ def run_cmd(
             raise typer.Exit(code=2)
 
     duration = "unlimited" if prof.duration_seconds is None else f"{prof.duration_seconds // 60} min"
+    session_id = new_session_id()
     if dry_run:
         console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
     console.print(f"[bold]Airlock Profile:[/bold] {prof.name.upper()}")
@@ -117,6 +121,7 @@ def run_cmd(
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")
     console.print(f"[bold]Image:[/bold] {image}")
+    console.print(f"[bold]Session ID:[/bold] {session_id}")
     if resolved:
         console.print("[bold]Mounts:[/bold]")
         for m, mode in resolved:
@@ -127,14 +132,19 @@ def run_cmd(
 
     if dry_run:
         import shlex
-        argv = build_run_argv(prof, image=image, resolved_mounts=resolved)
+        argv = build_run_argv(
+            prof, image=image, resolved_mounts=resolved, session_id=session_id,
+        )
         console.print("[bold]docker invocation that would run:[/bold]")
         console.print("  " + " ".join(shlex.quote(a) for a in argv))
         # Note: image existence is NOT checked here — dry-run reports intent.
         # If the image is missing, an actual `whizzard run` would surface that.
+        # Dry-run does NOT write to the session log.
         raise typer.Exit(code=0)
 
-    result = run_shell(prof, image=image, resolved_mounts=resolved)
+    result = run_shell(
+        prof, image=image, resolved_mounts=resolved, session_id=session_id,
+    )
     raise typer.Exit(code=result.exit_code)
 
 
@@ -272,6 +282,29 @@ def image_build_cmd(
         env=_docker_env(),
     )
     raise typer.Exit(code=completed.returncode)
+
+
+@sessions_app.command("tail")
+def sessions_tail_cmd(
+    n: Annotated[
+        int,
+        typer.Option("-n", help="Number of recent log lines to show."),
+    ] = 10,
+) -> None:
+    """Show the last N lines of the session log."""
+    if not SESSIONS_LOG.exists():
+        console.print(f"[yellow]no session log yet[/yellow] at {SESSIONS_LOG}")
+        return
+
+    lines = SESSIONS_LOG.read_text().splitlines()
+    for line in lines[-n:]:
+        console.print(line)
+
+
+@sessions_app.command("path")
+def sessions_path_cmd() -> None:
+    """Print the path to the session log."""
+    console.print(str(SESSIONS_LOG))
 
 
 if __name__ == "__main__":

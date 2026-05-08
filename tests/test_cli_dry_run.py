@@ -126,3 +126,25 @@ def test_dry_run_shows_broad_mount_override_state():
     out = result.output
     assert "Broad-mount override" in out
     assert "blocked" in out
+
+
+# Stage 5 — session log integration
+
+def test_dry_run_shows_session_id():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert "Session ID" in result.output
+
+
+def test_dry_run_argv_includes_session_label():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert "whizzard.session_id" in result.output
+
+
+def test_dry_run_does_not_write_session_log(tmp_path: Path, monkeypatch):
+    """Dry-run must not touch the session log."""
+    from whizzard import session_log
+    log_path = tmp_path / "sessions.jsonl"
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", log_path)
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert result.exit_code == 0
+    assert not log_path.exists()
