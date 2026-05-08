@@ -517,7 +517,136 @@ Expected: container actually runs, prompt returns. Confirms dry-run flag wasn't 
 
 ## Stage 5 — Session Logging
 
-*(To be added once Stage 5 lands.)*
+### Setup
+
+```sh
+cd /Users/USER/ai-sandbox/airlock-warlock
+source venv/bin/activate
+pytest -v
+```
+
+Expected: 71 tests pass (55 prior + 9 in `test_session_log.py` + 4 docker-cmd Stage 5 additions + 3 dry-run Stage 5 additions).
+
+### Step 1: Banner shows session ID
+
+```sh
+whizzard run --profile default --dry-run
+```
+
+Expected: a new line `Session ID: <uuid>` in the banner. The docker argv includes `--label whizzard.session_id=<same uuid>`. No file is written for dry-run.
+
+```sh
+whizzard sessions tail
+```
+
+Expected: yellow `no session log yet` message at `~/.whizzard/logs/sessions.jsonl` (file shouldn't exist after only dry-runs).
+
+### Step 2: Real run writes start AND end records
+
+```sh
+whizzard run --profile default
+# inside container:
+exit
+```
+
+Then on the host:
+
+```sh
+whizzard sessions tail
+```
+
+Expected: TWO JSONL lines, one with `"event":"session_start"` and one with `"event":"session_end"`, sharing the same `session_id`. The `start` record includes profile, mounts, network_enabled, image_tag, image_id (sha256:...), and the full argv. The `end` record includes container_id (sha256-style hex) and exit_status (0 for clean exit).
+
+### Step 3: Container ID is captured
+
+The `container_id` field in the session_end record should be a 64-char hex string (or shorter — depends on docker version). It's the actual ID of the container that ran, captured via `--cidfile`.
+
+To verify, while a session is running, check from another terminal:
+
+```sh
+# in another terminal:
+docker ps --filter label=whizzard.session_id=<the uuid you saw>
+```
+
+Expected: shows the container with that label. The `CONTAINER ID` here matches what ends up in the log.
+
+### Step 4: Image ID is recorded
+
+The session_start record's `image_id` should be a `sha256:...` digest. Verify it matches:
+
+```sh
+docker image inspect --format '{{.Id}}' whizzard-base:latest
+```
+
+This sha256 should equal the `image_id` field in the most recent session_start log entry.
+
+### Step 5: Duration tracking
+
+Run a session, wait a few seconds, exit:
+
+```sh
+whizzard run --profile default
+sleep 3
+exit
+```
+
+`whizzard sessions tail` — the session_end record's `duration_seconds` should be roughly the time you spent in the container (somewhere around 3 plus your exit-typing time).
+
+### Step 6: Mount metadata in start record
+
+```sh
+whizzard run --profile build --mount rw-test
+exit
+```
+
+The session_start record's `mounts` array should contain one object:
+```json
+{"name":"rw-test","mode":"rw","host_path":"/Users/USER/test-whizzard-rw","container_path":"/mounts/rw-test"}
+```
+
+### Step 7: Failed pre-flight does NOT write session log
+
+```sh
+whizzard run --profile nope
+```
+
+Expected: red error, exit code 2, NO new lines in the session log (run_shell never gets called).
+
+```sh
+whizzard run --profile default --image bogus:nonexistent
+```
+
+Expected: red `image not found` error, exit code 125, NO new session log entries (run_shell does the image-existence check before writing the start event).
+
+### Step 8: Sessions log path command
+
+```sh
+whizzard sessions path
+```
+
+Expected: prints `/Users/USER/.whizzard/logs/sessions.jsonl` (the absolute path).
+
+### Step 9: JSONL format is parseable
+
+```sh
+cat ~/.whizzard/logs/sessions.jsonl | tail -2 | python3 -c "import json,sys; [print(json.dumps(json.loads(l), indent=2)) for l in sys.stdin]"
+```
+
+Expected: pretty-printed JSON for the last two lines, no parse errors.
+
+### Pass criteria
+
+- [ ] All 71 unit tests pass
+- [ ] Banner shows `Session ID: <uuid>`
+- [ ] Real `whizzard run` writes one `session_start` and one `session_end` per session
+- [ ] start and end records share the same `session_id`
+- [ ] `container_id` in session_end matches the actual docker container ID
+- [ ] `image_id` in session_start matches `docker image inspect`
+- [ ] `duration_seconds` in session_end is a sane number reflecting wall time
+- [ ] Mount details appear in session_start when `--mount` is used
+- [ ] Pre-flight failures (bad profile, missing image) do NOT add log entries
+- [ ] `whizzard sessions tail` and `whizzard sessions path` work
+- [ ] Each line of the log parses cleanly as JSON
 
 ---
 

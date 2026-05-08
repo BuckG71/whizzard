@@ -1,0 +1,160 @@
+"""Stage 5: session log tests."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from whizzard.session_log import (
+    append_event,
+    log_session_end,
+    log_session_start,
+    new_session_id,
+)
+
+
+def test_new_session_ids_are_unique():
+    seen = {new_session_id() for _ in range(50)}
+    assert len(seen) == 50
+
+
+def test_new_session_id_is_uuid_format():
+    sid = new_session_id()
+    # 8-4-4-4-12 hex pattern
+    parts = sid.split("-")
+    assert len(parts) == 5
+    assert [len(p) for p in parts] == [8, 4, 4, 4, 12]
+
+
+def test_append_event_creates_parent_dir(tmp_path: Path):
+    target = tmp_path / "deep" / "nested" / "log.jsonl"
+    append_event({"event": "x"}, path=target)
+    assert target.exists()
+
+
+def test_append_event_one_object_per_line(tmp_path: Path):
+    target = tmp_path / "log.jsonl"
+    append_event({"event": "a", "n": 1}, path=target)
+    append_event({"event": "b", "n": 2}, path=target)
+    lines = target.read_text().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0]) == {"event": "a", "n": 1}
+    assert json.loads(lines[1]) == {"event": "b", "n": 2}
+
+
+def test_log_session_start_writes_expected_fields(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-1",
+        profile_name="build",
+        network_enabled=True,
+        duration_limit_seconds=7200,
+        allow_broad_mount=False,
+        image_tag="whizzard-base:latest",
+        image_id="sha256:abc123",
+        mounts=[{"name": "alpha", "mode": "rw", "host_path": "/h/a", "container_path": "/mounts/alpha"}],
+        argv=["docker", "run", "--rm"],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    line = target.read_text().strip()
+    record = json.loads(line)
+    assert record["event"] == "session_start"
+    assert record["session_id"] == "sess-1"
+    assert record["profile"] == "build"
+    assert record["network_enabled"] is True
+    assert record["duration_limit_seconds"] == 7200
+    assert record["allow_broad_mount"] is False
+    assert record["image_tag"] == "whizzard-base:latest"
+    assert record["image_id"] == "sha256:abc123"
+    assert record["mounts"][0]["name"] == "alpha"
+    assert record["argv"] == ["docker", "run", "--rm"]
+    assert "start_time" in record
+    assert "ts" in record
+
+
+def test_log_session_start_handles_unlimited_duration(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-2",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert record["duration_limit_seconds"] is None
+    assert record["image_id"] is None
+
+
+def test_log_session_end_writes_expected_fields(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_end(
+        session_id="sess-1",
+        container_id="abc1234567",
+        exit_status=0,
+        end_time=1_700_000_042.5,
+        duration_seconds=42.5,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert record["event"] == "session_end"
+    assert record["session_id"] == "sess-1"
+    assert record["container_id"] == "abc1234567"
+    assert record["exit_status"] == 0
+    assert record["duration_seconds"] == 42.5
+    assert "end_time" in record
+
+
+def test_log_session_end_handles_missing_container_id(tmp_path: Path):
+    """Container ID may be None if cidfile was never written (e.g. docker
+    failed before the container started). Log it as null, not as a crash."""
+    target = tmp_path / "sessions.jsonl"
+    log_session_end(
+        session_id="sess-3",
+        container_id=None,
+        exit_status=125,
+        end_time=1_700_000_001.0,
+        duration_seconds=1.0,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert record["container_id"] is None
+    assert record["exit_status"] == 125
+
+
+def test_start_and_end_appear_in_order(tmp_path: Path):
+    """A complete session writes start then end as separate JSONL lines."""
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-1",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    log_session_end(
+        session_id="sess-1",
+        container_id="cid",
+        exit_status=0,
+        end_time=1_700_000_010.0,
+        duration_seconds=10.0,
+        path=target,
+    )
+    lines = target.read_text().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["event"] == "session_start"
+    assert json.loads(lines[1])["event"] == "session_end"
+    assert json.loads(lines[0])["session_id"] == json.loads(lines[1])["session_id"]
