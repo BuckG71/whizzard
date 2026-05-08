@@ -1,4 +1,4 @@
-# Warlock / Airlock — Post-MVP Specification (v1.0)
+# Airlock / Warlock — Post-MVP Specification (v1.0)
 
 This document is the tactical plan for v1.0, the first major evolution following the MVP. It assumes context from:
 
@@ -341,7 +341,7 @@ or:
 
 ### Objective
 
-Ensure that anyone cloning the public repo can get a working Warlock/Airlock environment without friction or guesswork.
+Ensure that anyone cloning the public repo can get a working Airlock/Warlock environment without friction or guesswork.
 
 ### Requirements
 

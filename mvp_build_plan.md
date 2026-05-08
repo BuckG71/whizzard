@@ -1,4 +1,4 @@
-# Warlock / Airlock — MVP Build Plan
+# Airlock / Warlock — MVP Build Plan
 
 This document is the tactical plan for the MVP. It assumes context from:
 
@@ -154,7 +154,7 @@ Stale images are a silent risk: a compromised or outdated base image defeats the
 ## Repository Structure
 
 ```text
-warlock-airlock/
+airlock-warlock/
   README.md
   pyproject.toml
 

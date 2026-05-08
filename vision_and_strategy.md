@@ -1,12 +1,12 @@
-# Warlock / Airlock — Vision & Strategy
+# Airlock / Warlock — Vision & Strategy
 
-This document is the single source of truth for what Warlock/Airlock is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
+This document is the single source of truth for what Airlock/Warlock is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
 
 ---
 
 ## Core Thesis
 
-Warlock/Airlock is a local-first capability governance layer for running powerful AI agents with explicit, temporary, human-readable permission boundaries.
+Airlock/Warlock is a local-first capability governance layer for running powerful AI agents with explicit, temporary, human-readable permission boundaries.
 
 The system exists to prove:
 
@@ -70,7 +70,7 @@ Useful autonomous agents without unrestricted machine access.
 
 ### Competitive Framing
 
-Warlock/Airlock is NOT intended to compete with:
+Airlock/Warlock is NOT intended to compete with:
 - Claude Code
 - Codex
 - Cursor
@@ -85,7 +85,7 @@ It targets:
 Tagline:
 
 ```text
-Warlock/Airlock corrals local AI agent harnesses.
+Airlock/Warlock corrals local AI agent harnesses.
 ```
 
 ---
@@ -144,7 +144,7 @@ Approval required
 
 ### The Mount List IS the Permission Model
 
-Capability grants in Warlock/Airlock are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
+Capability grants in Airlock/Warlock are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
 
 - visible permissions
 - temporary capability grants
@@ -273,7 +273,7 @@ Most current agent systems focus on:
 - container isolation
 - permission prompts
 
-Warlock/Airlock instead focuses on:
+Airlock/Warlock instead focuses on:
 
 ```text
 dynamic capability governance
@@ -281,7 +281,7 @@ dynamic capability governance
 
 As autonomous local agents become more capable, users will increasingly need practical capability governance — rather than unrestricted trust or unusably restrictive sandboxes.
 
-Warlock/Airlock attempts to occupy the middle ground:
+Airlock/Warlock attempts to occupy the middle ground:
 - useful enough to matter
 - controlled enough to trust
 - simple enough to use daily

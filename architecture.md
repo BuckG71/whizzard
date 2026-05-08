@@ -1,6 +1,6 @@
-# Warlock / Airlock — System Architecture
+# Airlock / Warlock — System Architecture
 
-This document defines the system architecture, security invariants, and adapter contract for Warlock/Airlock. It applies across all phases of the project — MVP, v1, and beyond.
+This document defines the system architecture, security invariants, and adapter contract for Airlock/Warlock. It applies across all phases of the project — MVP, v1, and beyond.
 
 ---
 
