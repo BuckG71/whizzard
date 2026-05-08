@@ -9,7 +9,6 @@ from whizzard.mounts import (
     CONTAINER_MOUNT_ROOT,
     Mount,
     MountRegistryError,
-    basic_path_sanity_check,
     load_mounts,
     resolve_mount_spec,
 )
@@ -106,20 +105,6 @@ def test_resolve_invalid_mode_raises(mounts_file: Path):
     registry = load_mounts(mounts_file)
     with pytest.raises(MountRegistryError, match="must be 'ro' or 'rw'"):
         resolve_mount_spec("project-alpha:weird", registry)
-
-
-def test_basic_sanity_rejects_root(tmp_path: Path):
-    with pytest.raises(MountRegistryError, match="filesystem root"):
-        basic_path_sanity_check(Path("/"))
-
-
-def test_basic_sanity_rejects_nonexistent(tmp_path: Path):
-    with pytest.raises(MountRegistryError, match="does not exist"):
-        basic_path_sanity_check(tmp_path / "definitely-not-here")
-
-
-def test_basic_sanity_passes_existing_dir(tmp_path: Path):
-    basic_path_sanity_check(tmp_path)  # no error
 
 
 def test_container_path_is_under_mount_root():

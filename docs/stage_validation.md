@@ -652,7 +652,213 @@ Expected: pretty-printed JSON for the last two lines, no parse errors.
 
 ## Stage 6 — Safety Validation
 
-*(To be added once Stage 6 lands.)*
+### Setup
+
+```sh
+cd /Users/USER/ai-sandbox/airlock-warlock
+source venv/bin/activate
+pytest -v
+```
+
+Expected: 90 tests pass (73 prior − 3 removed Stage-2 sanity tests + 18 in `test_safety.py` + 1 in `test_session_log.py` + 1 typing adjustment).
+
+### Step 1: Hard block — filesystem root
+
+Add a fake registered mount that points at `/` and try to use it. We don't actually want the registry to reach `/`, so do this carefully:
+
+```sh
+# Temporarily corrupt the registry to point a mount at /
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"]["danger-root"] = {"host_path": "/", "default_mode": "ro"}
+p.write_text(json.dumps(data))
+PY
+
+whizzard run --profile default --mount danger-root
+```
+
+Expected: red `safety policy: ... hard-blocked` error mentioning `/`. Exit code 2. No container launches.
+
+```sh
+whizzard run --profile power --mount danger-root --allow-broad-mount
+```
+
+Expected: STILL blocked. Hard blocks have no override.
+
+Cleanup:
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"].pop("danger-root", None)
+p.write_text(json.dumps(data))
+PY
+```
+
+### Step 2: Hard block — `~/.ssh`
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"]["danger-ssh"] = {"host_path": "~/.ssh", "default_mode": "ro"}
+p.write_text(json.dumps(data))
+PY
+
+whizzard run --profile default --mount danger-ssh
+```
+
+Expected: red `safety policy: ... hard-blocked` error mentioning `.ssh`. Even on the `power` profile with `--allow-broad-mount`, still blocked. Cleanup the registry entry afterwards.
+
+### Step 3: Config write-protection
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"]["danger-whizzard"] = {"host_path": "~/.whizzard", "default_mode": "rw"}
+p.write_text(json.dumps(data))
+PY
+
+whizzard run --profile power --mount danger-whizzard --allow-broad-mount
+```
+
+Expected: hard-blocked. The Whizzard config dir is non-overridable. Cleanup the registry entry afterwards.
+
+### Step 4: Override-required — broad folder, strict profile
+
+Set up a `~/Documents` mount (assuming you have that directory):
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"]["my-docs"] = {"host_path": "~/Documents", "default_mode": "ro"}
+p.write_text(json.dumps(data))
+PY
+
+whizzard run --profile default --mount my-docs
+```
+
+Expected: red `safety policy:` error stating the path requires broad-mount override but profile `default` blocks it. Reason: `broad folder (~/Documents)`.
+
+### Step 5: Override-required — broad folder, permissive profile, no flag
+
+```sh
+whizzard run --profile power --mount my-docs
+```
+
+Expected: red error saying the override flag is required: `pass --allow-broad-mount to opt in`. Reason: `broad folder`.
+
+### Step 6: Override-required — both gates open → allowed
+
+```sh
+whizzard run --profile power --mount my-docs --allow-broad-mount
+```
+
+Expected:
+- Banner shows `Broad-mount overrides applied:` in yellow with the reason
+- Container launches normally
+- Inside the container, `/mounts/my-docs/` shows your Documents directory contents
+
+Exit the container and confirm the override was logged:
+
+```sh
+whizzard sessions tail -n 1
+```
+
+The most recent `session_start` should include an `overrides_used` array with the broad-folder reason.
+
+Cleanup:
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"].pop("my-docs", None)
+p.write_text(json.dumps(data))
+PY
+```
+
+### Step 7: Parent-of-registered-mount detection
+
+Set up a registered mount at a deep path, then try to mount its parent:
+
+```sh
+mkdir -p ~/test-parent/child
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"]["the-child"] = {"host_path": "~/test-parent/child", "default_mode": "rw"}
+data["mounts"]["the-parent"] = {"host_path": "~/test-parent", "default_mode": "rw"}
+p.write_text(json.dumps(data))
+PY
+
+whizzard run --profile power --mount the-parent
+```
+
+Expected: red error stating `the-parent` is a parent of registered mount `the-child`, requires override.
+
+```sh
+whizzard run --profile power --mount the-parent --allow-broad-mount
+```
+
+Expected: launches with override applied; banner shows the override; session log records it.
+
+Cleanup:
+
+```sh
+rm -rf ~/test-parent
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/mounts.json"
+data = json.loads(p.read_text())
+data["mounts"].pop("the-child", None)
+data["mounts"].pop("the-parent", None)
+p.write_text(json.dumps(data))
+PY
+```
+
+### Step 8: Dry-run respects safety
+
+```sh
+# After re-creating ~/Documents mount as in Step 4
+whizzard run --profile default --mount my-docs --dry-run
+```
+
+Expected: the dry-run still surfaces the safety error before printing any argv. Hard blocks and override-required violations are caught in the same code path as live runs.
+
+### Step 9: Allowed paths are unaffected
+
+```sh
+whizzard run --profile build --mount rw-test
+```
+
+Expected: launches normally with no override banner. The `rw-test` mount is in `~/test-whizzard-rw` which doesn't intersect any block list.
+
+### Pass criteria
+
+- [ ] All 90 unit tests pass
+- [ ] Mounting `/` is hard-blocked, no override possible
+- [ ] Mounting `~/.ssh` is hard-blocked, no override possible
+- [ ] Mounting `~/.whizzard` is hard-blocked, no override possible
+- [ ] Mounting `~/Documents` is blocked on strict profile (no override)
+- [ ] Mounting `~/Documents` on permissive profile without flag is blocked
+- [ ] Mounting `~/Documents` on permissive profile WITH `--allow-broad-mount` succeeds
+- [ ] Banner shows yellow override notice when overrides apply
+- [ ] Session log records `overrides_used` for runs that used overrides
+- [ ] Mounting a parent of a registered mount is override-required
+- [ ] Dry-run catches the same safety violations as live runs
+- [ ] Allowed paths (registered, outside all block lists) launch normally with no override
 
 ---
 

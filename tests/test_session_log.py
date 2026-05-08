@@ -71,6 +71,31 @@ def test_log_session_start_writes_expected_fields(tmp_path: Path):
     assert record["argv"] == ["docker", "run", "--rm"]
     assert "start_time" in record
     assert "ts" in record
+    assert record["overrides_used"] == []  # default empty list
+
+
+def test_log_session_start_records_overrides_used(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-7",
+        profile_name="power",
+        network_enabled=True,
+        duration_limit_seconds=3600,
+        allow_broad_mount=True,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        overrides_used=[
+            {"path": "/Users/me/Documents", "reason": "broad folder (/Users/me/Documents)"},
+        ],
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert len(record["overrides_used"]) == 1
+    assert record["overrides_used"][0]["path"] == "/Users/me/Documents"
+    assert "broad folder" in record["overrides_used"][0]["reason"]
 
 
 def test_log_session_start_handles_unlimited_duration(tmp_path: Path):
