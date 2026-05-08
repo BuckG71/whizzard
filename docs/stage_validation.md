@@ -525,7 +525,7 @@ source venv/bin/activate
 pytest -v
 ```
 
-Expected: 71 tests pass (55 prior + 9 in `test_session_log.py` + 4 docker-cmd Stage 5 additions + 3 dry-run Stage 5 additions).
+Expected: 73 tests pass (55 prior + 9 in `test_session_log.py` + 4 docker-cmd Stage 5 additions + 5 dry-run / pre-flight error tests).
 
 ### Step 1: Banner shows session ID
 

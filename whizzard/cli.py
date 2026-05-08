@@ -142,6 +142,18 @@ def run_cmd(
         # Dry-run does NOT write to the session log.
         raise typer.Exit(code=0)
 
+    # Pre-flight checks before launch — surfaced via the same red-error path
+    # the rest of the CLI uses, so the error styling is consistent.
+    if not docker_available():
+        console.print("[red]error: docker not found on PATH[/red]")
+        raise typer.Exit(code=127)
+    if not image_exists(image):
+        console.print(
+            f"[red]error: image {image!r} not found.[/red]\n"
+            f"build it with: [bold]whizzard image build[/bold]"
+        )
+        raise typer.Exit(code=125)
+
     result = run_shell(
         prof, image=image, resolved_mounts=resolved, session_id=session_id,
     )
