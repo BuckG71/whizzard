@@ -864,7 +864,161 @@ Expected: launches normally with no override banner. The `rw-test` mount is in `
 
 ## Stage 7 — Generic Adapter
 
-*(To be added once Stage 7 lands.)*
+### Setup
+
+```sh
+cd /Users/bg1971/ai-sandbox/airlock-warlock
+source venv/bin/activate
+pytest -v
+```
+
+Expected: 131 tests pass (90 prior + 16 in `test_adapters.py` + 13 in `test_harness_config.py` + 8 docker-cmd Stage 7 additions + 4 dry-run Stage 7 additions).
+
+### Step 1: Default behavior unchanged
+
+```sh
+whizzard run --profile default --dry-run
+```
+
+Expected: banner now shows a `Harness: generic` line. The docker argv ends with `/bin/bash` and includes `--label whizzard.harness=generic`. Everything else is unchanged from Stage 6.
+
+### Step 2: List the harness registry
+
+```sh
+whizzard harnesses list
+```
+
+Expected: a Rich table titled `Harnesses (bundled defaults)` showing the `generic` harness.
+
+### Step 3: Seed user config from defaults
+
+```sh
+whizzard harnesses init
+cat ~/.whizzard/config/harnesses.json
+whizzard harnesses list
+```
+
+Expected: writes the defaults to `~/.whizzard/config/harnesses.json`. `harnesses list` now shows `Harnesses (user config)` in the title.
+
+### Step 4: Add a custom shell harness
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/harnesses.json"
+data = json.loads(p.read_text())
+data["harnesses"]["bash-login"] = {
+    "type": "shell",
+    "start_command": "/bin/bash -l",
+    "working_dir": "/home/whizzard",
+    "env": {"FOO": "bar"},
+    "description": "login shell with example env"
+}
+p.write_text(json.dumps(data, indent=2))
+PY
+
+whizzard harnesses list
+```
+
+Expected: `bash-login` row appears in the list with the right values.
+
+### Step 5: Use the custom harness in dry-run
+
+```sh
+whizzard run --profile default --harness bash-login --dry-run
+```
+
+Expected:
+- Banner shows `Harness: bash-login`
+- argv ends with `/bin/bash -l`
+- argv includes `-e FOO=bar`
+- argv includes `-w /home/whizzard`
+- argv includes `--label whizzard.harness=bash-login`
+
+### Step 6: Use the custom harness for real
+
+```sh
+whizzard run --profile default --harness bash-login
+```
+
+Expected: a login bash session inside the container. Inside, `echo $FOO` should print `bar`. Confirms env injection through the adapter is working.
+
+```sh
+exit
+whizzard sessions tail -n 1
+```
+
+The session_start record's `argv` field should reflect the custom start_command and env.
+
+### Step 7: Unknown harness produces a clean error
+
+```sh
+whizzard run --profile default --harness nope --dry-run
+```
+
+Expected: red `unknown harness: 'nope'. Available: ...` error, exit code 2.
+
+### Step 8: Agent-type harness rejected until Stage 8
+
+```sh
+python3 - <<'PY'
+import json, pathlib
+p = pathlib.Path.home() / ".whizzard/config/harnesses.json"
+data = json.loads(p.read_text())
+data["harnesses"]["fake-agent"] = {
+    "type": "agent",
+    "start_command": "echo nope"
+}
+p.write_text(json.dumps(data, indent=2))
+PY
+
+whizzard run --profile default --harness fake-agent --dry-run
+```
+
+Expected: red error stating `harness 'fake-agent' has type 'agent' but no agent adapter is implemented yet (lands in Stage 8 with the Hermes adapter)`.
+
+### Step 9: Schema violations are caught
+
+```sh
+echo '{"schema_version": 1, "harnesses": {"bad": {"type": "alien", "start_command": "x"}}}' > ~/.whizzard/config/harnesses.json
+whizzard harnesses list
+```
+
+Expected: red `error loading harnesses.json: harness 'bad': type must be 'shell' or 'agent', got 'alien'`. Exit code 2.
+
+### Step 10: Init refuses to clobber
+
+```sh
+whizzard harnesses init
+```
+
+Expected: yellow "already exists, use --force" message. Exit code 1.
+
+```sh
+whizzard harnesses init --force
+```
+
+Expected: overwrites silently with the green confirmation.
+
+### Cleanup
+
+```sh
+# Remove custom entries from harnesses.json
+whizzard harnesses init --force
+```
+
+### Pass criteria
+
+- [ ] All 131 unit tests pass
+- [ ] `whizzard run` still works as before, defaulting to the generic harness
+- [ ] Banner shows `Harness: <name>`
+- [ ] docker argv includes `--label whizzard.harness=<name>`
+- [ ] Custom shell harnesses (start_command, env, working_dir) work end-to-end
+- [ ] `whizzard harnesses list` and `whizzard harnesses init` work
+- [ ] Unknown harness produces clean red error, no traceback
+- [ ] Agent-type harnesses are explicitly rejected with a Stage-8 message
+- [ ] Schema violations produce clean errors
+- [ ] `init` refuses to clobber without `--force`
 
 ---
 

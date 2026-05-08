@@ -17,18 +17,18 @@ runner = CliRunner()
 @pytest.fixture(autouse=True)
 def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Point WHIZZARD_HOME at a temp dir so tests don't pollute the user's
-    actual ~/.whizzard, and reset profiles/mounts module-level paths.
+    actual ~/.whizzard, and reset module-level paths in dependent modules.
     """
     home = tmp_path / "whizzard-home"
     monkeypatch.setenv("WHIZZARD_HOME", str(home))
-    # The module read os.environ at import time, so patch the path constants too.
-    from whizzard import config, mounts
+    from whizzard import config, harness_config, mounts
     monkeypatch.setattr(config, "WHIZZARD_HOME", home)
     monkeypatch.setattr(config, "CONFIG_DIR", home / "config")
     monkeypatch.setattr(config, "LOGS_DIR", home / "logs")
     monkeypatch.setattr(config, "STATE_DIR", home / "state")
     monkeypatch.setattr(config, "PROFILES_FILE", home / "config" / "profiles.json")
     monkeypatch.setattr(mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
+    monkeypatch.setattr(harness_config, "HARNESSES_FILE", home / "config" / "harnesses.json")
     yield
 
 
@@ -179,3 +179,48 @@ def test_missing_docker_shows_red_error_via_cli(monkeypatch):
     result = runner.invoke(app, ["run", "--profile", "default"])
     assert result.exit_code == 127
     assert "docker not found" in result.output
+
+
+# Stage 7 — adapter / harness flag
+
+def test_dry_run_banner_shows_harness_name():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert "Harness" in result.output
+    assert "generic" in result.output
+
+
+def test_dry_run_argv_includes_harness_label():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert "whizzard.harness=generic" in result.output
+
+
+def test_unknown_harness_is_rejected():
+    result = runner.invoke(app, [
+        "run", "--profile", "default", "--harness", "nope", "--dry-run",
+    ])
+    assert result.exit_code == 2
+    assert "unknown harness" in result.output
+
+
+def test_custom_harness_via_user_config(tmp_path: Path):
+    """A user-defined shell harness in harnesses.json should work end-to-end."""
+    import json
+    home = Path(__import__("os").environ["WHIZZARD_HOME"])
+    config_dir = home / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "harnesses.json").write_text(json.dumps({
+        "schema_version": 1,
+        "harnesses": {
+            "zsh-flavored": {
+                "type": "shell",
+                "start_command": "/bin/zsh",
+                "working_dir": "/home/whizzard",
+            },
+        },
+    }))
+    result = runner.invoke(app, [
+        "run", "--profile", "default", "--harness", "zsh-flavored", "--dry-run",
+    ])
+    assert result.exit_code == 0
+    assert "zsh-flavored" in result.output
+    assert "/bin/zsh" in result.output
