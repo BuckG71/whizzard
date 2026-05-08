@@ -1,0 +1,128 @@
+"""Stage 4: dry-run tests for the run command."""
+
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from typer.testing import CliRunner
+
+from whizzard.cli import app
+from whizzard.docker_cmd import RunResult
+
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Point WHIZZARD_HOME at a temp dir so tests don't pollute the user's
+    actual ~/.whizzard, and reset profiles/mounts module-level paths.
+    """
+    home = tmp_path / "whizzard-home"
+    monkeypatch.setenv("WHIZZARD_HOME", str(home))
+    # The module read os.environ at import time, so patch the path constants too.
+    from whizzard import config, mounts
+    monkeypatch.setattr(config, "WHIZZARD_HOME", home)
+    monkeypatch.setattr(config, "CONFIG_DIR", home / "config")
+    monkeypatch.setattr(config, "LOGS_DIR", home / "logs")
+    monkeypatch.setattr(config, "STATE_DIR", home / "state")
+    monkeypatch.setattr(config, "PROFILES_FILE", home / "config" / "profiles.json")
+    monkeypatch.setattr(mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
+    yield
+
+
+def test_dry_run_does_not_call_run_shell():
+    """Dry-run must not invoke run_shell — that's the whole point."""
+    with patch("whizzard.cli.run_shell") as mock_run:
+        result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert result.exit_code == 0
+    assert mock_run.call_count == 0
+
+
+def test_dry_run_output_contains_dry_run_banner():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert result.exit_code == 0
+    assert "DRY RUN" in result.output
+
+
+def test_dry_run_output_contains_profile_summary():
+    result = runner.invoke(app, ["run", "--profile", "build", "--dry-run"])
+    assert "BUILD" in result.output
+    assert "Network" in result.output
+    assert "Duration" in result.output
+    assert "Image" in result.output
+
+
+def test_dry_run_output_contains_docker_argv():
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    out = result.output
+    assert "docker invocation that would run" in out
+    assert "docker" in out
+    assert "run" in out
+    assert "--rm" in out
+    assert "--cap-drop=ALL" in out
+    assert "/bin/bash" in out
+
+
+def test_dry_run_includes_mount_in_argv(tmp_path: Path):
+    """Dry-run with a mount should show the -v line in the argv."""
+    target = tmp_path / "alpha"
+    target.mkdir()
+
+    home = Path(__import__("os").environ["WHIZZARD_HOME"])
+    config_dir = home / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "mounts.json").write_text(json.dumps({
+        "schema_version": 1,
+        "mounts": {
+            "test-alpha": {
+                "host_path": str(target),
+                "default_mode": "rw",
+            },
+        },
+    }))
+
+    result = runner.invoke(
+        app,
+        ["run", "--profile", "build", "--mount", "test-alpha", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    assert "-v" in result.output
+    assert "/mounts/test-alpha:rw" in result.output
+
+
+def test_dry_run_with_unknown_profile_errors():
+    result = runner.invoke(app, ["run", "--profile", "nope", "--dry-run"])
+    assert result.exit_code == 2
+    assert "Unknown profile" in result.output
+
+
+def test_dry_run_with_unknown_mount_errors():
+    result = runner.invoke(
+        app,
+        ["run", "--profile", "default", "--mount", "does-not-exist", "--dry-run"],
+    )
+    assert result.exit_code == 2
+    assert "unknown mount" in result.output
+
+
+def test_run_without_dry_run_calls_run_shell():
+    """Sanity check: omitting --dry-run still calls run_shell."""
+    with patch("whizzard.cli.run_shell", return_value=RunResult(None, 0)) as mock_run:
+        result = runner.invoke(app, ["run", "--profile", "default"])
+    assert mock_run.call_count == 1
+    assert result.exit_code == 0
+
+
+def test_dry_run_shows_broad_mount_override_state():
+    """Stage 4 dry-run surfaces broad-mount override status from the profile."""
+    result = runner.invoke(app, ["run", "--profile", "power", "--dry-run"])
+    out = result.output
+    assert "Broad-mount override" in out
+    assert "allowed" in out
+
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    out = result.output
+    assert "Broad-mount override" in out
+    assert "blocked" in out
