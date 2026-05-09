@@ -27,16 +27,17 @@ The MVP is operational when the system can:
 8. Launch a generic harness and a Hermes harness through adapters.
 9. Expose a read-only Whiz MCP server so the contained agent can introspect its own constraints.
 
-**Personal-use capabilities (Stages 10–17, added 2026-05-09 per D-137 / D-140):**
+**Personal-use capabilities (Stages 10–18, added 2026-05-09 per D-137 / D-140 / D-142 / D-143):**
 
-10. Switch between named, scoped agent contexts via presets.
-11. Inject API credentials via OneCLI vault (with env-var fallback when OneCLI is absent).
-12. Adjust an active session's capabilities mid-session via stop+restart, with local TTY approval.
-13. Expose request-side MCP tools so the agent can ask for capability changes (`whiz_request_mount`, `whiz_request_extend`).
-14. Enforce session duration and idle timeout, not just log them.
-15. View running sessions, status, and audit logs via a Discord read-only control plane.
-16. Start, stop, extend, switch profile, and approve mount additions remotely via Discord write/approve flow with single-use identity-bound tokens.
-17. Build, audit, and pin by digest the container image used for execution.
+10. Switch between named, scoped agent contexts via presets, with terse CLI shortcuts (`whiz r`, `whiz p`, `whiz s`).
+11. Operate Whiz from inside Claude Code via slash commands (`/whiz launch`, `/whiz status`, `/whiz adjust`, etc.).
+12. Inject API credentials via OneCLI vault (with env-var fallback when OneCLI is absent).
+13. Adjust an active session's capabilities mid-session via stop+restart, with local TTY approval.
+14. Expose request-side MCP tools so the agent can ask for capability changes (`whiz_request_mount`, `whiz_request_extend`).
+15. Enforce session duration and idle timeout, not just log them.
+16. View running sessions, status, and audit logs via a Discord read-only control plane.
+17. Start, stop, extend, switch profile, and approve mount additions remotely via Discord write/approve flow with single-use identity-bound tokens.
+18. Build, audit, and pin by digest the container image used for execution.
 
 ---
 
@@ -188,19 +189,48 @@ Tools shipped at this stage (cooperation layer, all read-only):
 
 The MCP server is a first-class part of the design (D-25). Mutate-side tools come at Stage 13.
 
-### Stage 10 — Presets
+### Stage 10 — Presets and CLI Ergonomics
 
-Goal: deliver the day-1 OSS value-prop "switch between named, scoped agent contexts" (the **D** half of D-102's B+D combination).
+Goal: deliver the day-1 OSS value-prop "switch between named, scoped agent contexts" (the **D** half of D-102's B+D combination), with low-friction CLI ergonomics so common operations require minimal typing.
 
-A preset bundles a profile, harness, mounts, duration, env vars, and (optionally) idle timeout under a single name:
+Deliverables:
+
+**Presets** — named bundles of profile + harness + mounts + duration + env vars + (optionally) idle timeout:
 
 ```zsh
 whizzard preset launch coding-session
 ```
 
-Preset config format and example presets are defined in [post_mvp_spec.md §7](post_mvp_spec.md). Promoted from post-MVP per D-103.
+Preset config format and example presets per [post_mvp_spec.md §7](post_mvp_spec.md). Promoted from post-MVP per D-103.
 
-### Stage 11 — OneCLI Vault Integration
+**CLI brevity** (D-142 A):
+- Short binary alias: `whiz` alongside `whizzard`
+- Subcommand shortcuts: `whiz r` → `whiz run`, `whiz s` → `whiz sessions tail`, `whiz p` → `whiz preset launch`
+- Smart defaults: `whiz r` with no args = launch the most recently used preset
+
+Pure UX work; no architectural lift.
+
+### Stage 11 — Host-side Claude Code Slash Commands
+
+Goal: zero-friction Whiz operation from inside Claude Code (D-142 C).
+
+Deliverable: a bundle of `.claude/skills/` recipes that wrap the underlying `whizzard` CLI. Pattern follows NanoClaw's operator-side skill model documented in [nanoclaw_internals.md §2](nanoclaw_internals.md).
+
+Skills shipped at this stage:
+
+- `/whiz launch <preset>` — start a preset session
+- `/whiz status` — list running sessions
+- `/whiz preset list` — list available presets
+- `/whiz sessions tail` — tail the audit log
+- `/whiz extend <session-id> <duration>` — read-only display at this stage; mutating behavior unlocked at Stage 13
+- `/whiz approve <token>` — read-only display at this stage; mutating behavior unlocked at Stage 14
+- `/whiz adjust <session-id> --add-mount <name>` — read-only display at this stage; mutating behavior unlocked at Stage 13
+
+The Stage 11 deliverable is the skill bundle plus the read-only operations. Mutating operations are unlocked progressively as their underlying stages land.
+
+No new pip dependencies; the skills shell out to `whizzard`.
+
+### Stage 12 — OneCLI Vault Integration
 
 Goal: real API credentials never enter the container.
 
@@ -208,11 +238,11 @@ Mechanism: outbound HTTPS routed through the OneCLI gateway proxy via `HTTPS_PRO
 
 Promoted to MVP from post-v1 backlog based on the NanoClaw research findings (D-91, D-98). Lands here rather than later because credential isolation is the strongest single argument for Whiz's security thesis (D-102 / B).
 
-### Stage 12 — Stop+Restart Mechanism + Local TTY Approval Flow
+### Stage 13 — Stop+Restart Mechanism + Local TTY Approval Flow
 
 Goal: change a running session's capabilities without losing the session.
 
-Mechanism (D-27): adapter.wrap_up() → terminate → relaunch with new flags. The session is logically continuous from the user's perspective even though the container is replaced. Approval is a local TTY prompt for MVP; Discord approval comes at Stage 16.
+Mechanism (D-27): adapter.wrap_up() → terminate → relaunch with new flags. The session is logically continuous from the user's perspective even though the container is replaced. Approval is a local TTY prompt for MVP; Discord approval comes at Stage 17.
 
 User-facing CLI:
 
@@ -221,19 +251,19 @@ whizzard adjust <session-id> --add-mount foo
 whizzard adjust <session-id> --extend 30m
 ```
 
-This is the substrate Stage 13's request-side MCP tools call into.
+This is the substrate Stage 14's request-side MCP tools call into.
 
-### Stage 13 — Whiz MCP Server (Request-Side Tools)
+### Stage 14 — Whiz MCP Server (Request-Side Tools)
 
 Goal: agent-initiated capability requests.
 
 Tools added at this stage:
-- `whiz_request_mount` — agent requests a named mount be added; Whiz host-side prompts user (or auto-approves per profile policy), applies via Stage 12 stop+restart
+- `whiz_request_mount` — agent requests a named mount be added; Whiz host-side prompts user (or auto-approves per profile policy), applies via Stage 13 stop+restart
 - `whiz_request_extend` — agent requests duration extension
 
-Depends on Stage 12 substrate. Network-egress-allowlist requests (`whiz_request_network`) require sidecar proxy and remain post-MVP.
+Depends on Stage 13 substrate. Network-egress-allowlist requests (`whiz_request_network`) require sidecar proxy and remain post-MVP.
 
-### Stage 14 — Duration + Idle Timeout Enforcement
+### Stage 15 — Duration + Idle Timeout Enforcement
 
 Goal: time-bounded sessions become enforced (not just logged).
 
@@ -245,7 +275,7 @@ Requirements:
 
 Builds on the duration tracking already present from Stage 5.
 
-### Stage 15 — Discord Control Plane (Read-Only)
+### Stage 16 — Discord Control Plane (Read-Only)
 
 Goal: see what's running from anywhere.
 
@@ -258,7 +288,7 @@ Reads are queries against `~/.whizzard/logs/sessions.jsonl` plus live process st
 
 The Whiz control plane channel must be separate from the agent interaction channel (architecture invariant — agents do not manage their own permissions, [post_mvp_spec.md §2](post_mvp_spec.md)).
 
-### Stage 16 — Discord Control Plane (Write + Approve)
+### Stage 17 — Discord Control Plane (Write + Approve)
 
 Goal: full Discord-mediated session management.
 
@@ -266,12 +296,12 @@ Mutating commands:
 - `/whizzard start` — launch a session (preset or explicit args)
 - `/whizzard stop <session-id>`
 - `/whizzard extend <session-id> <duration>`
-- `/whizzard switch-profile <session-id> <profile>` — implemented via Stage 12 stop+restart
+- `/whizzard switch-profile <session-id> <profile>` — implemented via Stage 13 stop+restart
 - `/whizzard approve <token>` — approve pending mount addition or other capability request
 
 Approval token security (per D-113): tokens are single-use, expire after 5 minutes, validated against the Discord user ID that initiated the session request.
 
-### Stage 17 — Image Management
+### Stage 18 — Image Management
 
 Goal: prevent stale or unknown images from undermining containment.
 
@@ -284,7 +314,7 @@ Requirements:
 
 Stale images are a silent risk: a compromised or outdated base image defeats the containment model regardless of policy correctness. Image provenance must be visible and auditable.
 
-This stage was originally Stage 9, then Stage 11; it now lands at Stage 17 (D-138). It's polish-relative-to-functionality compared to the personal-use capability stages and benefits from being the last MVP stage so the security audit before OSS-launch starts from a fully digest-pinned baseline.
+This stage was originally Stage 9, then Stage 11, then Stage 17; it now lands at Stage 18 (D-143). It's polish-relative-to-functionality compared to the personal-use capability stages and benefits from being the last MVP stage so the security audit before OSS-launch starts from a fully digest-pinned baseline.
 
 ---
 
@@ -349,10 +379,12 @@ whizzard harnesses list
 whizzard sessions tail
 ```
 
-**Personal-use (Stages 10–17):**
+**Personal-use (Stages 10–18):**
 
 ```zsh
 whizzard preset launch coding-session
+whiz r                                                 # smart default: launch most-recent preset
+whiz s                                                 # subcommand shortcut: sessions tail
 whizzard run --profile build --vault                  # OneCLI vault on
 whizzard adjust <session-id> --add-mount foo
 whizzard adjust <session-id> --extend 30m
@@ -361,7 +393,19 @@ whizzard image status
 whizzard image check
 ```
 
-**Discord control plane (Stages 15–16):**
+**Claude Code slash commands (Stage 11):**
+
+```text
+/whiz launch coding-session
+/whiz status
+/whiz preset list
+/whiz sessions tail
+/whiz extend <session-id> 30m
+/whiz adjust <session-id> --add-mount foo
+/whiz approve <token>
+```
+
+**Discord control plane (Stages 16–17):**
 
 ```text
 /whizzard status

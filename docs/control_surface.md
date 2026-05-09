@@ -63,7 +63,7 @@ Whizzard exposes two architecturally distinct kinds of control. They look relate
 
 Status legend:
 
-- **✓** in MVP today (Stages 1–7 implemented; Stages 8–11 planned for MVP)
+- **✓** in MVP today (Stages 1–7 implemented; Stages 8–18 planned for MVP)
 - **◐** in post-MVP backlog ([post_mvp_spec.md](post_mvp_spec.md))
 - **○** identified but not yet scoped to any milestone
 - **✗** harness-native — Whiz must NOT recreate this
@@ -106,16 +106,16 @@ Status legend:
 
 | Item | Status | Notes |
 |---|---|---|
-| Hard duration cap | ✓ planned | logged in MVP via session_log; enforcement at Stage 14 |
-| Idle timeout (kill if no activity) | ✓ planned | Stage 14 |
+| Hard duration cap | ✓ planned | logged in MVP via session_log; enforcement at Stage 15 |
+| Idle timeout (kill if no activity) | ✓ planned | Stage 15 |
 | Time-of-day windows | ○ | enterprise-shaped, deprioritized |
-| Mid-session extend prompt | ✓ planned | Stage 13 (`whiz_request_extend`) + Stage 14 enforcement |
+| Mid-session extend prompt | ✓ planned | Stage 14 (`whiz_request_extend`) + Stage 15 enforcement |
 
 ### 5. Credentials and secrets
 
 | Item | Status | Notes |
 |---|---|---|
-| Vault-mediated credentials (OneCLI) | ✓ planned | Stage 11; with env-var fallback when OneCLI not on host |
+| Vault-mediated credentials (OneCLI) | ✓ planned | Stage 12; with env-var fallback when OneCLI not on host |
 | Per-domain credential scoping at vault | ○ | OneCLI primitive |
 | Per-call rate limits at vault | ○ | OneCLI primitive |
 | Credential-use audit (independent of agent log) | ○ | enterprise-shaped, deprioritized |
@@ -135,7 +135,7 @@ Status legend:
 | Item | Status | Notes |
 |---|---|---|
 | Hardened base image (non-root, minimal) | ✓ | Stage 1 |
-| Digest-pinned base image | ◐ | Stage 11 (was Stage 9; reordered after MCP/preset stages) |
+| Digest-pinned base image | ✓ planned | Stage 18 (was Stage 9, then Stage 11, then Stage 17; final per D-143) |
 | Staleness check + warning | ◐ | post-MVP §6 |
 | Per-session image override | ○ | useful when adapters land for different agent types |
 
@@ -163,9 +163,9 @@ Status legend:
 | Item | Status | Notes |
 |---|---|---|
 | In-session command approval | ✗ | Hermes / NanoClaw native |
-| Local TTY approval flow (substrate for request-side MCP) | ✓ planned | Stage 12 |
-| Discord control plane — read-only (status, list sessions, tail logs) | ✓ planned | Stage 15 |
-| Discord control plane — write/approve (start, stop, extend, switch profile, approve mount) | ✓ planned | Stage 16; single-use time-bounded tokens, identity-bound |
+| Local TTY approval flow (substrate for request-side MCP) | ✓ planned | Stage 13 |
+| Discord control plane — read-only (status, list sessions, tail logs) | ✓ planned | Stage 16 |
+| Discord control plane — write/approve (start, stop, extend, switch profile, approve mount) | ✓ planned | Stage 17; single-use time-bounded tokens, identity-bound |
 | Multi-party approval | ○ | enterprise-shaped, deprioritized |
 | Auto-approve allowlist per profile | ○ | small lift |
 
@@ -195,8 +195,8 @@ These are the agent-facing tools Whiz exposes via MCP. The MCP server is a first
 | `whiz_audit_self` | read | ✓ planned (Stage 9) | this session's audit log |
 | `whiz_emit_event` | append | ✓ planned (Stage 9) | structured agent-authored audit entry |
 | `whiz_list_presets` | read | ✓ planned (Stage 9) | enumerable presets (depends on Stage 10) |
-| `whiz_request_mount` | mutate | ✓ planned (Stage 13) | depends on Stage 12 stop+restart + local TTY approval |
-| `whiz_request_extend` | mutate | ✓ planned (Stage 13) | depends on Stage 12 |
+| `whiz_request_mount` | mutate | ✓ planned (Stage 14) | depends on Stage 13 stop+restart + local TTY approval |
+| `whiz_request_extend` | mutate | ✓ planned (Stage 14) | depends on Stage 13 |
 | `whiz_request_network` | mutate | ○ | requires sidecar proxy; remains post-MVP |
 | `whiz_graceful_exit` | mutate | ○ | overlaps adapter `wrap_up()`; not committed to MVP |
 
@@ -206,7 +206,7 @@ These are the agent-facing tools Whiz exposes via MCP. The MCP server is a first
 
 Three patterns:
 
-1. **The MVP through Stage 17 covers roughly half of the total surface.** That's the foundational layer (FS, network on/off, container hardening, audit log) plus the personal-use cluster pulled in 2026-05-09 (vault, stop+restart, request-side MCP, Discord control plane, duration + idle enforcement, presets, image management). The remaining ~50% is post-MVP, post-OSS-launch, or deferred indefinitely.
+1. **The MVP through Stage 18 covers roughly half of the total surface.** That's the foundational layer (FS, network on/off, container hardening, audit log) plus the personal-use cluster pulled in 2026-05-09 (vault, stop+restart, request-side MCP, Discord control plane read+write, duration + idle enforcement, presets + CLI ergonomics, Claude Code slash commands, image management). The remaining ~50% is post-MVP, post-OSS-launch, or deferred indefinitely.
 
 2. **The "new territory" (○) clusters in three areas, each with a single mechanism that unlocks it:**
    - **Sidecar proxy** — unlocks network egress allowlists, MCP tool shaping, traffic logging, vault generalization
@@ -249,16 +249,17 @@ These were made in conversation 2026-05-09 and aren't yet reflected in [mvp_buil
 
    D specifically pulls presets up from post-MVP §7 into MVP scope, because preset-driven switching is how D is delivered.
 
-4. **MVP scope additions** (driven by B+D and personal-use threshold). The MVP build order is now Stage 1 → Stage 17 (D-138):
+4. **MVP scope additions** (driven by B+D, personal-use threshold, and slash command surface decisions). The MVP build order is now Stage 1 → Stage 18 (D-143):
    - Stage 9: Whiz MCP server, read-only subset (`whiz_status`, `whiz_audit_self`, `whiz_emit_event`, `whiz_list_presets`)
-   - Stage 10: Presets (named bundles of profile + harness + mounts + duration + env)
-   - Stage 11: OneCLI vault integration (with env-var fallback when OneCLI not on host)
-   - Stage 12: Stop+restart mechanism + local TTY approval flow
-   - Stage 13: Whiz MCP server request-side tools (`whiz_request_mount`, `whiz_request_extend`)
-   - Stage 14: Duration + idle timeout enforcement
-   - Stage 15: Discord control plane (read-only)
-   - Stage 16: Discord control plane (write + approve flow)
-   - Stage 17: Image management (digest pinning, status, age check)
+   - Stage 10: Presets and CLI ergonomics (`whiz` alias, subcommand shortcuts, smart defaults)
+   - Stage 11: Host-side Claude Code slash commands (`.claude/skills/` bundle for `/whiz launch`, `/whiz status`, etc.)
+   - Stage 12: OneCLI vault integration (with env-var fallback when OneCLI not on host)
+   - Stage 13: Stop+restart mechanism + local TTY approval flow
+   - Stage 14: Whiz MCP server request-side tools (`whiz_request_mount`, `whiz_request_extend`)
+   - Stage 15: Duration + idle timeout enforcement
+   - Stage 16: Discord control plane (read-only)
+   - Stage 17: Discord control plane (write + approve flow)
+   - Stage 18: Image management (digest pinning, status, age check)
 
 5. **Mid-session adjustment mechanism = stop+restart.** When the user (CLI or, eventually, Discord) or the agent (via MCP request tools) requests a capability change mid-session, Whiz wraps_up the harness, terminates the container, and relaunches with new flags. Acceptable friction; clean state model.
 
@@ -266,7 +267,9 @@ These were made in conversation 2026-05-09 and aren't yet reflected in [mvp_buil
 
 7. **All five personal-use candidate items pulled into MVP** (D-137). Rather than rank-ordering them, the user committed to all of them so MVP fully clears the personal daily-driver threshold.
 
-8. **Discord control plane includes write + approve, not just read-only** (D-139). The original "read-only first" framing was a staging suggestion; both subsets are in MVP, with read-only at Stage 15 and write/approve at Stage 16.
+8. **Discord control plane includes write + approve, not just read-only** (D-139). The original "read-only first" framing was a staging suggestion; both subsets are in MVP, with read-only at Stage 16 and write/approve at Stage 17.
+
+9. **Slash command surface — A, B, C in MVP; D post-MVP** (D-142). CLI brevity (A) folds into Stage 10. Claude Code slash commands (C) become new Stage 11. Discord slash commands (B) ride on Stages 16–17. In-agent-chat command interception (D) is post-MVP and will be designed-for during Stage 8 so the adapter contract supports it without retrofitting.
 
 ---
 
