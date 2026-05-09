@@ -6,7 +6,7 @@ Cross-references:
 - [architecture.md](architecture.md) — system components, safety policy, adapter schema, foundational invariants
 - [post_mvp_spec.md](post_mvp_spec.md) — current v1.0 plan
 - [vision_and_strategy.md](vision_and_strategy.md) — long-term direction (Phase 3 Breaker, Phase 4 Shadow Home)
-- [hermes_research.md](hermes_research.md), [nanoclaw_research.md](nanoclaw_research.md), [nanoclaw_internals.md](nanoclaw_internals.md) — what existing harnesses already do (don't recreate)
+- [archive/hermes_research.md](archive/hermes_research.md), [archive/nanoclaw_research.md](archive/nanoclaw_research.md), [archive/nanoclaw_internals.md](archive/nanoclaw_internals.md) — what existing harnesses already do (don't recreate)
 
 Written: 2026-05-09. Status markers reflect this date and will drift as work progresses.
 

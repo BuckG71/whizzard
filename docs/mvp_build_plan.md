@@ -214,7 +214,7 @@ Pure UX work; no architectural lift.
 
 Goal: zero-friction Whiz operation from inside Claude Code (D-142 C).
 
-Deliverable: a bundle of `.claude/skills/` recipes that wrap the underlying `whizzard` CLI. Pattern follows NanoClaw's operator-side skill model documented in [nanoclaw_internals.md §2](nanoclaw_internals.md).
+Deliverable: a bundle of `.claude/skills/` recipes that wrap the underlying `whizzard` CLI. Pattern follows NanoClaw's operator-side skill model documented in [archive/nanoclaw_internals.md §2](archive/nanoclaw_internals.md).
 
 Skills shipped at this stage:
 
