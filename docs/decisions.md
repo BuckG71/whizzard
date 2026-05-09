@@ -1163,7 +1163,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Source:** conversation 2026-05-09
 
-**Status:** active; supersedes D-100
+**Status:** superseded by D-143
 
 ### D-139: Discord control plane write + approve flow is in MVP
 
@@ -1187,13 +1187,38 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 ### D-141: Whizzard adopts a hybrid generalization path — agent-focused at MVP, explicit "general" mode at OSS-launch
 
-**Decision:** Whizzard's MVP remains agent-focused (Hermes/NanoClaw harness adapters anchor the audience). At OSS-launch, an explicit "general process" mode is added: `harnesses.json` schema accepts any executable, presets shaped for non-agent OSS tools (e.g., "try-untrusted-cli"), marketing positions both agent and general use cases. The architectural foundation already supports this — most stages are harness-neutral; only the Whiz MCP cooperation layer (Stages 9, 13) is agent-specific.
+**Decision:** Whizzard's MVP remains agent-focused (Hermes/NanoClaw harness adapters anchor the audience). At OSS-launch, an explicit "general process" mode is added: `harnesses.json` schema accepts any executable, presets shaped for non-agent OSS tools (e.g., "try-untrusted-cli"), marketing positions both agent and general use cases. The architectural foundation already supports this — most stages are harness-neutral; only the Whiz MCP cooperation layer (Stages 9, 14) is agent-specific.
 
 **Rationale:** Three options were considered: A) stay agent-focused with sibling project later, B) general from the start, C) hybrid — agent at MVP, general at OSS-launch. C wins because it preserves MVP focus (sharp use cases drive design) while leaving the broader OSS-tool audience addressable when polish lands. B risks losing focus pre-MVP; A leaves a real gap on the table — there's no good cross-platform low-friction security-shaped container layer for individual developers (firejail/bwrap are Linux-only and config-tedious; Docker alone has no policy/preset/audit layering; devcontainers and Distrobox aren't security-shaped).
 
 **Source:** conversation 2026-05-09
 
 **Status:** active
+
+### D-142: Slash command surface — A, B, C in MVP; D post-MVP
+
+**Decision:** Four slash-command surfaces were considered:
+
+- **A. Host CLI brevity** (`whiz` alias alongside `whizzard`, subcommand shortcuts like `whiz r` / `whiz s` / `whiz p`, smart defaults such as "launch most recent preset" with no args) — in MVP, folded into Stage 10 alongside presets
+- **B. Discord and other gateway slash commands** (`/whizzard status`, `/whizzard start`, `/whizzard extend`, etc.) — in MVP at Stages 16–17
+- **C. Host-side Claude Code slash commands** (`.claude/skills/` bundle for `/whiz launch`, `/whiz status`, `/whiz adjust`, etc., wrapping the underlying CLI) — in MVP as new Stage 11
+- **D. In-agent-chat slash command interception by harness adapter** (user types `/whiz extend 30m` inside their Discord conversation with the agent; adapter intercepts before the agent sees it; forwards to Whiz host-side) — post-MVP
+
+**Rationale:** A, B, C are small, near-orthogonal, and directly reduce daily-driver friction. D is more architecturally consequential — it requires a new adapter contract method (input-side intercept hook), transport-level user authentication, and opt-in design — and benefits from being designed after the Hermes adapter (Stage 8) and Discord control plane (Stages 16–17) are stable. Stage 8 will be designed with D's contract requirement in mind so it's not retrofitted.
+
+**Source:** conversation 2026-05-09
+
+**Status:** active
+
+### D-143: MVP build order extended to 18 stages
+
+**Decision:** MVP build order is now Stage 1 → Stage 18. Stage 10 expands to include CLI brevity (D-142 A); new Stage 11 is Host-side Claude Code Slash Commands (D-142 C); subsequent stages renumber by +1: Stage 12 = OneCLI vault (was 11), Stage 13 = stop+restart + local TTY approval (was 12), Stage 14 = Whiz MCP request-side (was 13), Stage 15 = duration + idle timeout (was 14), Stage 16 = Discord control plane read-only (was 15), Stage 17 = Discord control plane write+approve (was 16), Stage 18 = image management (was 17).
+
+**Rationale:** Slash command surface decisions per D-142. CLI brevity (A) is pure UX with the same theme as presets — folding into Stage 10 keeps stage count from inflating without sacrificing clarity. Claude Code slash commands (C) merit their own stage because the deliverable is a distinct `.claude/skills/` bundle with its own test surface. Image management still defers to last (D-138 rationale unchanged).
+
+**Source:** conversation 2026-05-09
+
+**Status:** active; supersedes D-138
 
 ---
 
