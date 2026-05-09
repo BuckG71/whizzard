@@ -127,6 +127,56 @@ This separation is mandatory for maintaining the security model.
 
 ---
 
+## Control Layering
+
+Whizzard's controls compose in three concentric layers. Each layer has a different shape, a different enforcement mechanism, and a different owner. They do not collapse into each other.
+
+```text
+┌─ Outer (Whiz pre-session enforcement) ────────────────┐
+│  Mounts, network, capabilities, image, hardening,     │
+│  duration. Set at launch via container flags.         │
+│  Agent can never reach or modify these directly.      │   ← enforcement layer
+│  Kernel / Docker enforce.                             │
+│                                                       │
+│  ┌─ Inner (harness — Hermes/NanoClaw/etc) ─────────┐  │
+│  │  Dangerous-command approval, tool intent gating,│  │   ← behavioral layer
+│  │  /yolo, smart-mode aux LLM, etc.                │  │     (HARNESS-NATIVE
+│  │  Whiz does NOT recreate these.                  │  │      — don't recreate)
+│  │                                                 │  │
+│  │  ┌─ Whiz MCP server (in-container surface) ──┐  │  │
+│  │  │  Status / self-audit / event emission /  │  │  │   ← cooperation layer
+│  │  │  capability-change requests (which       │  │  │     (agent-facing API
+│  │  │  trigger outer-layer changes via         │  │  │      to Whiz host brain)
+│  │  │  stop+restart)                           │  │  │
+│  │  └──────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+```
+
+### Enforcement layer (outer, Whizzard-owned)
+
+Set at container launch via Docker flags and container configuration. Includes mount visibility and modes, network policy, capability drops, image identity, container hardening, and session duration. The agent never sees these as configurable surfaces — they exist before the agent does, and changing them requires stop+restart. Enforced by the kernel and Docker, not by the agent or harness.
+
+This is the layer where Whizzard's safety policy operates, and the layer that harnesses do not address themselves.
+
+### Behavioral layer (inner, harness-owned)
+
+Dangerous-command interception, in-session approval flows, tool intent gating, `/yolo`-style bypass mechanisms. These exist inside the harness and are intent-time, fine-grained decisions. Hermes and NanoClaw both ship robust versions of this layer.
+
+**Whizzard does not recreate these controls.** Recreating them would duplicate harness work and add surface area the harness already maintains. Layering is the discipline: structural posture is Whizzard's job, behavioral interception is the harness's.
+
+### Cooperation layer (innermost, Whizzard-exposed via MCP)
+
+A first-class part of the design. MCP support is treated as a baseline harness capability, not a per-adapter feature flag. Exposes a small set of agent-facing tools that let the running agent introspect its own constraints, write structured audit entries, and request structural changes. Capability-change requests are mediated by Whizzard host-side and applied via stop+restart of the container.
+
+The cooperation layer never replaces the enforcement layer; it is a structured, agent-visible interface to the host-side capability brain. The full cooperation-layer tool surface is documented in [control_surface.md](control_surface.md).
+
+### Composition rule
+
+Each layer does what the others cannot. The enforcement layer determines what the agent could possibly do; the behavioral layer determines what the agent will be allowed to attempt within that envelope; the cooperation layer determines what the agent can ask Whizzard to change about the envelope. Mixing layers — recreating harness approval at the enforcement layer, or exposing structural controls as MCP-modifiable from inside the agent — breaks the model.
+
+---
+
 ## Config Write-Protection Invariant
 
 The Whizzard config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `agents.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.

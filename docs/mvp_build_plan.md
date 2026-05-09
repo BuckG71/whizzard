@@ -11,7 +11,11 @@ The MVP exists to prove that useful autonomous agents can coexist with practical
 
 ## MVP Definition
 
+The MVP is a **personal daily-driver milestone, not the OSS-launch milestone** (D-101). OSS-launch scope is defined separately once MVP is operational.
+
 The MVP is operational when the system can:
+
+**Foundational capabilities (Stages 1–9):**
 
 1. Launch a generic Docker shell under a profile.
 2. Mount only approved registered folders.
@@ -20,8 +24,19 @@ The MVP is operational when the system can:
 5. Reject dangerous mounts per the safety policy.
 6. Show dry-run permission previews.
 7. Write session logs.
-8. Launch a generic harness through an adapter.
-9. Manage and audit the container image used for execution.
+8. Launch a generic harness and a Hermes harness through adapters.
+9. Expose a read-only Whiz MCP server so the contained agent can introspect its own constraints.
+
+**Personal-use capabilities (Stages 10–17, added 2026-05-09 per D-137 / D-140):**
+
+10. Switch between named, scoped agent contexts via presets.
+11. Inject API credentials via OneCLI vault (with env-var fallback when OneCLI is absent).
+12. Adjust an active session's capabilities mid-session via stop+restart, with local TTY approval.
+13. Expose request-side MCP tools so the agent can ask for capability changes (`whiz_request_mount`, `whiz_request_extend`).
+14. Enforce session duration and idle timeout, not just log them.
+15. View running sessions, status, and audit logs via a Discord read-only control plane.
+16. Start, stop, extend, switch profile, and approve mount additions remotely via Discord write/approve flow with single-use identity-bound tokens.
+17. Build, audit, and pin by digest the container image used for execution.
 
 ---
 
@@ -159,7 +174,104 @@ Instead:
 Hermes adapter → Airlock core
 ```
 
-### Stage 9 — Image Management
+Profile-based isolation: Whizzard mounts a single Hermes profile directory as `HERMES_HOME` rather than mounting individual subdirectories of `~/.hermes`. Credentials inject via env vars; `auth.json` never enters the cell. Wrap-up uses `/quit` via `docker exec`. Five Stage 8 design questions remain open at the time of this writing — see D-86 through D-90.
+
+### Stage 9 — Whiz MCP Server (Read-Only Subset)
+
+Goal: give the contained agent a structured, agent-facing interface to introspect its own Whiz-imposed constraints.
+
+Tools shipped at this stage (cooperation layer, all read-only):
+- `whiz_status` — current profile, mounts, network policy, expiry, harness, session id
+- `whiz_audit_self` — this session's own audit log entries
+- `whiz_emit_event` — agent-authored entry appended to the audit log
+- `whiz_list_presets` — enumerable presets (Stage 10 dependency)
+
+The MCP server is a first-class part of the design (D-25). Mutate-side tools come at Stage 13.
+
+### Stage 10 — Presets
+
+Goal: deliver the day-1 OSS value-prop "switch between named, scoped agent contexts" (the **D** half of D-102's B+D combination).
+
+A preset bundles a profile, harness, mounts, duration, env vars, and (optionally) idle timeout under a single name:
+
+```zsh
+whizzard preset launch coding-session
+```
+
+Preset config format and example presets are defined in [post_mvp_spec.md §7](post_mvp_spec.md). Promoted from post-MVP per D-103.
+
+### Stage 11 — OneCLI Vault Integration
+
+Goal: real API credentials never enter the container.
+
+Mechanism: outbound HTTPS routed through the OneCLI gateway proxy via `HTTPS_PROXY` env var + CA cert mount. Per-agent OneCLI identity. If OneCLI is not installed on the host, fall back to env-var injection with a warning logged to the session record.
+
+Promoted to MVP from post-v1 backlog based on the NanoClaw research findings (D-91, D-98). Lands here rather than later because credential isolation is the strongest single argument for Whiz's security thesis (D-102 / B).
+
+### Stage 12 — Stop+Restart Mechanism + Local TTY Approval Flow
+
+Goal: change a running session's capabilities without losing the session.
+
+Mechanism (D-27): adapter.wrap_up() → terminate → relaunch with new flags. The session is logically continuous from the user's perspective even though the container is replaced. Approval is a local TTY prompt for MVP; Discord approval comes at Stage 16.
+
+User-facing CLI:
+
+```zsh
+whizzard adjust <session-id> --add-mount foo
+whizzard adjust <session-id> --extend 30m
+```
+
+This is the substrate Stage 13's request-side MCP tools call into.
+
+### Stage 13 — Whiz MCP Server (Request-Side Tools)
+
+Goal: agent-initiated capability requests.
+
+Tools added at this stage:
+- `whiz_request_mount` — agent requests a named mount be added; Whiz host-side prompts user (or auto-approves per profile policy), applies via Stage 12 stop+restart
+- `whiz_request_extend` — agent requests duration extension
+
+Depends on Stage 12 substrate. Network-egress-allowlist requests (`whiz_request_network`) require sidecar proxy and remain post-MVP.
+
+### Stage 14 — Duration + Idle Timeout Enforcement
+
+Goal: time-bounded sessions become enforced (not just logged).
+
+Requirements:
+- hard duration cap kills the container at expiry
+- idle timeout kills the container after N minutes with no agent activity
+- both write to session log with expiry reason
+- pre-expiry warning at configurable lead time
+
+Builds on the duration tracking already present from Stage 5.
+
+### Stage 15 — Discord Control Plane (Read-Only)
+
+Goal: see what's running from anywhere.
+
+Bot framework + Discord auth + read-only commands:
+- `/whizzard status` — list running sessions, current profile/mounts/expiry per session
+- `/whizzard sessions list` — recent session history
+- `/whizzard logs tail <session-id>` — tail the audit log for one session
+
+Reads are queries against `~/.whizzard/logs/sessions.jsonl` plus live process state. No mutation.
+
+The Whiz control plane channel must be separate from the agent interaction channel (architecture invariant — agents do not manage their own permissions, [post_mvp_spec.md §2](post_mvp_spec.md)).
+
+### Stage 16 — Discord Control Plane (Write + Approve)
+
+Goal: full Discord-mediated session management.
+
+Mutating commands:
+- `/whizzard start` — launch a session (preset or explicit args)
+- `/whizzard stop <session-id>`
+- `/whizzard extend <session-id> <duration>`
+- `/whizzard switch-profile <session-id> <profile>` — implemented via Stage 12 stop+restart
+- `/whizzard approve <token>` — approve pending mount addition or other capability request
+
+Approval token security (per D-113): tokens are single-use, expire after 5 minutes, validated against the Discord user ID that initiated the session request.
+
+### Stage 17 — Image Management
 
 Goal: prevent stale or unknown images from undermining containment.
 
@@ -167,9 +279,12 @@ Requirements:
 - base image digest pinned in `Dockerfile` (not floating tag)
 - `whizzard image build` to build/rebuild the local image
 - `whizzard image status` to show current image id, build date, base digest
-- session log records the image id for each session
+- `whizzard image check` to compare current image age against staleness threshold
+- session log records the image id for each session (already implemented in Stage 5)
 
-Stale images are a silent risk: a compromised or outdated base image defeats the containment model regardless of policy correctness. Image provenance must be visible and auditable from day one.
+Stale images are a silent risk: a compromised or outdated base image defeats the containment model regardless of policy correctness. Image provenance must be visible and auditable.
+
+This stage was originally Stage 9, then Stage 11; it now lands at Stage 17 (D-138). It's polish-relative-to-functionality compared to the personal-use capability stages and benefits from being the last MVP stage so the security audit before OSS-launch starts from a fully digest-pinned baseline.
 
 ---
 
@@ -219,40 +334,73 @@ airlock-whizzard/
 
 The MVP passes if these commands behave as specified:
 
+**Foundational (Stages 1–9):**
+
 ```zsh
 whizzard run --profile safe
 whizzard run --profile default
 whizzard run --profile build --mount project-alpha
 whizzard run --dry-run --profile build
+whizzard run --profile build --harness hermes
 whizzard adapters list
 whizzard profiles list
 whizzard mounts list
+whizzard harnesses list
+whizzard sessions tail
+```
+
+**Personal-use (Stages 10–17):**
+
+```zsh
+whizzard preset launch coding-session
+whizzard run --profile build --vault                  # OneCLI vault on
+whizzard adjust <session-id> --add-mount foo
+whizzard adjust <session-id> --extend 30m
+whizzard sessions list
 whizzard image status
+whizzard image check
+```
+
+**Discord control plane (Stages 15–16):**
+
+```text
+/whizzard status
+/whizzard start preset:coding-session
+/whizzard stop <session-id>
+/whizzard extend <session-id> 30m
+/whizzard approve <token>
 ```
 
 And:
 - dangerous mounts are blocked per the safety policy
-- logs are written
-- containerized execution works
+- logs are written for every session, including capability adjustments
+- containerized execution works for both shell and Hermes harnesses
 - network mode changes by profile
 - host home directory is inaccessible
 - adapter abstraction is preserved
 - image provenance is recorded for every session
+- credentials never enter the container when the vault is in use
+- duration and idle timeouts are enforced (not just logged)
+- agent-initiated `whiz_request_*` MCP calls go through the local TTY approval flow (or the Discord approval flow when the control plane is up)
+- Discord control plane channel is separate from agent interaction channel
 
 ---
 
 ## Explicit Non-MVP Features
 
-Do NOT build initially:
+Do NOT build during MVP:
 - GUI
-- Discord control plane
-- MCP gateway
-- per-agent orchestration
-- breaker engine
-- shadow-home system
-- file tree mount picker
+- MCP gateway adapter (governed MCP runtime for arbitrary harnesses — distinct from the Whiz MCP server in Stages 9 and 13)
+- Per-agent orchestration (per-agent capability scoping comes via Whiz profiles + presets in MVP; full multi-agent identity is post-MVP)
+- Breaker engine
+- Shadow-home system
+- File tree mount picker
 - AI risk scoring
-- VM orchestration
+- VM orchestration (Podman / Firecracker / Apple Virtualization Framework)
+- Network egress allowlists, MCP tool shaping, traffic logs (all require sidecar-proxy mechanism — post-MVP / post-OSS-launch)
+- AppArmor / SELinux profiles, time-of-day windows, bandwidth caps, multi-party approval, identity-provider integrations (deprioritized indefinitely per D-123 — enterprise-shaped)
+
+The Discord control plane was previously listed here; it moved into MVP at Stages 15–16 per D-137 and D-139.
 
 These belong to post-MVP phases. See [post_mvp_spec.md](post_mvp_spec.md) and [vision_and_strategy.md](vision_and_strategy.md).
 
