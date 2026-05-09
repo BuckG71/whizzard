@@ -23,6 +23,6 @@ env/
 .claude/settings.local.json
 
 # Project local
-~/.warlock/
+~/.whizzard/
 *.log
 .claude/worktrees/

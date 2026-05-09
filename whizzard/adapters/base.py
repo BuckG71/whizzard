@@ -1,8 +1,8 @@
 """Adapter interface for harness integration.
 
-The adapter is the seam between Airlock (which provides containment and
+The adapter is the seam between Whizzard (which provides containment and
 policy enforcement) and Whizzard (which orchestrates an agent harness
-inside the contained execution cell). Airlock core stays harness-neutral
+inside the contained execution cell). Whizzard core stays harness-neutral
 per architecture.md; harness-specific behavior lives behind this interface.
 
 Stage 7 lands the interface and the trivial GenericShellAdapter.
@@ -38,7 +38,7 @@ class HarnessAdapter(Protocol):
     contained execution cell, and how to gracefully wrap it up before
     container termination.
 
-    Airlock decides WHAT capabilities the cell has (mounts, network,
+    Whizzard decides WHAT capabilities the cell has (mounts, network,
     duration). The adapter decides WHAT runs inside the cell.
     """
 
@@ -56,7 +56,7 @@ class HarnessAdapter(Protocol):
     def container_env(self) -> dict[str, str]:
         """Environment variables to inject into the container.
 
-        Airlock applies these on top of its own baseline. The adapter
+        Whizzard applies these on top of its own baseline. The adapter
         is responsible for any harness-specific config injection here
         (e.g., Hermes might set HERMES_HOME or override terminal.backend).
         """
@@ -69,7 +69,7 @@ class HarnessAdapter(Protocol):
     def wrap_up(self, container_id: str, grace_seconds: int) -> WrapUpResult:
         """Send the harness's native graceful-shutdown signal.
 
-        Called by Airlock before SIGTERM when a session is about to end
+        Called by Whizzard before SIGTERM when a session is about to end
         (duration expiry, user-initiated stop, safety termination).
         Bounded by grace_seconds; if the harness doesn't acknowledge in
         that window, the caller proceeds to SIGTERM regardless.

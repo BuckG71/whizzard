@@ -1,4 +1,4 @@
-"""Airlock/Whizzard CLI entry point."""
+"""Whizzard CLI entry point."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ from whizzard.session_log import SESSIONS_LOG, new_session_id
 
 app = typer.Typer(
     name="whizzard",
-    help="Airlock/Whizzard — local capability governance for AI agents.",
+    help="Whizzard — local capability governance for AI agents.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -173,7 +173,7 @@ def run_cmd(
     session_id = new_session_id()
     if dry_run:
         console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
-    console.print(f"[bold]Airlock Profile:[/bold] {prof.name.upper()}")
+    console.print(f"[bold]Whizzard Profile:[/bold] {prof.name.upper()}")
     console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")

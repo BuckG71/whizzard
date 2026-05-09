@@ -1,4 +1,4 @@
-# Airlock / Whizzard — Post-MVP Specification (v1.0)
+# Whizzard — Post-MVP Specification (v1.0)
 
 This document is the tactical plan for v1.0, the first major evolution following the MVP. It assumes context from:
 
@@ -27,7 +27,7 @@ The MVP proves containerized capability governance, profiles, scoped mounts, saf
 
 ### Objective
 
-Move from instance-level permissions to agent-level permissions, allowing different agents within the same harness/runtime to operate under different Airlock policies.
+Move from instance-level permissions to agent-level permissions, allowing different agents within the same harness/runtime to operate under different Whizzard policies.
 
 ### Architecture
 
@@ -64,9 +64,9 @@ Harness Runtime
 ### Initial v1 Approach
 
 Do NOT implement full autonomous multi-agent orchestration initially. Instead:
-- bind agents to Airlock policies
+- bind agents to Whizzard policies
 - resolve policy at execution time
-- route tool execution through Airlock
+- route tool execution through Whizzard
 
 Example:
 
@@ -93,7 +93,7 @@ Discord approval is additive to local approval, not a replacement for it.
 
 ### Objective
 
-Allow safe mobile management of local agents and Airlock policies.
+Allow safe mobile management of local agents and Whizzard policies.
 
 ### Architecture
 
@@ -102,17 +102,17 @@ Discord
   ├── Hermes Chat Channel
   │      └── Hermes/OpenClaw/etc
   │
-  └── Airlock Control Channel
+  └── Whizzard Control Channel
          └── Whizzard Control Bot
                  ↓
             Local Whizzard Daemon
                  ↓
-            Airlock Policy Engine
+            Whizzard Policy Engine
                  ↓
             Docker Execution Cells
 ```
 
-The Airlock control channel must be separate from the agent interaction channel. Agents do not manage their own permissions.
+The Whizzard control channel must be separate from the agent interaction channel. Agents do not manage their own permissions.
 
 ### Control Plane Responsibilities
 
@@ -195,7 +195,7 @@ Without these controls the approval flow is vulnerable to token replay and to ot
 
 ### Objective
 
-Bring multiple agent harnesses online through the existing adapter layer (defined in [architecture.md](architecture.md)) without coupling Airlock core to any single runtime.
+Bring multiple agent harnesses online through the existing adapter layer (defined in [architecture.md](architecture.md)) without coupling Whizzard core to any single runtime.
 
 ### v1 Adapter Slate
 
@@ -215,7 +215,7 @@ The adapter contract and canonical `harnesses.json` schema are defined once in [
 
 ### Objective
 
-Position Airlock as a capability-governed MCP tool gateway.
+Position Whizzard as a capability-governed MCP tool gateway.
 
 ### Concept
 
@@ -224,7 +224,7 @@ Harness
    ↓
 MCP Tool Request
    ↓
-Airlock Policy Engine
+Whizzard Policy Engine
    ↓
 Controlled Tool Execution
 ```
@@ -353,7 +353,7 @@ or:
 
 ### Objective
 
-Ensure that anyone cloning the public repo can get a working Airlock/Whizzard environment without friction or guesswork.
+Ensure that anyone cloning the public repo can get a working Whizzard/Whizzard environment without friction or guesswork.
 
 ### Requirements
 
@@ -406,7 +406,7 @@ Agents themselves should not browse the host filesystem tree.
 
 ### MCP-Native Governance Layer
 
-Airlock becomes a governed MCP execution runtime for arbitrary harnesses.
+Whizzard becomes a governed MCP execution runtime for arbitrary harnesses.
 
 ### GUI / Desktop Application
 
@@ -446,7 +446,7 @@ Properties:
 - every credential use is logged at the gateway, independent of agent log
 - pairs with the Phase 4 Shadow Home (vision_and_strategy.md): shadow-test new agents before exposure, then run them in production with vault-mediated credentials. They solve different problems — Shadow Home is observational ("we'd have caught this"), the vault is architectural ("the agent literally cannot exfiltrate").
 
-Implementation direction: integrate with an existing vault implementation (OneCLI, HashiCorp Vault, or similar) rather than build from scratch. Whizzard/Airlock's job is to wire the container's network through the vault; the credential storage and policy engine are someone else's well-tested problem.
+Implementation direction: integrate with an existing vault implementation (OneCLI, HashiCorp Vault, or similar) rather than build from scratch. Whizzard's job is to wire the container's network through the vault; the credential storage and policy engine are someone else's well-tested problem.
 
 Reference implementations:
 - [NanoClaw Agent Vault blog post](https://nanoclaw.dev/blog/nanoclaw-agent-vault/)
