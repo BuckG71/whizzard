@@ -1,4 +1,4 @@
-# Airlock / Whizzard — MVP Build Plan
+# Whizzard — MVP Build Plan
 
 This document is the tactical plan for the MVP. It assumes context from:
 
@@ -167,12 +167,12 @@ Hermes integration must occur ONLY through the adapter layer.
 
 Not:
 ```text
-Airlock = Hermes wrapper
+Whizzard = Hermes wrapper
 ```
 
 Instead:
 ```text
-Hermes adapter → Airlock core
+Hermes adapter → Whizzard core
 ```
 
 Profile-based isolation: Whizzard mounts a single Hermes profile directory as `HERMES_HOME` rather than mounting individual subdirectories of `~/.hermes`. Credentials inject via env vars; `auth.json` never enters the cell. Wrap-up uses `/quit` via `docker exec`. Five Stage 8 design questions remain open at the time of this writing — see D-86 through D-90.
@@ -321,7 +321,7 @@ This stage was originally Stage 9, then Stage 11, then Stage 17; it now lands at
 ## Repository Structure
 
 ```text
-airlock-whizzard/
+whizzard/
   README.md
   pyproject.toml
 

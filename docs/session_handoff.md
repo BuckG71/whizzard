@@ -1,5 +1,7 @@
 # Session Handoff — 2026-05-08
 
+> **Historical snapshot — superseded by subsequent work.** This document captures the project state as of 2026-05-08. The 2026-05-09 session moved well past it: MVP scope expanded to 18 stages, naming consolidated to single "Whizzard" (D-144), repo and local dir renamed (D-145, D-146), control-layering framing formalized in [architecture.md](architecture.md), control surface mapped in [control_surface.md](control_surface.md), decisions index built in [decisions.md](decisions.md). A new session should orient from those documents, not this one.
+
 Comprehensive context for resuming this work in a new Claude Code session. Designed so a fresh session can read this one document and pick up the thread without re-deriving the whole project from scratch.
 
 ---

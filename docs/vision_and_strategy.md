@@ -1,12 +1,14 @@
-# Airlock / Whizzard — Vision & Strategy
+# Whizzard — Vision & Strategy
 
-This document is the single source of truth for what Airlock/Whizzard is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
+This document is the single source of truth for what Whizzard is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
+
+> Naming note: earlier drafts used a two-name framing ("Airlock" = containment, "Whizzard" = orchestrator). Project consolidated to single name "Whizzard" on 2026-05-09 (D-144). "Whizzard" is itself a working placeholder; long-term name TBD.
 
 ---
 
 ## Core Thesis
 
-Airlock/Whizzard is a local-first capability governance layer for running powerful AI agents with explicit, temporary, human-readable permission boundaries.
+Whizzard is a local-first capability governance layer for running powerful AI agents (and, post-MVP, general OSS tools) with explicit, temporary, human-readable permission boundaries.
 
 The system exists to prove:
 
@@ -18,25 +20,13 @@ Useful autonomous agents can coexist with practical local security boundaries.
 
 ## Naming System
 
-| Component  | Role                                              |
-|------------|---------------------------------------------------|
-| Whizzard    | Agent runtime / orchestrator                      |
-| Airlock    | Permission and containment layer                  |
-| Breaker    | Behavioral interruption engine (post-MVP)         |
-| Quarantine | High-risk execution mode                          |
-
-Verbal framing:
-
-```text
-Whizzard operates.
-Airlock governs.
-```
-
-or:
-
-```text
-Whizzard executes inside Airlock.
-```
+| Component       | Role                                              |
+|-----------------|---------------------------------------------------|
+| Whizzard        | The whole system: orchestrator, policy engine, containment |
+| Execution Cell  | The contained execution environment (Docker container in MVP) |
+| Harness Adapter | Integration layer for Hermes / OpenClaw / NanoClaw / etc. |
+| Breaker         | Behavioral interruption engine (post-MVP)         |
+| Quarantine      | High-risk execution mode (a profile name)         |
 
 ---
 
@@ -70,7 +60,7 @@ Useful autonomous agents without unrestricted machine access.
 
 ### Competitive Framing
 
-Airlock/Whizzard is NOT intended to compete with:
+Whizzard is NOT intended to compete with:
 - Claude Code
 - Codex
 - Cursor
@@ -85,7 +75,7 @@ It targets:
 Tagline:
 
 ```text
-Airlock/Whizzard corrals local AI agent harnesses.
+Whizzard corrals local AI agent harnesses.
 ```
 
 ---
@@ -121,7 +111,7 @@ whizzard run --profile coding --mount project-alpha
 Output:
 
 ```text
-Airlock Profile: POWER
+Whizzard Profile: POWER
 Network: ENABLED
 Filesystem: project-alpha (rw)
 Breaker: ACTIVE
@@ -144,7 +134,7 @@ Approval required
 
 ### The Mount List IS the Permission Model
 
-Capability grants in Airlock/Whizzard are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
+Capability grants in Whizzard are not abstract policy declarations — they are the literal list of mounts and toggles a user sees before launch. This creates:
 
 - visible permissions
 - temporary capability grants
@@ -273,7 +263,7 @@ Most current agent systems focus on:
 - container isolation
 - permission prompts
 
-Airlock/Whizzard instead focuses on:
+Whizzard instead focuses on:
 
 ```text
 dynamic capability governance
@@ -281,7 +271,7 @@ dynamic capability governance
 
 As autonomous local agents become more capable, users will increasingly need practical capability governance — rather than unrestricted trust or unusably restrictive sandboxes.
 
-Airlock/Whizzard attempts to occupy the middle ground:
+Whizzard attempts to occupy the middle ground:
 - useful enough to matter
 - controlled enough to trust
 - simple enough to use daily

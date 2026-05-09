@@ -1,8 +1,10 @@
-# Whizzard / Airlock — Decisions Index
+# Whizzard — Decisions Index
 
 ## What this is
 
-The canonical, append-only index of every decision made for the Whizzard / Airlock project — architectural, scope, process, and framing. Source documents (vision, architecture, MVP plan, post-MVP, research notes, control surface, session handoff) remain authoritative for narrative and rationale; this file is the searchable index of the choices themselves. Decisions are append-only: superseded entries stay in place with a status update rather than being deleted, so cross-references stay stable. Decisions made in conversation but not yet reflected in source docs are flagged with `Source: conversation YYYY-MM-DD`.
+The canonical, append-only index of every decision made for the Whizzard project — architectural, scope, process, and framing. Source documents (vision, architecture, MVP plan, post-MVP, research notes, control surface, session handoff) remain authoritative for narrative and rationale; this file is the searchable index of the choices themselves. Decisions are append-only: superseded entries stay in place with a status update rather than being deleted, so cross-references stay stable. Decisions made in conversation but not yet reflected in source docs are flagged with `Source: conversation YYYY-MM-DD`.
+
+> Naming note: as of 2026-05-09 (D-144), the project consolidated from a two-name framing ("Airlock = governance, Whizzard = orchestrator") to a single name "Whizzard". Pre-D-144 entries that reference "Airlock" describe what is now called "Whizzard core"; their substance is unchanged. Entries D-01 through D-08 are partially historical (placeholder repo and package names that have since changed).
 
 ## Status legend
 
@@ -23,7 +25,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Source:** docs/session_handoff.md
 
-**Status:** active
+**Status:** superseded by D-145
 
 ### D-02: Internal package name is `whizzard` (replaces `warlock`)
 
@@ -43,7 +45,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Source:** docs/session_handoff.md
 
-**Status:** active
+**Status:** superseded by D-146 (rename happens between sessions, not mid-session)
 
 ### D-04: Two-name component split — Airlock vs. Whizzard
 
@@ -53,7 +55,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Source:** docs/vision_and_strategy.md; docs/architecture.md
 
-**Status:** active
+**Status:** superseded by D-144
 
 ### D-05: Verbal framing — "Whizzard operates. Airlock governs."
 
@@ -63,7 +65,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Source:** docs/vision_and_strategy.md; docs/architecture.md
 
-**Status:** active
+**Status:** superseded by D-144
 
 ### D-06: License is MIT
 
@@ -109,13 +111,13 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Status:** active
 
-### D-10: Airlock core stays harness-neutral
+### D-10: Whizzard core stays harness-neutral
 
-**Decision:** Airlock core must know nothing about Hermes, OpenClaw, NanoClaw, Discord, or MCP specifics. All harness-specific logic lives in adapters.
+**Decision:** Whizzard core must know nothing about Hermes, OpenClaw, NanoClaw, Discord, or MCP specifics. All harness-specific logic lives in adapters.
 
 **Rationale:** Coupling core to any specific harness collapses the layering and makes future harnesses second-class.
 
-**Source:** docs/architecture.md (Airlock Core)
+**Source:** docs/architecture.md (Whizzard Core; pre-D-144 referred to as "Airlock Core")
 
 **Status:** active
 
@@ -133,7 +135,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Decision:** Agent-reachable mount paths must never include the Whizzard config directory, regardless of policy files.
 
-**Rationale:** An agent that can write files Airlock reads can influence its own policies, breaking the trust model. Cannot be relaxed by profiles or presets.
+**Rationale:** An agent that can write files Whizzard reads can influence its own policies, breaking the trust model. Cannot be relaxed by profiles or presets.
 
 **Source:** docs/architecture.md (Config Write-Protection Invariant)
 
@@ -205,17 +207,17 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 ### D-19: Four named components — Whizzard, Airlock, Execution Cell, Harness Adapter
 
-**Decision:** Component vocabulary is fixed at: Whizzard (orchestrator), Airlock (policy/containment), Execution Cell (the contained environment, Docker in MVP), Harness Adapter (integration layer).
+**Decision:** Component vocabulary is fixed at: Whizzard (orchestrator), Airlock (policy/containment), Execution Cell (the contained environment, Docker in MVP), Harness Adapter (integration layer). *(Three components after D-144 consolidation: Whizzard, Execution Cell, Harness Adapter.)*
 
 **Rationale:** Stable vocabulary lets docs and code converge; alternatives (e.g., calling the cell "the container") leak implementation detail.
 
 **Source:** docs/architecture.md (System Components)
 
-**Status:** active
+**Status:** partially superseded by D-144 (the Airlock sub-component name is retired; the other three names remain)
 
-### D-20: Three architecture layers — Airlock Core, Adapter Layer, Execution Backend
+### D-20: Three architecture layers — Whizzard Core, Adapter Layer, Execution Backend
 
-**Decision:** The system is organized as Airlock Core (harness-neutral) → Harness Adapter Layer → Execution Backend.
+**Decision:** The system is organized as Whizzard Core (harness-neutral) → Harness Adapter Layer → Execution Backend. *(Pre-D-144: "Airlock Core" was the term for what is now "Whizzard Core".)*
 
 **Rationale:** Clean seams allow swapping execution backends and adding adapters without touching core; matches the trust model.
 
@@ -339,7 +341,7 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 ### D-32: Agent identity is the adapter's responsibility, not core's
 
-**Decision:** Airlock core does not assume agent identity is available. Adapters tag tool execution with agent identity at the harness boundary; core trusts that claim.
+**Decision:** Whizzard core does not assume agent identity is available. Adapters tag tool execution with agent identity at the harness boundary; core trusts that claim.
 
 **Rationale:** Per-agent policy needs identity; harnesses Whizzard does not own can't be required to expose it natively. Cryptographic verification is a future problem.
 
@@ -1220,6 +1222,36 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Status:** active; supersedes D-138
 
+### D-144: Consolidate naming to single "Whizzard" — drop the Airlock/Whizzard split
+
+**Decision:** Drop the two-component naming split. The whole project is named "Whizzard" — orchestrator, policy engine, and containment layer all under one name. The "Airlock" sub-component name is retired. Architecture layers within Whizzard remain (Whizzard Core / Harness Adapter / Execution Backend), but they're internal layering rather than separately-named user-facing components. "Whizzard" itself remains a working placeholder; long-term name TBD.
+
+**Rationale:** The Airlock/Whizzard split was elegant verbally ("Whizzard operates / Airlock governs") but added cognitive load with no benefit — both names mapped to the same codebase, the same `.whizzard` config dir, the same CLI binary. Users had to learn two names to describe one thing. Consolidation simplifies the mental model. The architectural separation between core / adapter / backend is preserved as internal layering inside the architecture doc.
+
+**Source:** conversation 2026-05-09
+
+**Status:** active; supersedes D-04, D-05, partially D-19
+
+### D-145: GitHub repository will rename from `basicagentauth` to `whizzard`
+
+**Decision:** The GitHub repository will be renamed from the placeholder `basicagentauth` to `whizzard`. Rename happens between Claude sessions (executed by the user via `gh repo rename whizzard` from the local working dir, plus `git remote set-url origin git@github.com:BuckG71/whizzard.git`).
+
+**Rationale:** Consolidate naming with D-144. The placeholder repo name added confusion when discussing the project. "Whizzard" is the working name across docs, code, and config; the repo name should match.
+
+**Source:** conversation 2026-05-09
+
+**Status:** active; supersedes D-01
+
+### D-146: Local working directory rename `airlock-warlock` → `whizzard` happens between sessions
+
+**Decision:** The local working directory at `/Users/bg1971/ai-sandbox/airlock-warlock` will be renamed to `/Users/bg1971/ai-sandbox/whizzard`. The rename is executed between Claude Code sessions (not mid-session), to avoid breaking the current session's working-directory binding. Steps: end current Claude session; remove the `crazy-ellis-b21769` worktree (`git worktree remove`); rename the parent directory; start a new Claude Code session pointed at the new path.
+
+**Rationale:** D-03 prohibited mid-session rename for binding-stability reasons; that constraint doesn't apply between sessions. Consolidates the local layout with D-144 and D-145. After rename, Claude Code's auto-memory will live at a new encoded path (`-Users-bg1971-ai-sandbox-whizzard/`); the user must copy memory files from the old path or recreate them.
+
+**Source:** conversation 2026-05-09
+
+**Status:** active; supersedes D-03
+
 ---
 
 ## 13. Post-MVP & beyond
@@ -1437,6 +1469,26 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 **Rationale:** Stable cross-references; lets future work cite "D-NN as superseded by D-MM" without breaking links.
 
 **Source:** docs/decisions.md (this file's preamble); conversation 2026-05-09
+
+**Status:** active
+
+### D-147: Merge doc-only commits into main immediately
+
+**Decision:** Doc-only commits (anything touching only `docs/**`, `README.md`, comment-only changes) are fast-forward merged into `main` immediately after commit, without separate confirmation. Code changes still pause for explicit confirmation. Mixed commits follow the code-change path.
+
+**Rationale:** Doc changes are reversible via `git revert`. Holding them adds friction without proportional safety benefit. The user develops directly on main; PR ceremony is not the workflow.
+
+**Source:** memory/feedback_merge_doc_changes.md; conversation 2026-05-09
+
+**Status:** active
+
+### D-148: Pause at UX-shaped stages to design before coding
+
+**Decision:** Stages whose primary deliverable is a user-facing surface — profiles, presets, CLI shortcuts, slash commands, Discord control plane — open with a design conversation before implementation. List candidate affordances, rank by frequency × friction-saved, cut anything below the bar, confirm the slate before code lands. Currently applies to MVP Stages 10 (Presets + CLI ergonomics), 11 (Claude Code slash commands), 16, 17 (Discord), and any future stage introducing user-facing surfaces.
+
+**Rationale:** UX surfaces compound. Bad shortcuts become muscle memory; missing presets become daily papercuts. Once shipped, these are hard to change without breaking habits. Friction at these surfaces undermines the project's core value prop. Throughput on these stages matters less than getting affordances right.
+
+**Source:** memory/feedback_ux_pause_at_design_stages.md; conversation 2026-05-09
 
 **Status:** active
 

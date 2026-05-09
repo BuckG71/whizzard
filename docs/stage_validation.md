@@ -9,7 +9,7 @@ Manual validation steps for each MVP stage. Update this file as new stages land.
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -41,7 +41,7 @@ Expected:
 whizzard run --profile default
 ```
 
-Expected: see `Airlock Profile: DEFAULT` banner followed by a bash prompt inside the container.
+Expected: see `Whizzard Profile: DEFAULT` banner followed by a bash prompt inside the container.
 
 ### Step 4: Verify containment from inside the container
 
@@ -112,7 +112,7 @@ All of the following must be true:
 Update the install (in-place editable install picks up new modules automatically, but pytest needs a fresh collect):
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source .venv/bin/activate
 git pull
 pytest -v
@@ -135,7 +135,7 @@ mkdir -p ~/test-whizzard-rw ~/test-whizzard-ro
 echo "writable test data" > ~/test-whizzard-rw/hello.txt
 echo "read-only test data" > ~/test-whizzard-ro/hello.txt
 
-# Ensure the whizzard config directory exists. (ensure_warlock_home()
+# Ensure the whizzard config directory exists. (ensure_whizzard_home()
 # only runs on `whizzard run`, not on `mounts list`, so on a fresh
 # install this directory may not exist yet.)
 mkdir -p ~/.whizzard/config
@@ -261,7 +261,7 @@ rm ~/.whizzard/config/mounts.json    # or keep it for future stages
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source venv/bin/activate
 git pull
 pytest -v
@@ -416,7 +416,7 @@ whizzard profiles init --force
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source venv/bin/activate
 pytest -v
 ```
@@ -431,7 +431,7 @@ whizzard run --profile default --dry-run
 
 Expected:
 - Yellow `DRY RUN — no container will be launched.` banner at the top
-- The standard profile summary (Airlock Profile, Network, Duration, Broad-mount override, Image, Mounts)
+- The standard profile summary (Whizzard Profile, Network, Duration, Broad-mount override, Image, Mounts)
 - A `docker invocation that would run:` block showing the full docker command, copy-pasteable
 - Exits cleanly with code 0
 - **No container launches** — your shell prompt returns immediately, no bash session inside
@@ -520,7 +520,7 @@ Expected: container actually runs, prompt returns. Confirms dry-run flag wasn't 
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source venv/bin/activate
 pytest -v
 ```
@@ -655,7 +655,7 @@ Expected: pretty-printed JSON for the last two lines, no parse errors.
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source venv/bin/activate
 pytest -v
 ```
@@ -867,7 +867,7 @@ Expected: launches normally with no override banner. The `rw-test` mount is in `
 ### Setup
 
 ```sh
-cd /Users/bg1971/ai-sandbox/airlock-warlock
+cd /Users/bg1971/ai-sandbox/whizzard
 source venv/bin/activate
 pytest -v
 ```

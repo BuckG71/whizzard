@@ -1,6 +1,8 @@
-# Airlock / Whizzard — System Architecture
+# Whizzard — System Architecture
 
-This document defines the system architecture, security invariants, and adapter contract for Airlock/Whizzard. It applies across all phases of the project — MVP, v1, and beyond.
+This document defines the system architecture, security invariants, and adapter contract for Whizzard. It applies across all phases of the project — MVP, v1, and beyond.
+
+> Naming note: earlier drafts used a two-component framing ("Airlock = governance, Whizzard = orchestrator"). The project consolidated to a single name "Whizzard" on 2026-05-09 (D-144). Older docs and historical decisions may still reference Airlock; the substance is unchanged.
 
 ---
 
@@ -19,30 +21,18 @@ This is the foundational trust model. It applies to profiles, mounts, harness ad
 ## System Components
 
 ```text
-Whizzard         = local orchestrator / launcher
-Airlock         = policy and containment layer
-Execution Cell  = the contained execution environment (Docker container in MVP)
-Harness Adapter = integration layer for Hermes / OpenClaw / etc.
+Whizzard         = the whole system: orchestrator, policy engine, containment layer
+Execution Cell   = the contained execution environment (Docker container in MVP)
+Harness Adapter  = integration layer for Hermes / OpenClaw / NanoClaw / etc.
 ```
 
-Verbal framing:
-
-```text
-Whizzard operates.
-Airlock governs.
-```
-
-or:
-
-```text
-Whizzard executes inside Airlock.
-```
+Whizzard is one product with three internal layers (see below). Earlier drafts split the policy/containment layer into a named sub-component "Airlock"; that split has been retired in favor of treating Whizzard as the single named entity.
 
 ---
 
 ## Architecture Layers
 
-### 1. Airlock Core
+### 1. Whizzard Core
 
 Responsibilities:
 - profiles
@@ -54,28 +44,28 @@ Responsibilities:
 - session logging
 - dry-run preview
 
-Airlock core must remain harness-neutral. It must know nothing about:
+Whizzard core must remain harness-neutral. It must know nothing about:
 - Hermes internals
 - OpenClaw internals
 - Discord bots
 - MCP specifics
 
-This is the most important architectural rule. **No harness-specific logic belongs in Airlock core.**
+This is the most important architectural rule. **No harness-specific logic belongs in Whizzard core.**
 
 ### 2. Harness Adapter Layer
 
-Adapters translate harness-specific behavior into Airlock-compatible execution.
+Adapters translate harness-specific behavior into Whizzard-compatible execution.
 
 Responsibilities:
 - launch harness
 - stop harness
 - inject workspace/config
 - identify agents at the harness boundary
-- route tool execution through Airlock
+- route tool execution through Whizzard
 - expose capability boundaries
 - **wrap up the harness gracefully before container termination, using harness-native means**
 
-The wrap-up step is required from MVP, not deferred to v1. When a session is about to end (duration expiry, user-initiated stop, or safety termination), Airlock invokes `adapter.wrap_up(grace_seconds)` *before* sending SIGTERM. The adapter's job is to give the harness a chance to finalize its own state via whatever mechanism that harness provides — for example, Hermes has a wrap-up slash command. The grace period is bounded so wrap-up cannot block termination indefinitely.
+The wrap-up step is required from MVP, not deferred to v1. When a session is about to end (duration expiry, user-initiated stop, or safety termination), Whizzard invokes `adapter.wrap_up(grace_seconds)` *before* sending SIGTERM. The adapter's job is to give the harness a chance to finalize its own state via whatever mechanism that harness provides — for example, Hermes has a wrap-up slash command. The grace period is bounded so wrap-up cannot block termination indefinitely.
 
 The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
@@ -99,7 +89,7 @@ Future backends:
 - Apple Virtualization Framework
 - cloud execution cells
 
-The execution backend is intentionally abstracted so that future migrations do not require changes to Airlock Core or the Harness Adapter Layer.
+The execution backend is intentionally abstracted so that future migrations do not require changes to Whizzard Core or the Harness Adapter Layer.
 
 ---
 
@@ -112,7 +102,7 @@ Container    = execution plane
 
 Runs on host:
 - Whizzard daemon
-- Airlock policy engine
+- Whizzard policy engine
 - config registry
 - logs
 - Discord control bot (post-MVP)
@@ -181,7 +171,7 @@ Each layer does what the others cannot. The enforcement layer determines what th
 
 The Whizzard config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `agents.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.
 
-This is enforced at the safety validation layer, not the policy layer. An agent that can write files Airlock reads can influence its own policies — violating the foundational trust model. This rule cannot be overridden by profiles or presets.
+This is enforced at the safety validation layer, not the policy layer. An agent that can write files Whizzard reads can influence its own policies — violating the foundational trust model. This rule cannot be overridden by profiles or presets.
 
 ---
 
@@ -218,7 +208,7 @@ The override mechanism is intentional friction. Warnings are not used because th
 
 ## Harness Adapter Schema
 
-`harnesses.json` defines all harnesses Airlock can launch via the adapter layer.
+`harnesses.json` defines all harnesses Whizzard can launch via the adapter layer.
 
 ```json
 {
@@ -258,7 +248,7 @@ Required fields: `type`, `start_command`.
 
 Optional fields: `stop_command`, `wrap_up_command`, `wrap_up_grace_seconds`, `working_dir`, `health_check`, `startup_timeout_seconds`, `env`.
 
-The `wrap_up_command` is the string the adapter sends to the harness's interactive interface to trigger graceful wind-down (e.g., a slash command). `wrap_up_grace_seconds` bounds how long Airlock waits for the harness to finish before proceeding to SIGTERM. Adapters whose harnesses do not have a native wrap-up mechanism omit these fields; their `wrap_up()` is a no-op.
+The `wrap_up_command` is the string the adapter sends to the harness's interactive interface to trigger graceful wind-down (e.g., a slash command). `wrap_up_grace_seconds` bounds how long Whizzard waits for the harness to finish before proceeding to SIGTERM. Adapters whose harnesses do not have a native wrap-up mechanism omit these fields; their `wrap_up()` is a no-op.
 
 The schema is versioned (`schema_version`) so it can be extended without breaking existing configs. The MVP can ship with only `type` and `start_command` populated, but the parser must accept and ignore the optional fields from day one to avoid a breaking config change later.
 
@@ -266,11 +256,11 @@ The schema is versioned (`schema_version`) so it can be extended without breakin
 
 ## Agent Identity
 
-Per-agent policies require Airlock to know which agent is making a tool call at runtime. This is non-trivial for harnesses Airlock does not own.
+Per-agent policies require Whizzard to know which agent is making a tool call at runtime. This is non-trivial for harnesses Whizzard does not own.
 
-The adapter layer is responsible for agent identity resolution. Airlock core must not assume identity is available.
+The adapter layer is responsible for agent identity resolution. Whizzard core must not assume identity is available.
 
-Initial approach: the adapter tags tool execution with agent identity at the harness boundary. Airlock trusts the adapter's identity claim. Cryptographic identity verification is a future problem.
+Initial approach: the adapter tags tool execution with agent identity at the harness boundary. Whizzard trusts the adapter's identity claim. Cryptographic identity verification is a future problem.
 
 ---
 
@@ -279,7 +269,7 @@ Initial approach: the adapter tags tool execution with agent identity at the har
 These rules apply to all phases and cannot be relaxed by future work:
 
 - **Capability flow is one-way.** Agents request; Whizzard grants; agents never self-grant.
-- **Airlock core stays harness-neutral.** Harness behavior lives in adapters.
+- **Whizzard core stays harness-neutral.** Harness behavior lives in adapters.
 - **The mount list IS the permission model.** Visible, named, scoped capability grants are the system's primary affordance.
 - **Config integrity is non-negotiable.** Agent-reachable paths cannot include the config directory.
 - **Time-bounded sessions are enforced, not advisory.** Duration is a first-class capability primitive.

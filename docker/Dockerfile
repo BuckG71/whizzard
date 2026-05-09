@@ -1,4 +1,4 @@
-# Airlock/Whizzard execution cell — Stage 1 baseline image
+# Whizzard execution cell — Stage 1 baseline image
 #
 # A minimal Debian-based image with a non-root user. Stage 9 will pin the
 # base image by digest. For Stage 1 we use a tag and the build will be
