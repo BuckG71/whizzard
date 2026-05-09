@@ -157,7 +157,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Validated against NanoClaw's external `~/.config/nanoclaw/mount-allowlist.json` pattern; same principle as config write-protection but elevated as a general rule.
 
-**Source:** docs/nanoclaw_research.md (Things to learn from NanoClaw)
+**Source:** docs/archive/nanoclaw_research.md (Things to learn from NanoClaw)
 
 **Status:** active
 
@@ -261,7 +261,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Both Hermes and NanoClaw ship robust behavioral layers; recreating adds surface area for no gain. Layering is the discipline.
 
-**Source:** docs/architecture.md; docs/hermes_research.md; docs/control_surface.md
+**Source:** docs/architecture.md; docs/archive/hermes_research.md; docs/control_surface.md
 
 **Status:** active
 
@@ -553,7 +553,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Otherwise an attacker can register a symlink whose target is a hard-blocked path; resolve-then-check defeats this.
 
-**Source:** docs/architecture.md (Safety Policy); docs/nanoclaw_research.md (comparison table)
+**Source:** docs/architecture.md (Safety Policy); docs/archive/nanoclaw_research.md (comparison table)
 
 **Status:** active
 
@@ -609,7 +609,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Defense in depth; even if an exploit lands inside the container, it has no extra capabilities to leverage.
 
-**Source:** docs/session_handoff.md; docs/control_surface.md (§3); docs/nanoclaw_research.md (comparison)
+**Source:** docs/session_handoff.md; docs/control_surface.md (§3); docs/archive/nanoclaw_research.md (comparison)
 
 **Status:** active
 
@@ -649,7 +649,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Hermes's own Docker setup uses `network_mode: host` for convenience; that defeats containment. Whizzard explicitly does not.
 
-**Source:** docs/hermes_research.md (Existing Docker setup)
+**Source:** docs/archive/hermes_research.md (Existing Docker setup)
 
 **Status:** active
 
@@ -817,7 +817,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Tag-based pulls can silently change; digest pinning closes that gap. NanoClaw's tag-only choice is explicitly something Whizzard should not borrow.
 
-**Source:** docs/mvp_build_plan.md (Stage 9); docs/control_surface.md (§7); docs/nanoclaw_research.md
+**Source:** docs/mvp_build_plan.md (Stage 9); docs/control_surface.md (§7); docs/archive/nanoclaw_research.md
 
 **Status:** active
 
@@ -841,7 +841,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** `HERMES_HOME` is Hermes's single relocation knob; mounting one profile subsumes per-file decisions and isolates the contained Hermes from the host's default profile.
 
-**Source:** docs/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 1)
+**Source:** docs/archive/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 1)
 
 **Status:** active
 
@@ -851,7 +851,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Hermes's `_apply_env_overrides()` officially supports env-var credential override; this is not a workaround. Keeps host credentials at the boundary.
 
-**Source:** docs/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 2)
+**Source:** docs/archive/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 2)
 
 **Status:** active
 
@@ -863,7 +863,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Different layers, different decisions; Hermes already does this well.
 
-**Source:** docs/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 3)
+**Source:** docs/archive/hermes_research.md; docs/session_handoff.md (Stage 8 settled, item 3)
 
 **Status:** active
 
@@ -873,7 +873,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** A plugin runs *inside* Hermes; Whizzard runs Hermes inside a sandbox. The directionality is wrong.
 
-**Source:** docs/hermes_research.md (Plugins are NOT a path)
+**Source:** docs/archive/hermes_research.md (Plugins are NOT a path)
 
 **Status:** active
 
@@ -903,7 +903,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Each describes a different thing; collapsing them would lose expressiveness.
 
-**Source:** docs/hermes_research.md (Concrete answers, Q3)
+**Source:** docs/archive/hermes_research.md (Concrete answers, Q3)
 
 **Status:** active
 
@@ -913,7 +913,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Open design question for Stage 8; impacts onboarding friction vs. explicit control.
 
-**Source:** docs/session_handoff.md (Stage 8 open #1); docs/hermes_research.md (Open question 1)
+**Source:** docs/session_handoff.md (Stage 8 open #1); docs/archive/hermes_research.md (Open question 1)
 
 **Status:** open
 
@@ -923,7 +923,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Open design question; concurrent same-profile use can corrupt state.db.
 
-**Source:** docs/session_handoff.md (Stage 8 open #2); docs/hermes_research.md (Open question 2)
+**Source:** docs/session_handoff.md (Stage 8 open #2); docs/archive/hermes_research.md (Open question 2)
 
 **Status:** open
 
@@ -933,7 +933,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Open design question; cascades into the platform-credential UX choice.
 
-**Source:** docs/session_handoff.md (Stage 8 open #3); docs/hermes_research.md (Open question 3)
+**Source:** docs/session_handoff.md (Stage 8 open #3); docs/archive/hermes_research.md (Open question 3)
 
 **Status:** open
 
@@ -943,7 +943,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Open design question; current lean is "hybrid: config defaults, CLI overrides" but not committed.
 
-**Source:** docs/session_handoff.md (Stage 8 open #4); docs/hermes_research.md (Open question 4)
+**Source:** docs/session_handoff.md (Stage 8 open #4); docs/archive/hermes_research.md (Open question 4)
 
 **Status:** open
 
@@ -953,7 +953,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Open design question; real product decision with safety implications.
 
-**Source:** docs/session_handoff.md (Stage 8 open #5); docs/hermes_research.md (Open question 5)
+**Source:** docs/session_handoff.md (Stage 8 open #5); docs/archive/hermes_research.md (Open question 5)
 
 **Status:** open
 
@@ -967,7 +967,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** NanoClaw's production implementation validates the pattern; integrate with OneCLI rather than building from scratch.
 
-**Source:** docs/post_mvp_spec.md (Vault-Mediated Credentials); docs/nanoclaw_research.md
+**Source:** docs/post_mvp_spec.md (Vault-Mediated Credentials); docs/archive/nanoclaw_research.md
 
 **Status:** active
 
@@ -977,7 +977,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** NanoClaw's external `~/.config/nanoclaw/mount-allowlist.json` is a deliberate defensive choice; making it a named principle prevents future drift.
 
-**Source:** docs/nanoclaw_research.md (Things to learn from NanoClaw)
+**Source:** docs/archive/nanoclaw_research.md (Things to learn from NanoClaw)
 
 **Status:** active
 
@@ -987,7 +987,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Whizzard's value-add over harness-native containment is exactly this hardening layer.
 
-**Source:** docs/nanoclaw_research.md
+**Source:** docs/archive/nanoclaw_research.md
 
 **Status:** active
 
@@ -997,7 +997,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** NanoClaw's branch-grafting model fits their fork-and-customize UX; Whizzard's "policy layer that wraps any harness" UX needs a different distribution shape.
 
-**Source:** docs/nanoclaw_internals.md §9.2
+**Source:** docs/archive/nanoclaw_internals.md §9.2
 
 **Status:** active
 
@@ -1007,7 +1007,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Whizzard contains harnesses; harnesses bring their own multi-channel infrastructure.
 
-**Source:** docs/nanoclaw_internals.md §9.2
+**Source:** docs/archive/nanoclaw_internals.md §9.2
 
 **Status:** active
 
@@ -1017,7 +1017,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** NanoClaw can use `bypassPermissions: true` because the container is its boundary. Whizzard wraps existing harnesses; harness-level permission posture is the harness's call.
 
-**Source:** docs/nanoclaw_internals.md §9.2
+**Source:** docs/archive/nanoclaw_internals.md §9.2
 
 **Status:** active
 
@@ -1027,7 +1027,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** NanoClaw's host-side architecture (router/delivery as host process) is more involved than Hermes; defer until Hermes adapter is solid.
 
-**Source:** docs/nanoclaw_research.md (How NanoClaw fits as a harness)
+**Source:** docs/archive/nanoclaw_research.md (How NanoClaw fits as a harness)
 
 **Status:** active
 
@@ -1037,7 +1037,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Rationale:** Production-proven pattern; the gap between env-var injection (MVP) and vault-mediated (v1) is the difference between "credentials in process env" and "agent literally cannot exfiltrate."
 
-**Source:** docs/session_handoff.md; docs/nanoclaw_research.md (Bottom line); docs/control_surface.md (§5)
+**Source:** docs/session_handoff.md; docs/archive/nanoclaw_research.md (Bottom line); docs/control_surface.md (§5)
 
 **Status:** active
 
@@ -1492,6 +1492,16 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Status:** active
 
+### D-149: `session_handoff.md` is overwriteable, not append-only
+
+**Decision:** `docs/session_handoff.md` captures the current snapshot needed to start a fresh Claude Code session and is rewritten end-to-end each session. It is not a log; do not append. Prior versions are recoverable via `git show <hash>:docs/session_handoff.md` if a rollback is ever needed. Other docs (notably `decisions.md`) remain append-only — this convention applies only to the handoff file.
+
+**Rationale:** A growing handoff file is a worse handoff: stale guidance accumulates, the new-session instructions get buried, and the document loses its "read this first" character. Git already preserves history; the working file should optimize for the next session reading it cold, not for completeness across all sessions. Decisions and validation checklists live in their own append-only docs, so historical context is not lost by overwriting the handoff.
+
+**Source:** docs/session_handoff.md (D-149-pending note); conversation 2026-05-09
+
+**Status:** active
+
 ---
 
 ## 15. Open / unresolved
@@ -1547,7 +1557,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Decision:** Whether to integrate with OneCLI directly for MVP-era credential injection (before the full vault backlog item lands) is unresolved.
 
-**Source:** docs/nanoclaw_research.md (Open question 1)
+**Source:** docs/archive/nanoclaw_research.md (Open question 1)
 
 **Status:** open
 
@@ -1555,7 +1565,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Decision:** Whether Whizzard should support / recommend NanoClaw's read-only project-root + selective writable subdirs pattern for "containerize my own dev project" use cases is unresolved.
 
-**Source:** docs/nanoclaw_research.md (Things to learn from NanoClaw)
+**Source:** docs/archive/nanoclaw_research.md (Things to learn from NanoClaw)
 
 **Status:** open
 
@@ -1563,7 +1573,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Decision:** Whether to pursue collaboration with NanoClaw upstream (offering Whizzard hardening as a complement to their scope-reduction model) is unresolved.
 
-**Source:** docs/nanoclaw_research.md (Open question 4)
+**Source:** docs/archive/nanoclaw_research.md (Open question 4)
 
 **Status:** open
 
@@ -1579,8 +1589,8 @@ For narrative context behind clusters of decisions:
 - **docs/mvp_build_plan.md** — D-37..D-46 (profiles & mounts), D-64..D-71 (session lifecycle), D-72..D-77 (image management), D-99..D-108 (MVP scope).
 - **docs/post_mvp_spec.md** — D-91, D-98 (vault), D-109..D-118 (v1.0 goals & requirements), D-121..D-123 (deferred features).
 - **docs/stage_validation.md** — operational confirmation of D-37..D-71; the validation checklists are the practical contract behind those design decisions.
-- **docs/hermes_research.md** — D-78..D-90 (Hermes integration), D-25 (MCP-universal), D-24 (don't recreate behavioral controls).
-- **docs/nanoclaw_research.md** + **docs/nanoclaw_internals.md** — D-91..D-98 (NanoClaw lessons applied), D-14 (mount allowlist principle), D-92 (architectural elevation), D-77 (digest pinning rationale).
+- **docs/archive/hermes_research.md** — D-78..D-90 (Hermes integration), D-25 (MCP-universal), D-24 (don't recreate behavioral controls).
+- **docs/archive/nanoclaw_research.md** + **docs/archive/nanoclaw_internals.md** — D-91..D-98 (NanoClaw lessons applied), D-14 (mount allowlist principle), D-92 (architectural elevation), D-77 (digest pinning rationale).
 - **docs/control_surface.md** — D-23 (control layering), D-25..D-27 (cooperation layer), D-76, D-101..D-104 (2026-05-09 framing decisions), D-130..D-133 (open items).
 - **docs/session_handoff.md** — D-01..D-03 (naming), D-46, D-48, D-55..D-56 (settled hardening choices), D-78..D-90 (Hermes settled and open).
 - **whizzard/** package code — D-08 (WHIZZARD_HOME), D-28..D-31 (adapter Protocol), D-37..D-45 (profile and mount loaders), D-34 (harness types).
