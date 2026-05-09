@@ -929,13 +929,13 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-88: Default mode (interactive vs. gateway) for the Hermes adapter
 
-**Decision:** The default mode (interactive-default vs. gateway-default vs. two explicit modes with no default) is unresolved.
+**Decision:** Gateway is the default. `whiz hermes <profile>` with no mode flag launches `hermes gateway run` inside the cell. Interactive (`hermes chat`) is opt-in via an explicit `--interactive` (or equivalent) flag. **Empty-platforms guard rail:** if the selected profile's `config.yaml` declares no active platforms, gateway-default refuses to start and emits a clear error message that points the user to either configure platforms or pass `--interactive` — gateway-default does not silently fall back to interactive, and does not start an empty daemon.
 
-**Rationale:** Open design question; cascades into the platform-credential UX choice.
+**Rationale:** Whizzard's center of gravity is users who run Hermes as a 24/7 platform-connected agent (Discord, Slack, etc.), not as a CLI chat tool. Virtually every Hermes installation Bryan has seen or anticipates uses a messaging app as the primary interface; making gateway the default aligns the path of least resistance with the dominant usage pattern, and is consistent with the post-MVP Discord control plane direction. This commits D-89 (platform credential declaration UX) and D-90 (in-session approval routing) to MVP-blocking polish — they are not deferrable, since gateway-default puts both surfaces on the day-one path. The empty-platforms refusal is preferred over silent fallback because gateway-vs-interactive is a meaningful behavior difference and a misconfigured profile should fail loudly, not silently land the user in the wrong mode.
 
-**Source:** docs/session_handoff.md (Stage 8 open #3); docs/archive/hermes_research.md (Open question 3)
+**Source:** docs/session_handoff.md (Stage 8 open #3); docs/archive/hermes_research.md (Open question 3); conversation 2026-05-09
 
-**Status:** open
+**Status:** active
 
 ### D-89: Platform credential declaration UX in gateway mode
 
@@ -1603,9 +1603,8 @@ The following decisions are currently **open**. Any work that depends on them sh
 
 - **D-86** — Hermes profile auto-creation UX (auto-create on first launch vs. require manual `hermes profile create` first)
 - **D-87** — Concurrency exclusivity (refuse contained launch if host-side Hermes uses same profile, vs. document only)
-- **D-88** — Default Hermes mode (interactive vs. gateway vs. no default)
-- **D-89** — Platform credential declaration in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid)
-- **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass)
+- **D-89** — Platform credential declaration in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid) — promoted to MVP-blocking by D-88
+- **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass) — promoted to MVP-blocking by D-88
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
