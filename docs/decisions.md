@@ -1185,6 +1185,16 @@ The canonical, append-only index of every decision made for the Whizzard / Airlo
 
 **Status:** active; extends D-99
 
+### D-141: Whizzard adopts a hybrid generalization path — agent-focused at MVP, explicit "general" mode at OSS-launch
+
+**Decision:** Whizzard's MVP remains agent-focused (Hermes/NanoClaw harness adapters anchor the audience). At OSS-launch, an explicit "general process" mode is added: `harnesses.json` schema accepts any executable, presets shaped for non-agent OSS tools (e.g., "try-untrusted-cli"), marketing positions both agent and general use cases. The architectural foundation already supports this — most stages are harness-neutral; only the Whiz MCP cooperation layer (Stages 9, 13) is agent-specific.
+
+**Rationale:** Three options were considered: A) stay agent-focused with sibling project later, B) general from the start, C) hybrid — agent at MVP, general at OSS-launch. C wins because it preserves MVP focus (sharp use cases drive design) while leaving the broader OSS-tool audience addressable when polish lands. B risks losing focus pre-MVP; A leaves a real gap on the table — there's no good cross-platform low-friction security-shaped container layer for individual developers (firejail/bwrap are Linux-only and config-tedious; Docker alone has no policy/preset/audit layering; devcontainers and Distrobox aren't security-shaped).
+
+**Source:** conversation 2026-05-09
+
+**Status:** active
+
 ---
 
 ## 13. Post-MVP & beyond
