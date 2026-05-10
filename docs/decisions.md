@@ -1524,6 +1524,18 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Notes:** Bulk rename pending as a separate commit; cross-references in code/docs must be updated atomically with the rename to avoid broken links.
 
+### D-152: Defense-in-depth against bundled-test-file Skill attacks
+
+**Decision:** (1) `pyproject.toml` declares `norecursedirs = [".agents", ".claude", ".cursor"]` in addition to `testpaths = ["tests"]`, so pytest cannot auto-discover test files inside skill / agent / IDE state directories even if `testpaths` is later broadened. (2) Any Anthropic Skills (or equivalent agent-extension bundles) installed into this repository must be pinned to a specific commit hash, not a branch. (3) Before merging any commit that introduces files under `.agents/`, `.claude/skills/`, or `.cursor/skills/`, reviewers must check for the file shapes that ride the developer-toolchain execution surface — `*.test.*`, `*.spec.*`, `conftest.py`, `__tests__/`, `*.config.*` — and treat any presence as a finding requiring justification.
+
+**Rationale:** Per Gecko Security's disclosure (VentureBeat, 2026-05-09), public Anthropic Skill scanners inspect the agent-execution surface (`SKILL.md`, agent-invoked scripts) but not the developer-toolchain surface (test files auto-discovered by Jest/Vitest/pytest with full local permissions). Whizzard's structural containment addresses the agent-execution side but does not bound the developer toolchain — `npm test` / `pytest` runs on the host, not inside a cell. The MVP scope does not extend to sandboxing developer tooling, so we defend project hygiene through configuration and review. Audit at decision time: `.claude/` contained only `.DS_Store` and `settings.local.json`; `.agents/` and `.cursor/` did not exist; no findings.
+
+**Source:** VentureBeat 2026-05-09 (Gecko Security disclosure on Anthropic Skill scanner blind spot); conversation 2026-05-09
+
+**Status:** active
+
+**Notes:** `.agents/` is *not* added to `.gitignore` because Skills are intended to be committed and shared per upstream convention; the defense lives in test-runner config and pre-merge review.
+
 ---
 
 ## 15. Open / unresolved
