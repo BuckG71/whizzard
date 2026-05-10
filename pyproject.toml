@@ -29,3 +29,10 @@ include = ["whizzard*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Belt-and-suspenders against the bundled-test-file attack class
+# (see DECISIONS.md D-152 / VentureBeat 2026-05-09 on Anthropic Skill scanners).
+# `testpaths` already restricts discovery to `tests/`, but explicit
+# `norecursedirs` ensures that even if testpaths is broadened later,
+# pytest will not auto-discover test files inside skill / agent / IDE
+# state directories.
+norecursedirs = [".agents", ".claude", ".cursor"]
