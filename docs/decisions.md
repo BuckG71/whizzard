@@ -1500,7 +1500,29 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/session_handoff.md (D-149-pending note); conversation 2026-05-09
 
+**Status:** superseded by D-150
+
+### D-150: `HANDOFF.md` is append-only — supersedes D-149
+
+**Decision:** The handoff doc, renamed `docs/HANDOFF.md`, is append-only. New entries go at the top; prior entries are preserved verbatim. Each entry follows the structure defined by the `/handoff` skill (Goal / Active task / Tried & rejected / Resume protocol) with a target length under 250 words.
+
+**Rationale:** D-149's overwriteable framing was correct for the prior `session_handoff.md` format, which captured comprehensive narrative context (~3000 words) where accumulated entries would have bloated the file unusably. The new HANDOFF format under the `/handoff` skill captures different and much shorter content (~150–250 words/entry), so the bloat concern that justified overwrite no longer applies. Append-only enables cross-session decision archaeology and matches the behavior of every other long-lived doc in the project (`DECISIONS.md`, `STAGE_VALIDATION.md`).
+
+**Source:** conversation 2026-05-09; `/handoff` skill spec
+
 **Status:** active
+
+### D-151: Markdown filenames in this project are uppercase
+
+**Decision:** All markdown filenames in the Whizzard repository are uppercase by convention. Examples: `README.md`, `HANDOFF.md`, `DECISIONS.md`, `ARCHITECTURE.md`, `MVP_BUILD_PLAN.md`. Underscores separate words within the name. Bulk rename of existing lowercase files and the corresponding cross-reference updates are tracked as a separate cleanup commit.
+
+**Rationale:** Consistency with the common GitHub convention for top-level repo docs (`README`, `CONTRIBUTING`, `LICENSE`, `CHANGELOG`), extended uniformly to all project markdown to remove case-recall friction when typing references. The pattern is also visually distinctive against code files in directory listings.
+
+**Source:** conversation 2026-05-09
+
+**Status:** active
+
+**Notes:** Bulk rename pending as a separate commit; cross-references in code/docs must be updated atomically with the rename to avoid broken links.
 
 ---
 
