@@ -1,5 +1,36 @@
 # Session Handoff Log
 
+## 2026-05-14T20:46Z — DECISIONS.md migrated to flat+tags schema; Stage 8 unchanged
+
+### Goal
+Same as prior: ship Stage 8 Hermes adapter end-to-end per `docs/STAGE_8_BUILD_PLAN.md`. Today's work was an orthogonal docs-schema migration; the Stage 8 code state is unchanged.
+
+### Done since prior entry
+- **decision-capture skill** rewritten to flat+tags schema with `Type:` / optional `Tags:` / `Door Type:` (renamed from Reversibility, with one-way / two-way framing). Synced between `~/.claude/skills/` and Bryan's Library plugin dir.
+- **session-handoff skill** received two small consistency edits (stale `§10` reference in example; `"Open" section` wording in exclusions). Synced.
+- **`docs/decisions.md` migrated** (commits d1c40c7 / f30516f / 55ed465):
+  - 14 numbered section headers removed (file is now flat, sequential by ID)
+  - All 154 entries got `Type:` + `Door Type:` fields; adapter-section entries got `Tags:` (`hermes` or `nanoclaw`)
+  - 148 templated Door Type values were refined to per-entry-specific prose, with door direction (one-way / two-way) checked entry-by-entry — several mis-classifications corrected (notably D-22, D-28, D-29, D-32)
+  - §15 stale bullet for D-130 (superseded by D-137) cleared
+  - Migration script lives at `/tmp/migrate_decisions.py`; one-shot, not committed
+
+### Active task
+Resume Stage 8 work where the prior entry left it: M6 manual end-to-end smoke (needs Docker image build + harness config) and M7 packaging (`pyproject.toml` extras for `whizzard[hermes]`). No Stage 8 code changed in this session.
+
+### Tried & rejected
+- **Manual per-entry editing of 148 Door Types**: was the initial approach; cost too many turns. Switched to script-with-mapping (one Bash call per ~25-entry batch).
+- **Keeping `§15 Open / unresolved` numbered section header**: removed with the others; restored as non-numbered `## Open / unresolved` meta-heading so the bullet list retains context.
+
+### Resume protocol
+1. `docs/decisions.md` is now in the new schema. Future captures follow the decision-capture skill (flat append, Type/Tags/Door Type).
+2. Pick Stage 8 back up: see `docs/STAGE_8_BUILD_PLAN.md` "Where to resume" — M6 E2E smoke and M7 packaging are the remaining items.
+3. The prior `2026-05-14T18:28Z` entry below still describes the current Stage 8 code state accurately.
+
+Prior entries below are reference only.
+
+---
+
 ## 2026-05-14T18:28Z — Stage 8 build: code milestones 1–6 shipped; awaits Hermes E2E smoke + packaging
 
 ### Goal
