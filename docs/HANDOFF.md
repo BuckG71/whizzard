@@ -1,5 +1,31 @@
 # Session Handoff Log
 
+## 2026-05-14T16:32Z — Stage 8 build paused mid-Action-3 awaiting ~/.hermes access
+
+### Goal
+Same as prior entry: ship Stage 8 Hermes adapter end-to-end per `docs/STAGE_8_BUILD_PLAN.md`.
+
+### Active task
+Build-plan Action 3 — implement `HermesAdapter.container_env()` to read `<HERMES_HOME>/config.yaml` for active platforms and inject corresponding host env vars (D-89). **Paused before any Action 3 code written**: implementation quality depends on knowing the actual `config.yaml` schema, the real profile directory layout, and the `gateway.lock` / `gateway.pid` formats — all of which live in `~/.hermes` and have not yet been read. Bryan will grant access when back at desk.
+
+### Done since prior entry
+- **Action 1 (commit b5302c2)** — `whizzard/adapters/hermes.py` skeleton with all `HarnessAdapter` Protocol methods stubbed; `start_command` defaults to `hermes gateway run` per D-88; `wrap_up` raises `NotImplementedError` rather than misrepresenting as NO_OP. `build_adapter("agent", ...)` now returns `HermesAdapter` instead of raising. All 140 tests passed.
+- **Action 2 (commit 96450b6)** — `active_capabilities() -> list[str]` added to the `HarnessAdapter` Protocol (D-89, D-90). `GenericShellAdapter` returns `[]`; `HermesAdapter` returns `[]` as skeleton (Action 3 populates). 142 tests passed.
+
+### Resume protocol
+1. Once access is granted, read these paths in `~/.hermes` (one-time inspection — no need to keep open):
+   - `~/.hermes/<primary-profile>/config.yaml` — schema for platform declarations
+   - `ls -la ~/.hermes/<primary-profile>/` — full file layout (for Action 5's `--clone-from` planning)
+   - `~/.hermes/<primary-profile>/gateway.lock` and `gateway.pid` if a host gateway is running (for Action 4 / milestone 4 format confirmation)
+   - **Do not read `auth.json`** — D-80 applies to inspection too.
+2. Resume Action 3: implement `container_env()` against the real `config.yaml` schema. Map platforms to `<PLATFORM>_BOT_TOKEN` env vars (the D-89 convention) read from `os.environ`. Add unit tests with fixture HERMES_HOME directories covering: happy path, empty platforms, missing credential on host, unreadable config.
+3. **Open call to make:** PyYAML is needed for parsing config.yaml. Add it to `[project.optional-dependencies] hermes` in `pyproject.toml` (matching D-131 notes' monorepo+extras direction). Guard the `import yaml` lazily inside `container_env()` so the adapter remains importable without the `hermes` extra installed; method call without yaml raises a clear "install whizzard[hermes]" error.
+4. After Action 3 commits, milestone 4 (gateway.lock pre-check) is next per the build plan.
+
+Prior entries below are reference only. `docs/HANDOFF.md` is append-only per D-150.
+
+---
+
 ## 2026-05-14T15:53Z — Stage 8 design complete; Hermes adapter build ready to start
 
 ### Goal
