@@ -429,12 +429,144 @@ def test_hermes_working_dir_defaults_none():
     assert HermesAdapter().working_dir() is None
 
 
-def test_hermes_wrap_up_not_yet_implemented():
-    # Real wrap_up via `docker exec /quit` lands in build-plan milestone 6.
-    # Skeleton raises so end-to-end runs fail loudly rather than silently
-    # mishandling shutdown.
-    with pytest.raises(NotImplementedError, match="milestone 6"):
-        HermesAdapter().wrap_up("container-id", grace_seconds=10)
+def test_hermes_wrap_up_success_on_clean_exit(monkeypatch):
+    """docker stop returns 0; container exit code is non-137 → SUCCESS."""
+    calls = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        if argv[:2] == ["docker", "stop"]:
+            class _R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return _R()
+        if argv[:2] == ["docker", "inspect"]:
+            class _R:
+                returncode = 0
+                stdout = "0\n"
+                stderr = ""
+            return _R()
+        pytest.fail(f"unexpected argv: {argv}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("container-id-abc", grace_seconds=15)
+
+    assert result.status == WrapUpStatus.SUCCESS
+    assert calls[0] == ["docker", "stop", "--time", "15", "container-id-abc"]
+    assert calls[1] == [
+        "docker", "inspect",
+        "--format", "{{.State.ExitCode}}",
+        "container-id-abc",
+    ]
+
+
+def test_hermes_wrap_up_timeout_on_sigkill_exit_code(monkeypatch):
+    """Exit code 137 means docker had to SIGKILL after grace → TIMEOUT."""
+    def fake_run(argv, **kwargs):
+        if argv[:2] == ["docker", "stop"]:
+            class _R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return _R()
+        if argv[:2] == ["docker", "inspect"]:
+            class _R:
+                returncode = 0
+                stdout = "137\n"
+                stderr = ""
+            return _R()
+        pytest.fail(f"unexpected argv: {argv}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=10)
+    assert result.status == WrapUpStatus.TIMEOUT
+    assert "SIGKILL" in result.detail
+    assert "10s grace" in result.detail
+
+
+def test_hermes_wrap_up_error_when_docker_missing(monkeypatch):
+    def fake_run(argv, **kwargs):
+        raise FileNotFoundError("docker")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=5)
+    assert result.status == WrapUpStatus.ERROR
+    assert "docker" in result.detail.lower()
+
+
+def test_hermes_wrap_up_timeout_on_subprocess_hang(monkeypatch):
+    def fake_run(argv, **kwargs):
+        if argv[:2] == ["docker", "stop"]:
+            raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout", 0))
+        pytest.fail(f"unexpected argv: {argv}")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=5)
+    assert result.status == WrapUpStatus.TIMEOUT
+    assert "docker stop" in result.detail.lower()
+
+
+def test_hermes_wrap_up_error_on_docker_stop_nonzero(monkeypatch):
+    def fake_run(argv, **kwargs):
+        class _R:
+            returncode = 1
+            stdout = ""
+            stderr = "Error response from daemon: No such container: c"
+        return _R()
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=5)
+    assert result.status == WrapUpStatus.ERROR
+    assert "exit 1" in result.detail
+    assert "No such container" in result.detail
+
+
+def test_hermes_wrap_up_success_when_inspect_probe_fails(monkeypatch):
+    """Inspect failure shouldn't downgrade a successful docker stop."""
+    def fake_run(argv, **kwargs):
+        if argv[:2] == ["docker", "stop"]:
+            class _R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return _R()
+        if argv[:2] == ["docker", "inspect"]:
+            class _R:
+                returncode = 1
+                stdout = ""
+                stderr = "container not found"
+            return _R()
+        pytest.fail(f"unexpected argv: {argv}")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=5)
+    assert result.status == WrapUpStatus.SUCCESS
+    assert "probe" in result.detail.lower()
+
+
+def test_hermes_wrap_up_success_when_inspect_output_unparseable(monkeypatch):
+    def fake_run(argv, **kwargs):
+        if argv[:2] == ["docker", "stop"]:
+            class _R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return _R()
+        if argv[:2] == ["docker", "inspect"]:
+            class _R:
+                returncode = 0
+                stdout = "not-an-int\n"
+                stderr = ""
+            return _R()
+        pytest.fail(f"unexpected argv: {argv}")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = HermesAdapter().wrap_up("c", grace_seconds=5)
+    assert result.status == WrapUpStatus.SUCCESS
+    assert "unparseable" in result.detail.lower()
 
 
 def test_hermes_health_check_is_none():
