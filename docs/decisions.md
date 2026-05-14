@@ -1579,6 +1579,39 @@ All three existing-user migration shapes are first-class supported paths:
 
 **Notes:** Enforcement is per-PR review for MVP. A lint check (grep-based) is plausible post-MVP if drift becomes a recurring issue.
 
+### D-154: Upstream-change detection and adapter maintenance pipeline
+
+**Decision:** Each Whizzard adapter ships with an automated upstream-change-detection pipeline that follows a "detect/test/report (automated) → fix/ship (human-in-loop)" pattern:
+
+1. **Detection (automated, cron-scheduled).** A scheduled CI workflow (e.g., GitHub Actions daily) per adapter polls the upstream harness: latest release tag and latest HEAD of upstream main. Both are tracked but treated differently — releases are the ship signal, main is the early-warning signal. Pre-release / beta tracking is opt-in per adapter.
+2. **Testing (automated).** When a new upstream version is detected, the pipeline spins up an ephemeral test harness in CI: a fresh container with Whizzard + adapter + the new upstream version installed, then runs the adapter test suite. The substrate is layered:
+   - **Smoke** — does the adapter import and instantiate without error?
+   - **Unit** — do adapter Protocol methods return the expected shapes (`start_command`, `container_env`, `wrap_up`, etc.)?
+   - **Integration** — can a container be started, a one-shot prompt run, and a clean shutdown achieved?
+
+   Smoke + unit are required; integration is required for at least one mode (interactive is cheaper to substrate than gateway, which needs platform credentials).
+3. **Reporting (automated).**
+   - **Tests pass clean:** open a PR that bumps the adapter's tested-against-version range in `pyproject.toml`. Auto-merge is permitted for version-range-only changes (no code diff).
+   - **Tests fail:** open an issue or draft PR with the failure log, the upstream commit log since the last passing version, and any obvious suspect (renamed symbol, removed function, schema-field change). The report must be triage-ready — a human shouldn't have to re-do detective work the bot could have done.
+4. **Fixing (human, possibly AI-assisted).** A maintainer reads the failure report and writes the patch — Claude, Codex, or similar tooling may assist, but the patch goes through normal PR review. The pipeline does **not** auto-generate or auto-merge code changes that touch adapter logic. This boundary is load-bearing.
+5. **Shipping (gated by tag).** Adapter releases are tagged by humans; CI publishes on tag. The only auto-ship case is the version-range-only PR (no code change), and even that is opt-in once the signal is trusted (default: human-gated for the first ~6 months per adapter).
+
+**Supporting practices the pipeline assumes:**
+
+- **Version-pinning policy.** Each adapter declares a tested-against-version range in `pyproject.toml` (e.g., `hermes >= 1.0, < 2.0`). When upstream ships a new major version, `pip install whizzard[<adapter>]` keeps existing users on the validated range until the adapter is updated. Caps blast radius when automation falls behind. Works with the monorepo + extras direction in D-131's notes.
+- **Severity-based filtering.** The detection layer filters on paths and release notes / labels to reduce noise: a CVE patch escalates to a fast-path security-labeled issue; a non-API refactor shouldn't trigger anything.
+- **Upstream relationships.** Long-term, friendly contact with upstream maintainers (Hermes, OpenClaw, NanoClaw, etc.) catches breaking changes before they ship — more valuable than any automation. The pipeline is a backstop, not a substitute.
+
+**Rationale:** Adapter rot is a real maintenance burden for any project that bridges to actively-developed upstreams. Without automation, the rot happens silently until a user files a bug — slow, embarrassing, and corrosive to trust. Without *safe* automation, the rot happens loudly via shipped-broken releases — worse. The shape above maximizes automation where it's cheap and reversible (detection, testing, reporting) and keeps humans in the loop where stakes are high (code changes touching safety-relevant adapter logic, version releases). Whizzard's positioning as a safety tool makes the auto-fix / auto-ship boundary load-bearing: a bot patching adapter code on a weak test suite is the failure mode that erodes the project's trust premise — and is hard to recover from once it ships. Version pinning is the complementary defense; it bounds the blast radius of *any* failure (automation falling behind, missed upstream change, bad release) by keeping users on the last validated version until a maintainer signs off. Severity-based filtering and upstream relationships further compress the response window for the cases that matter most (security) and reduce noise for the cases that don't (cosmetic refactors).
+
+**Source:** conversation 2026-05-14 (during D-90 wrap-up; Bryan's question on OSS maintainability for adapter repos).
+
+**Status:** active
+
+**Notes:**
+- Implementation is a post-MVP / OSS-launch concern; this decision frames the policy now so MVP code is structured to enable it later — adapter tests should be organized into smoke / unit / integration tiers, and `pyproject.toml` should declare version ranges per adapter from the start.
+- Related to D-131 (OSS-launch milestone scope); this pipeline is one of the operational ingredients OSS launch requires.
+
 ---
 
 ## 15. Open / unresolved
