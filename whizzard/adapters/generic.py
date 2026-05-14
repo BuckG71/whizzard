@@ -60,6 +60,9 @@ class GenericShellAdapter:
         # Bash is "ready" the moment the container is running; no probe.
         return None
 
+    def active_capabilities(self) -> list[str]:
+        return []
+
 
 # Sanity check the Protocol contract at import time.
 _: HarnessAdapter = GenericShellAdapter()
