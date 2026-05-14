@@ -310,13 +310,84 @@ class HermesAdapter:
         return wd if wd else None
 
     def wrap_up(self, container_id: str, grace_seconds: int) -> WrapUpResult:
-        # Real implementation lands in milestone 6: `docker exec <id> /quit`
-        # with grace_seconds bound. Until then, calling wrap_up fails loudly
-        # rather than silently returning NO_OP, which would misrepresent
-        # Hermes (unlike generic shell, Hermes has a real wrap-up channel).
-        raise NotImplementedError(
-            "HermesAdapter.wrap_up is not yet implemented "
-            "(Stage 8 build plan milestone 6)"
+        # `/quit` from the original D-88 framing is a chat-mode slash command
+        # (hermes_research.md L208–209). For gateway mode, Hermes's SIGTERM
+        # handler is the canonical graceful-shutdown channel: drain active
+        # turns, write final state, exit. `docker stop --time=<grace>` sends
+        # SIGTERM and falls back to SIGKILL after the grace window — the
+        # exact contract D-29 / D-30 want from wrap_up.
+        try:
+            stop_result = subprocess.run(
+                ["docker", "stop", "--time", str(grace_seconds), container_id],
+                capture_output=True,
+                text=True,
+                timeout=grace_seconds + 5,  # subprocess overhead slack
+                check=False,
+            )
+        except FileNotFoundError:
+            return WrapUpResult(
+                status=WrapUpStatus.ERROR,
+                detail="`docker` not on PATH",
+            )
+        except subprocess.TimeoutExpired:
+            return WrapUpResult(
+                status=WrapUpStatus.TIMEOUT,
+                detail=f"`docker stop` did not return within {grace_seconds + 5}s",
+            )
+
+        if stop_result.returncode != 0:
+            return WrapUpResult(
+                status=WrapUpStatus.ERROR,
+                detail=(
+                    f"`docker stop` exit {stop_result.returncode}: "
+                    f"{stop_result.stderr.strip() or '(no stderr)'}"
+                ),
+            )
+
+        # docker stop returned 0; inspect the container's actual exit code
+        # to distinguish a clean SIGTERM exit from a SIGKILL forced after grace.
+        try:
+            inspect_result = subprocess.run(
+                [
+                    "docker", "inspect",
+                    "--format", "{{.State.ExitCode}}",
+                    container_id,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return WrapUpResult(
+                status=WrapUpStatus.SUCCESS,
+                detail="container stopped (exit-code probe unavailable)",
+            )
+
+        if inspect_result.returncode != 0:
+            return WrapUpResult(
+                status=WrapUpStatus.SUCCESS,
+                detail="container stopped (exit-code probe failed)",
+            )
+
+        try:
+            container_exit = int(inspect_result.stdout.strip())
+        except ValueError:
+            return WrapUpResult(
+                status=WrapUpStatus.SUCCESS,
+                detail="container stopped (unparseable exit code)",
+            )
+
+        if container_exit == 137:
+            # 128 + 9 (SIGKILL) — docker had to force-kill after the grace window.
+            return WrapUpResult(
+                status=WrapUpStatus.TIMEOUT,
+                detail=f"container required SIGKILL after {grace_seconds}s grace",
+            )
+
+        return WrapUpResult(
+            status=WrapUpStatus.SUCCESS,
+            detail=f"container stopped cleanly (exit {container_exit})",
         )
 
     def health_check_command(self) -> list[str] | None:
