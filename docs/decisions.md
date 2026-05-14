@@ -975,13 +975,18 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-90: In-session approval routing in gateway mode
 
-**Decision:** How Hermes's in-session dangerous-command approval routes when there's no TTY (Discord/etc. vs. `--yolo` bypass) is unresolved.
+**Decision:** Whizzard does not override or route Hermes's in-session approval system; it stays out of the harness-native behavioral control surface (per D-24). The Hermes adapter's posture toward Hermes approvals is:
 
-**Rationale:** Open design question; real product decision with safety implications.
+1. **No mode override.** Whizzard does not inject `--yolo`, does not rewrite the approval-mode field, and does not provide a Whizzard-side equivalent. Whatever the user configured in Hermes (`manual` / `smart` / `off` / `cron`) is what runs.
+2. **Pre-launch warning for incompatible mode + gateway combination.** If gateway mode is active (per D-88) and the Hermes adapter reads `manual` as the approval mode, Whizzard emits a clear warning pre-launch: gateway mode has no TTY for interactive y/n prompts; the agent may stall on dangerous-command detection. The warning suggests `smart` mode (Hermes's auxiliary-LLM pre-evaluator), `off` mode (the cell's outer boundary is trusted to constrain), or waiting for Hermes's platform-routed approvals if/when they ship upstream.
+3. **Approval mode appears in the capability banner.** The pre-launch banner introduced in D-89 (`Active platforms: discord, slack`) is extended to include the approval mode line, so the user sees the full capability posture before container start.
+4. **No Whizzard `--yolo` flag.** Yolo is a Hermes concept; users who want it set it in their Hermes config or pass Hermes's own flag through.
 
-**Source:** docs/session_handoff.md (Stage 8 open #5); docs/archive/hermes_research.md (Open question 5)
+**Rationale:** D-24 ("Whizzard does not recreate harness-native behavioral controls") is the load-bearing principle. Hermes already owns dangerous-command detection, approval-mode policy, and — eventually — platform-routed approval UX. Recreating any of that in Whizzard would duplicate the surface and create drift hazards as Hermes evolves. The narrow value-add Whizzard *can* provide is visibility (D-11: capability grants are human-readable) and a warning at the TTY-incompatibility failure mode, which is a predictable misconfiguration that would otherwise stall the agent silently. Surfacing the approval mode in the banner means the user sees the full capability posture in one place pre-launch, consistent with D-89's visibility principle. Bounding Whizzard's role to "warn, don't override" preserves the cooperation-layer-doesn't-replace-enforcement-layer principle (D-26).
 
-**Status:** open
+**Source:** docs/HANDOFF.md (2026-05-14T14:14Z entry); docs/archive/hermes_research.md (Open question 5, L92-102, L172-176, L222); conversation 2026-05-14.
+
+**Status:** active
 
 ---
 
@@ -1580,7 +1585,6 @@ All three existing-user migration shapes are first-class supported paths:
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
-- **D-90** — In-session approval routing in gateway mode
 - **D-130** — Personal-use MVP threshold candidates
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism in OSS-launch
@@ -1685,7 +1689,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass) — promoted to MVP-blocking by D-88
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
