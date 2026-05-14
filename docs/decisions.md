@@ -907,15 +907,25 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Status:** active
 
-### D-86: Hermes profile auto-creation UX
+### D-86: Hermes profile creation UX
 
-**Decision:** Whether Whizzard auto-creates a `whizzard-cell` Hermes profile on first launch, or requires the user to create one manually first, is unresolved.
+**Decision:** A Whizzard-native verb `whiz hermes profile create <name>` provisions the contained Hermes profile (Option C — Whizzard does not auto-create on first launch, and does not require the user to invoke `hermes profile create` directly). Flags:
 
-**Rationale:** Open design question for Stage 8; impacts onboarding friction vs. explicit control.
+- `--clone-from <profile-name>` — seed the new profile from an existing host-side Hermes profile (config, SOUL.md, memories — explicitly **excluding** `auth.json` per D-80).
+- `--no-clone` — create an empty profile.
 
-**Source:** docs/session_handoff.md (Stage 8 open #1); docs/archive/hermes_research.md (Open question 1)
+Bare `whiz hermes profile create <name>` defaults to `--clone-from default` when a host-side `default` profile exists; if no host Hermes profile exists, it gracefully degrades to `--no-clone` and announces which path it took. Explicit `--clone-from <name>` for a missing profile is an error.
 
-**Status:** open
+All three existing-user migration shapes are first-class supported paths:
+- **Parallel** — host-side Hermes keeps running; cell profile is a separate sibling. Drift between host and cell profiles is expected and documented.
+- **Migrate** — user transitions away from host-side Hermes after seeding; the host install becomes vestigial.
+- **Clean cell** — no host-side Hermes; the cell profile is the user's first and only Hermes.
+
+**Rationale:** Option A (auto-create on first launch) silently mutates state and has a typo failure mode — `whiz hermes whizard-cell` mistyped spawns a bogus profile and runs. Option B (require user to call `hermes profile create` directly) violates "Whiz easier than yolo" and couples Whizzard tightly to Hermes CLI shape across versions. The Whizzard-native verb keeps the surface in Whizzard's hands while delegating the actual profile-directory creation to Hermes underneath. Graceful clone-default-or-empty behavior makes the bare command Just Work for both clean-cell and existing-user paths without forcing the user to know which flag to pass first. Explicit `auth.json` omission preserves D-80 (credentials never enter the cell). Treating all three migration shapes as first-class means the docs give each substantive coverage rather than picking one as canonical — drift management becomes a real section, not a footnote.
+
+**Source:** docs/HANDOFF.md (2026-05-14T14:14Z entry); docs/archive/hermes_research.md (Open question 1); conversation 2026-05-14
+
+**Status:** active
 
 ### D-87: Concurrency exclusivity vs. host-side Hermes
 
@@ -1542,7 +1552,6 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
-- **D-86** — Hermes profile auto-creation UX
 - **D-87** — Concurrency exclusivity vs. host-side Hermes
 - **D-88** — Default mode (interactive vs. gateway) for Hermes adapter
 - **D-89** — Platform credential declaration UX in gateway mode
@@ -1635,7 +1644,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-86** — Hermes profile auto-creation UX (auto-create on first launch vs. require manual `hermes profile create` first)
 - **D-87** — Concurrency exclusivity (refuse contained launch if host-side Hermes uses same profile, vs. document only)
 - **D-89** — Platform credential declaration in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid) — promoted to MVP-blocking by D-88
 - **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass) — promoted to MVP-blocking by D-88
