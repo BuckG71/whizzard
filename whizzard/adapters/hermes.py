@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,6 +31,161 @@ from whizzard.adapters.base import (
 
 _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
 _GATEWAY_LOCK_FILENAME = "gateway.lock"
+
+
+# --- Profile creation (D-86) -----------------------------------------------
+
+# Files/dirs excluded when cloning a Hermes profile:
+#   - auth.json + auth.lock: D-80 (credentials never enter a derived profile)
+#   - .env: defense-in-depth, additional secret material
+#   - *.db, gateway.*, sessions/, logs/: per-instance runtime state
+#   - .git, hermes-agent: irrelevant install/repo metadata
+_CLONE_EXCLUDE_NAMES: set[str] = {
+    "auth.json",
+    "auth.lock",
+    ".env",
+    ".DS_Store",
+    "Thumbs.db",
+    "gateway.lock",
+    "gateway.pid",
+    "gateway_state.json",
+    ".skills_prompt_snapshot.json",
+    ".curator_state",
+    ".usage.json",
+    ".update_check",
+    "context_length_cache.yaml",
+    "models_dev_cache.json",
+    "channel_directory.json",
+    "discord_threads.json",
+}
+_CLONE_EXCLUDE_SUFFIXES: tuple[str, ...] = (
+    ".db",
+    ".db-shm",
+    ".db-wal",
+    ".log",
+    ".pyc",
+    ".pyo",
+)
+_CLONE_EXCLUDE_DIRS: set[str] = {
+    "sessions",
+    "logs",
+    "cache",
+    "tmp",
+    "audio_cache",
+    "checkpoints",
+    "state-snapshots",
+    "image_cache",
+    "pairing",
+    "hooks",
+    "hermes-agent",
+    "__pycache__",
+    ".git",
+    ".curator_backups",
+}
+
+
+class HermesProfileExistsError(Exception):
+    """Target profile directory already exists; refuses to clobber."""
+
+
+class HermesProfileSourceMissingError(Exception):
+    """Explicit --clone-from target does not exist on disk."""
+
+
+class HermesProfileNameError(Exception):
+    """Invalid or reserved profile name."""
+
+
+@dataclass(frozen=True)
+class HermesProfileCreated:
+    path: Path
+    source: Path | None  # None when the new profile is empty
+
+
+def _hermes_profile_path(name: str, parent: Path | None = None) -> Path:
+    """Map a Hermes profile name to its on-disk path.
+
+    Convention: `default` is `<parent>/.hermes` (Hermes's own default); any
+    other name is `<parent>/.hermes-<name>`. `parent` defaults to home.
+    """
+    base = parent if parent is not None else Path.home()
+    if name == "default":
+        return base / ".hermes"
+    return base / f".hermes-{name}"
+
+
+def _clone_ignore(src: str, names: list[str]) -> list[str]:
+    """shutil.copytree `ignore=` callable — names in `src` to skip."""
+    skipped: list[str] = []
+    for n in names:
+        if n in _CLONE_EXCLUDE_NAMES or n in _CLONE_EXCLUDE_DIRS:
+            skipped.append(n)
+        elif n.endswith(_CLONE_EXCLUDE_SUFFIXES):
+            skipped.append(n)
+    return skipped
+
+
+def create_profile(
+    name: str,
+    clone_from: str | None = None,
+    no_clone: bool = False,
+    parent_dir: Path | None = None,
+) -> HermesProfileCreated:
+    """Create a Hermes profile per D-86.
+
+    - Bare (`clone_from=None`, `no_clone=False`): clone from `default`
+      (`<parent>/.hermes`) if it exists; gracefully degrade to an empty
+      profile if it doesn't.
+    - `clone_from=<source>`: clone from the named profile; error if it
+      does not exist on disk.
+    - `no_clone=True`: create an empty profile directory.
+
+    Clones exclude `auth.json` (D-80) and per-instance runtime state.
+
+    Raises:
+      HermesProfileNameError, HermesProfileExistsError,
+      HermesProfileSourceMissingError.
+    """
+    if name == "default":
+        raise HermesProfileNameError(
+            "'default' is reserved for Hermes's default profile "
+            f"({_hermes_profile_path('default', parent_dir)}); pick a different name."
+        )
+    if not name or "/" in name or name.startswith("."):
+        raise HermesProfileNameError(
+            f"invalid profile name {name!r} "
+            "(must be non-empty, no slashes, no leading dot)"
+        )
+
+    target = _hermes_profile_path(name, parent_dir)
+    if target.exists():
+        raise HermesProfileExistsError(
+            f"profile directory already exists: {target}. "
+            "Pick a different name or remove the existing directory first."
+        )
+
+    if no_clone:
+        target.mkdir(parents=True, exist_ok=False)
+        return HermesProfileCreated(path=target, source=None)
+
+    if clone_from is None:
+        source = _hermes_profile_path("default", parent_dir)
+        if not source.exists():
+            target.mkdir(parents=True, exist_ok=False)
+            return HermesProfileCreated(path=target, source=None)
+    else:
+        source = _hermes_profile_path(clone_from, parent_dir)
+        if not source.exists():
+            raise HermesProfileSourceMissingError(
+                f"clone source not found: {source} "
+                f"(expected for --clone-from {clone_from!r})"
+            )
+
+    shutil.copytree(source, target, ignore=_clone_ignore)
+    return HermesProfileCreated(path=target, source=source)
+
+
+# --- OneCLI credential plumbing (D-89, D-134) ------------------------------
 
 # Hermes convention (per hermes_research.md L17): each platform's credential
 # is consumed from an env var named `<PLATFORM>_BOT_TOKEN`. OneCLI secret

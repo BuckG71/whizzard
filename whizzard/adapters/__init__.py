@@ -11,8 +11,13 @@ from whizzard.adapters.base import (
 from whizzard.adapters.generic import GenericShellAdapter
 from whizzard.adapters.hermes import (
     HermesAdapter,
+    HermesProfileCreated,
+    HermesProfileExistsError,
+    HermesProfileNameError,
+    HermesProfileSourceMissingError,
     OneCLINotInstalledError,
     OneCLISecretMissingError,
+    create_profile as create_hermes_profile,
 )
 
 
@@ -23,9 +28,14 @@ __all__ = [
     "WrapUpStatus",
     "GenericShellAdapter",
     "HermesAdapter",
+    "HermesProfileCreated",
+    "HermesProfileExistsError",
+    "HermesProfileNameError",
+    "HermesProfileSourceMissingError",
     "OneCLINotInstalledError",
     "OneCLISecretMissingError",
     "build_adapter",
+    "create_hermes_profile",
 ]
 
 
