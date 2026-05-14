@@ -15,9 +15,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 1. Project & naming
-
 ### D-01: Repo placeholder name is `basicagentauth`
+
+**Type:** naming
+
+**Door Type:** two-way (repo names are renamable; this placeholder was itself superseded by D-145).
 
 **Decision:** Public/private GitHub repo ships under the placeholder name `basicagentauth`.
 
@@ -29,6 +31,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-02: Internal package name is `whizzard` (replaces `warlock`)
 
+**Type:** naming
+
+**Door Type:** two-way (package can be renamed; was already renamed once from `warlock`).
+
 **Decision:** Python package and CLI command are named `whizzard`.
 
 **Rationale:** Original name `warlock` collided with an active 2026 ransomware family; renamed to avoid the collision.
@@ -38,6 +44,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-03: Local working directory stays `airlock-warlock` mid-development
+
+**Type:** naming
+
+**Door Type:** two-way (working directories can be renamed between sessions; this was, per D-146).
 
 **Decision:** Do not rename the working directory mid-session; it remains `airlock-warlock` despite the package rename.
 
@@ -49,6 +59,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-04: Two-name component split — Airlock vs. Whizzard
 
+**Type:** naming
+
+**Door Type:** two-way (verbal framing only; was superseded by D-144's single-name consolidation).
+
 **Decision:** Airlock = governance/containment layer; Whizzard = orchestrator/runtime.
 
 **Rationale:** Two-component naming maps to the split between policy enforcement and harness orchestration; keeps the layering explicit in user-facing language.
@@ -58,6 +72,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** superseded by D-144
 
 ### D-05: Verbal framing — "Whizzard operates. Airlock governs."
+
+**Type:** naming
+
+**Door Type:** two-way (verbal framing; superseded by D-144).
 
 **Decision:** Adopt "Whizzard operates / Airlock governs" (alt: "Whizzard executes inside Airlock") as the canonical short framing.
 
@@ -69,6 +87,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-06: License is MIT
 
+**Type:** naming
+
+**Door Type:** one-way (license commitments are sticky once distributed under OSS).
+
 **Decision:** Project licensed MIT.
 
 **Rationale:** Default permissive license aligned with OSS-launch goals.
@@ -78,6 +100,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-07: Initial version is 0.1.0; Python 3.11+
+
+**Type:** naming
+
+**Door Type:** two-way (version and Python floor evolve naturally over the project's life).
 
 **Decision:** Initial package version is 0.1.0; minimum Python is 3.11.
 
@@ -89,6 +115,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-08: WHIZZARD_HOME defaults to `~/.whizzard`
 
+**Type:** architecture
+
+**Door Type:** two-way (env-var override allows alternate layouts; default could change without breaking existing users).
+
 **Decision:** Whizzard's host-side state directory is `~/.whizzard` (override via `WHIZZARD_HOME` env var).
 
 **Rationale:** Standard dotfile convention; env-var override allows test isolation and alternate layouts.
@@ -99,9 +129,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 2. Foundational principles
-
 ### D-09: One-way capability flow
+
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
 
 **Decision:** Agents request capabilities; Whizzard grants; agents never self-grant.
 
@@ -113,6 +145,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-10: Whizzard core stays harness-neutral
 
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
+
 **Decision:** Whizzard core must know nothing about Hermes, OpenClaw, NanoClaw, Discord, or MCP specifics. All harness-specific logic lives in adapters.
 
 **Rationale:** Coupling core to any specific harness collapses the layering and makes future harnesses second-class.
@@ -122,6 +158,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-11: The mount list IS the permission model
+
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
 
 **Decision:** Capability grants are the literal, visible list of mounts and toggles a user sees before launch — not abstract policy declarations.
 
@@ -133,6 +173,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-12: Config integrity is non-negotiable
 
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
+
 **Decision:** Agent-reachable mount paths must never include the Whizzard config directory, regardless of policy files.
 
 **Rationale:** An agent that can write files Whizzard reads can influence its own policies, breaking the trust model. Cannot be relaxed by profiles or presets.
@@ -142,6 +186,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-13: Time-bounded sessions are enforced, not advisory
+
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
 
 **Decision:** Session duration is a first-class capability primitive that Whizzard enforces; unlimited is explicit, never the silent default.
 
@@ -153,6 +201,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-14: "Mount allowlist outside agent reach" is an architectural principle
 
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
+
 **Decision:** The directory that defines an agent's permissions must be unreachable (and unwritable) from any agent-writable mount.
 
 **Rationale:** Validated against NanoClaw's external `~/.config/nanoclaw/mount-allowlist.json` pattern; same principle as config write-protection but elevated as a general rule.
@@ -162,6 +214,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-15: Useful + controlled + simple is the middle-ground positioning
+
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
 
 **Decision:** The product target is the middle ground between unrestricted trust and unusably-restrictive sandboxes.
 
@@ -173,6 +229,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-16: This is NOT an agent platform / chatbot / coding assistant / Docker wrapper / generic AI sandbox / security utility
 
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
+
 **Decision:** Reject positioning as any of the listed categories.
 
 **Rationale:** Sharper "what we are not" framing protects the actual positioning ("local capability governance layer for autonomous AI systems").
@@ -182,6 +242,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-17: Not competing with Claude Code / Codex / Cursor
+
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
 
 **Decision:** Whizzard targets local/open-source agents (Hermes, OpenClaw, NanoClaw) and solo-developer power users — not the major harness vendors.
 
@@ -193,6 +257,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-18: Not initially targeting enterprise IAM, SOC2, centralized governance
 
+**Type:** foundational
+
+**Door Type:** one-way (foundational principle; reversing would require rethinking the trust model).
+
 **Decision:** Enterprise/compliance audiences are explicitly out-of-scope for v1.
 
 **Rationale:** v1 audience is solo developers, AI power users, security-conscious tinkerers; enterprise governance is a different product shape.
@@ -203,9 +271,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 3. Architecture & layering
-
 ### D-19: Four named components — Whizzard, Airlock, Execution Cell, Harness Adapter
+
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
 
 **Decision:** Component vocabulary is fixed at: Whizzard (orchestrator), Airlock (policy/containment), Execution Cell (the contained environment, Docker in MVP), Harness Adapter (integration layer). *(Three components after D-144 consolidation: Whizzard, Execution Cell, Harness Adapter.)*
 
@@ -217,6 +287,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-20: Three architecture layers — Whizzard Core, Adapter Layer, Execution Backend
 
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
+
 **Decision:** The system is organized as Whizzard Core (harness-neutral) → Harness Adapter Layer → Execution Backend. *(Pre-D-144: "Airlock Core" was the term for what is now "Whizzard Core".)*
 
 **Rationale:** Clean seams allow swapping execution backends and adding adapters without touching core; matches the trust model.
@@ -226,6 +300,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-21: Host = control plane; container = execution plane
+
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
 
 **Decision:** Whizzard daemon, policy engine, config registry, logs, and the future Discord bot run on the host. Agent runtime, shell, filesystem access, and tool execution run inside the container.
 
@@ -237,6 +315,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-22: Docker is the MVP execution backend; Podman/Firecracker/etc. are future
 
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
+
 **Decision:** MVP ships on Docker only; alternative backends (Podman, Firecracker, Apple Virtualization, cloud) are deferred.
 
 **Rationale:** Docker is ubiquitous on dev machines and gives the needed isolation primitives; abstracting now without a second implementation is speculative.
@@ -246,6 +328,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-23: Three concentric control layers — enforcement / behavioral / cooperation
+
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
 
 **Decision:** Whizzard's controls compose as outer (enforcement, kernel/Docker) → inner (behavioral, harness-native) → innermost (cooperation, Whiz MCP server).
 
@@ -257,6 +343,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-24: Whizzard does not recreate harness-native behavioral controls
 
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
+
 **Decision:** Dangerous-command approval, tool intent gating, `/yolo`, smart-mode aux LLM, and similar in-session interception remain harness-owned. Whizzard does not duplicate them.
 
 **Rationale:** Both Hermes and NanoClaw ship robust behavioral layers; recreating adds surface area for no gain. Layering is the discipline.
@@ -266,6 +356,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-25: MCP support is treated as a baseline harness capability
+
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
 
 **Decision:** Whizzard assumes all modern agent harnesses support MCP; the Whiz MCP server is a first-class design element, not a per-adapter capability flag.
 
@@ -277,6 +371,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-26: Cooperation layer never replaces enforcement layer
 
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
+
 **Decision:** Capability-change requests via the Whiz MCP server are mediated host-side; structural changes still require stop+restart of the container, not in-place mutation.
 
 **Rationale:** Letting a running agent mutate its own enforcement boundary collapses the trust model.
@@ -286,6 +384,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-27: Mid-session capability adjustment = stop+restart
+
+**Type:** architecture
+
+**Door Type:** one-way (architectural commitment; reversing requires substantial refactor).
 
 **Decision:** When the user (or agent via MCP) requests a capability change mid-session, Whizzard wraps up the harness, terminates the container, and relaunches with new flags.
 
@@ -297,9 +399,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 4. Adapter contract
-
 ### D-28: Adapter is a Python `Protocol`, not an abstract base class
+
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
 
 **Decision:** `HarnessAdapter` is a `runtime_checkable` Protocol with positional methods — `start_command`, `container_env`, `working_dir`, `wrap_up`, `health_check_command` — plus a `name` attribute.
 
@@ -311,6 +415,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-29: `wrap_up` is required from MVP, not deferred to v1
 
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
+
 **Decision:** Every adapter implements `wrap_up(grace_seconds)`; the generic shell adapter returns `NO_OP`.
 
 **Rationale:** Adding the method later would force an interface change once the Hermes adapter needs it; cheap to define now.
@@ -320,6 +428,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-30: WrapUpStatus enum has four values — SUCCESS / TIMEOUT / NO_OP / ERROR
+
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
 
 **Decision:** Wrap-up outcomes are discrete and enumerated.
 
@@ -331,6 +443,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-31: Adapters must not sleep beyond `grace_seconds`
 
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
+
 **Decision:** `wrap_up` implementations must return promptly with TIMEOUT if the harness has not acknowledged within the grace window.
 
 **Rationale:** Wrap-up cannot be allowed to block container termination indefinitely; the grace bound is the contract.
@@ -340,6 +456,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-32: Agent identity is the adapter's responsibility, not core's
+
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
 
 **Decision:** Whizzard core does not assume agent identity is available. Adapters tag tool execution with agent identity at the harness boundary; core trusts that claim.
 
@@ -351,6 +471,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-33: `harnesses.json` is a versioned schema with required + optional fields
 
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
+
 **Decision:** Required: `type`, `start_command`. Optional: `stop_command`, `wrap_up_command`, `wrap_up_grace_seconds`, `working_dir`, `health_check`, `startup_timeout_seconds`, `env`, `description`. Top-level `schema_version`.
 
 **Rationale:** Versioning lets the schema grow without breaking configs; parser must accept and ignore optional fields from day one to avoid breaking changes later.
@@ -360,6 +484,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-34: Two harness types — `shell` and `agent`
+
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
 
 **Decision:** `harnesses.json` accepts `type: "shell"` (Stage 7) and `type: "agent"` (Stage 8+). Other types are rejected.
 
@@ -371,6 +499,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-35: Initial adapter slate = generic (MVP), Hermes / OpenClaw / NanoClaw (post-MVP)
 
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
+
 **Decision:** MVP ships only the generic shell adapter; Hermes is Stage 8; OpenClaw and NanoClaw are post-MVP.
 
 **Rationale:** Prove the abstraction with a trivial adapter before any harness-specific work.
@@ -380,6 +512,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-36: MCP gateway adapter is post-v1 backlog
+
+**Type:** architecture
+
+**Door Type:** one-way (adapter-contract commitment; reversing breaks every adapter).
 
 **Decision:** A future MCP gateway adapter is named in the architecture but not scheduled.
 
@@ -391,9 +527,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 5. Profiles & mounts
-
 ### D-37: Five built-in profiles — safe / default / build / power / quarantine
+
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
 
 **Decision:** Bundled profile set is fixed at five named profiles with the documented capability shapes.
 
@@ -405,6 +543,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-38: Default profile is "SAFE-NET" — network on, no mounts, unlimited duration
 
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
+
 **Decision:** The `default` profile is the always-on baseline: network enabled, no mounts pre-bound, no duration cap, broad-mount override disabled.
 
 **Rationale:** Useful by default without unrestricted host access; unlimited duration on the productive baseline avoids unnecessary friction for the common case.
@@ -414,6 +556,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-39: Profile schema is JSON with a versioned envelope
+
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
 
 **Decision:** Profiles are stored in `~/.whizzard/config/profiles.json` with a `schema_version` field and a `profiles` map; required keys per profile are `network_enabled` and `duration_seconds` (null = unlimited).
 
@@ -425,6 +571,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-40: Bundled defaults are in code, copied to user config on `init`
 
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
+
 **Decision:** Default profiles ship in the `whizzard.config._DEFAULT_PROFILES` dict; `whizzard profiles init` writes them to disk on demand.
 
 **Rationale:** Always-available defaults work even with no user file; explicit `init` makes customization opt-in and prevents accidental clobber.
@@ -434,6 +584,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-41: `profiles init` refuses to clobber without `--force`
+
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
 
 **Decision:** If `~/.whizzard/config/profiles.json` exists, `init` exits 1 with a message; `--force` overwrites silently.
 
@@ -445,6 +599,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-42: Mount registry schema mirrors the profile schema
 
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
+
 **Decision:** Mounts are stored in `~/.whizzard/config/mounts.json` with a `schema_version` field and a `mounts` map; required keys per mount are `host_path` and `default_mode` ("ro" or "rw").
 
 **Rationale:** Consistent shape with profiles; versioned for forward compatibility.
@@ -454,6 +612,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-43: Mounts surface inside the container at `/mounts/<name>`
+
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
 
 **Decision:** Every named mount appears at `/mounts/<name>` inside the cell, regardless of host path.
 
@@ -465,6 +627,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-44: `default_mode` caps the maximum permission per mount
 
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
+
 **Decision:** A mount registered "ro" cannot be requested "rw" via the CLI; the registry caps permissions, the CLI can only request equal or lower.
 
 **Rationale:** Registry is the source of truth for the permission ceiling; CLI cannot escalate.
@@ -474,6 +640,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-45: Unknown mount names are rejected before launch
+
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
 
 **Decision:** A `--mount <name>` referring to an unregistered name produces a clean error and aborts before container start.
 
@@ -485,6 +655,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-46: Two-gate broad-mount override
 
+**Type:** architecture
+
+**Door Type:** one-way (profile/mount model is load-bearing for the permission boundary).
+
 **Decision:** Mounting a path on the override-required tier requires BOTH the profile's `allow_broad_mount: true` AND the CLI flag `--allow-broad-mount`. Either alone is insufficient.
 
 **Rationale:** Profile sets the ceiling; CLI confirms the specific session intent. Two independent gates reduce accidental override.
@@ -495,9 +669,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 6. Safety policy
-
 ### D-47: Three safety tiers — hard block / override-required / allowed
+
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
 
 **Decision:** Mount paths are classified into three tiers with distinct enforcement behavior.
 
@@ -509,6 +685,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-48: Hard-block list is non-overridable
 
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
+
 **Decision:** The hard-block list — `/`, `$HOME`, `~/.ssh`, `~/Library`, Keychains, browser profiles, Docker socket, Whizzard config dir — cannot be overridden by any flag, profile, or preset.
 
 **Rationale:** Some paths are categorically wrong to mount; making them overridable means somebody will override them.
@@ -518,6 +698,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-49: Override mechanism is intentional friction; no warning-only middle ground
+
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
 
 **Decision:** The override-required tier is "block by default, require explicit user action, log every override." Warnings (which tend to be ignored) are not used.
 
@@ -529,6 +713,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-50: Parent-of-registered-mount is override-required
 
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
+
 **Decision:** Mounting a path that is the parent directory of any other registered mount is treated as broad-folder override-required, even if the parent itself is not on a static block list.
 
 **Rationale:** Mounting a parent unintentionally widens the agent's view to include all sibling mounts; treat it as a broad-mount decision.
@@ -538,6 +726,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-51: Cloud-sync roots (iCloud Drive, Dropbox, OneDrive) are override-required
+
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
 
 **Decision:** Cloud-sync roots are on the override-required tier, not the allowed tier.
 
@@ -549,6 +741,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-52: Symlink targets are resolved before validation
 
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
+
 **Decision:** Safety check resolves symlinks before classifying a path against the block lists.
 
 **Rationale:** Otherwise an attacker can register a symlink whose target is a hard-blocked path; resolve-then-check defeats this.
@@ -558,6 +754,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-53: Override usage is recorded in the session log
+
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
 
 **Decision:** Any override applied to a session is written to `session_start` under `overrides_used` with the reason string.
 
@@ -569,6 +769,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-54: Dry-run is subject to the same safety gates as live runs
 
+**Type:** safety
+
+**Door Type:** one-way (safety policy commitment).
+
 **Decision:** Safety errors fire under `--dry-run` exactly as they do under live execution.
 
 **Rationale:** Dry-run is a preview, not a bypass; surfacing errors there is the whole point.
@@ -579,9 +783,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 7. Container hardening
-
 ### D-55: Container runs as fixed UID 1000 by default
+
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
 
 **Decision:** Default in-container user is `whizzard` at UID 1000.
 
@@ -592,6 +798,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-56: Hermes adapter uses scoped UID parity for the profile mount
+
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
 
 **Decision:** When the Hermes adapter is in use, the container UID matches the host UID for the Hermes profile mount specifically; other mounts and the rest of the container retain the default UID 1000.
 
@@ -605,6 +815,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-57: `--cap-drop=ALL` is mandatory
 
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
+
 **Decision:** All Linux capabilities are dropped in every cell.
 
 **Rationale:** Defense in depth; even if an exploit lands inside the container, it has no extra capabilities to leverage.
@@ -614,6 +828,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-58: `--security-opt no-new-privileges` is mandatory
+
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
 
 **Decision:** All cells run with `no-new-privileges` set.
 
@@ -625,6 +843,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-59: Read-only root filesystem with tmpfs scratch
 
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
+
 **Decision:** Root filesystem is `--read-only`. `/tmp` and `/home/whizzard` are tmpfs.
 
 **Rationale:** Prevents persistent in-container modification; tmpfs gives the agent the writable space it needs without persisting it.
@@ -634,6 +856,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-60: Network policy is profile-driven, on/off only in MVP
+
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
 
 **Decision:** MVP supports `--network none` (off) or default bridge (on), set per profile. Egress allowlists by host/port are post-MVP.
 
@@ -645,6 +871,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-61: Whizzard does not use host networking by default
 
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
+
 **Decision:** Cells do not run with `--network host`.
 
 **Rationale:** Hermes's own Docker setup uses `network_mode: host` for convenience; that defeats containment. Whizzard explicitly does not.
@@ -654,6 +884,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-62: Image base must be hardened (non-root, minimal)
+
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
 
 **Decision:** The execution image is built from a minimal base with non-root default user.
 
@@ -665,6 +899,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-63: Custom seccomp / AppArmor / SELinux profiles are out of scope for MVP
 
+**Type:** safety
+
+**Door Type:** one-way (container hardening commitment).
+
 **Decision:** MVP relies on Docker default seccomp. AppArmor/SELinux are deprioritized indefinitely.
 
 **Rationale:** Linux-only and enterprise-shaped; v1 audience does not include the personas who need this.
@@ -675,9 +913,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 8. Session lifecycle
-
 ### D-64: Session log is JSONL with paired start + end records
+
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
 
 **Decision:** Sessions are logged as one `session_start` and one `session_end` JSONL record per session, sharing a `session_id`. File path: `~/.whizzard/logs/sessions.jsonl`.
 
@@ -689,6 +929,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-65: Session ID is a UUID assigned pre-launch
 
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
+
 **Decision:** Session ID is a UUID generated before the container starts; surfaced in the banner and stamped on the container as a label (`whizzard.session_id=<uuid>`).
 
 **Rationale:** Allows the container to be located via Docker filters and tied to its log entries even if the host process crashes mid-session.
@@ -698,6 +942,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-66: Session log captures image_id, container_id, profile, mounts, network, argv, expiry reason, exit status
+
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
 
 **Decision:** Required fields in the session log are enumerated in Stage 5; image_id is the resolved sha256 digest, container_id is captured via `--cidfile`.
 
@@ -709,6 +957,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-67: Pre-flight failures do NOT write a session log entry
 
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
+
 **Decision:** If pre-launch validation (unknown profile, missing image, safety violation) fails, no session log entry is written.
 
 **Rationale:** No session ran; logging would clutter the audit trail with non-events. The CLI error message is the audit record.
@@ -718,6 +970,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-68: Termination flow is wrap_up → SIGTERM → 5s grace → SIGKILL
+
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
 
 **Decision:** Session termination sequence: invoke `adapter.wrap_up(grace_seconds)`; then SIGTERM; then a fixed 5s final grace; then SIGKILL.
 
@@ -729,6 +985,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-69: Each step in the termination flow is logged with timestamps
 
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
+
 **Decision:** wrap-up command sent, response received or timeout, duration consumed, and whether SIGTERM was sufficient or SIGKILL was required are all logged.
 
 **Rationale:** Wind-down is the riskiest moment; full timestamps make it auditable.
@@ -738,6 +998,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-70: Dry-run does NOT write to the session log
+
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
 
 **Decision:** `--dry-run` previews the docker invocation but writes nothing to `sessions.jsonl`.
 
@@ -749,6 +1013,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-71: Dry-run does NOT check image existence
 
+**Type:** architecture
+
+**Door Type:** one-way (session lifecycle commitment; reversing requires substantial refactor).
+
 **Decision:** `--dry-run` prints the full preview even if the referenced image is not built locally.
 
 **Rationale:** Dry-run is for previewing intent; gating on image presence undermines its usefulness during scripting and dry-run-before-build flows.
@@ -759,9 +1027,11 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 9. Image management
-
 ### D-72: Dockerfile lives at `docker/Dockerfile`
+
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
 
 **Decision:** Single Dockerfile at the repo's `docker/` directory.
 
@@ -773,6 +1043,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-73: Image tag is `whizzard-base:latest` for MVP
 
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
+
 **Decision:** The execution image is tagged `whizzard-base:latest`.
 
 **Rationale:** Predictable, scriptable; conventional `:latest` tag for the dev image.
@@ -782,6 +1056,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-74: `whizzard image build` and `whizzard image status` are MVP commands
+
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
 
 **Decision:** MVP exposes image management as `image build` (rebuild local image) and `image status` (show current image id, build date, base digest).
 
@@ -793,6 +1071,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-75: Image staleness check is post-MVP
 
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
+
 **Decision:** `whizzard image check` against a configurable staleness threshold, plus optional auto-rebuild policy per profile, ships in v1.
 
 **Rationale:** Useful but not necessary to prove the MVP thesis.
@@ -802,6 +1084,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-76: Image management was Stage 9, becomes Stage 11
+
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
 
 **Decision:** The image management stage is renumbered to Stage 11; Stage 9 becomes "Whiz MCP server (read-only subset)" and Stage 10 becomes "Presets."
 
@@ -813,6 +1099,10 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-77: Base image will be digest-pinned (planned, post-MVP)
 
+**Type:** architecture
+
+**Door Type:** one-way (image-management commitment; reversing affects all sessions).
+
 **Decision:** The base image reference in the Dockerfile will be pinned by digest (not floating tag) once Stage 11 lands.
 
 **Rationale:** Tag-based pulls can silently change; digest pinning closes that gap. NanoClaw's tag-only choice is explicitly something Whizzard should not borrow.
@@ -823,9 +1113,13 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ---
 
-## 10. Hermes integration (Stage 8)
-
 ### D-78: Hermes integration only through the adapter layer
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** Hermes is integrated via the adapter contract; Whizzard is not a Hermes wrapper.
 
@@ -837,6 +1131,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-79: Whizzard mounts a single Hermes profile directory as HERMES_HOME
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** The Hermes adapter mounts one Hermes profile directory (`~/.hermes/profiles/<name>/`) into the cell as the contained Hermes's `HERMES_HOME`. It does not mount per-subdirectory.
 
 **Rationale:** `HERMES_HOME` is Hermes's single relocation knob; mounting one profile subsumes per-file decisions and isolates the contained Hermes from the host's default profile.
@@ -846,6 +1146,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-80: Credentials are injected via env vars; auth.json never enters the cell
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** API credentials reach the contained Hermes as `<PLATFORM>_TOKEN` env vars via a `--expose-key NAME` flag; `auth.json` is not mounted.
 
@@ -859,6 +1165,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-81: Hermes's approval system is the inner gate; Whizzard does not duplicate it
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** Hermes's dangerous-command detection, manual/smart approval modes, and `/yolo` remain in force inside the cell. Whizzard's safety policy is the outer gate (mounts, network, container). The two stack.
 
 **Rationale:** Different layers, different decisions; Hermes already does this well.
@@ -868,6 +1180,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-82: Whizzard does not ship as a Hermes plugin
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** Whizzard is not implemented as a plugin loaded inside Hermes (`~/.hermes/plugins/`).
 
@@ -879,6 +1197,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-83: Wrap-up is `/quit` via `docker exec`
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** Hermes adapter sends `/quit` into the running container via `docker exec` to trigger graceful wind-down; SIGTERM is fallback.
 
 **Rationale:** `/quit` is Hermes's native interactive wrap-up; `docker exec` is the available channel into a running container.
@@ -888,6 +1212,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-84: Two operating modes — interactive and gateway
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** The Hermes adapter supports both interactive (`hermes chat`) and gateway (`hermes gateway run`) modes.
 
@@ -899,6 +1229,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 ### D-85: Whizzard profiles and Hermes profiles are orthogonal
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** Whizzard's "profile" (capability bundle: network, duration, broad-mount) and Hermes's "profile" (full HERMES_HOME directory) are different concepts at different layers and may both be specified per launch.
 
 **Rationale:** Each describes a different thing; collapsing them would lose expressiveness.
@@ -908,6 +1244,12 @@ The canonical, append-only index of every decision made for the Whizzard project
 **Status:** active
 
 ### D-86: Hermes profile creation UX
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** A Whizzard-native verb `whiz hermes profile create <name>` provisions the contained Hermes profile (Option C — Whizzard does not auto-create on first launch, and does not require the user to invoke `hermes profile create` directly). Flags:
 
@@ -929,6 +1271,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-87: Concurrency exclusivity vs. host-side Hermes
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** `whiz hermes <profile>` refuses to launch when a live gateway is already holding `<profile>`'s lock. The block applies symmetrically to host-vs-cell and cell-vs-cell contention.
 
 **Detection:** Pre-launch, check `<HERMES_HOME>/gateway.lock`. If present, read `<HERMES_HOME>/gateway.pid` and probe pid liveness (signal 0). Live pid → block with a clear error message naming the profile and conflicting pid. Lock exists but pid is dead → treat as stale, ignore, and announce the cleanup as the launch proceeds.
@@ -949,6 +1297,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-88: Default mode (interactive vs. gateway) for the Hermes adapter
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** Gateway is the default. `whiz hermes <profile>` with no mode flag launches `hermes gateway run` inside the cell. Interactive (`hermes chat`) is opt-in via an explicit `--interactive` (or equivalent) flag. **Empty-platforms guard rail:** if the selected profile's `config.yaml` declares no active platforms, gateway-default refuses to start and emits a clear error message that points the user to either configure platforms or pass `--interactive` — gateway-default does not silently fall back to interactive, and does not start an empty daemon.
 
 **Rationale:** Whizzard's center of gravity is users who run Hermes as a 24/7 platform-connected agent (Discord, Slack, etc.), not as a CLI chat tool. Virtually every Hermes installation Bryan has seen or anticipates uses a messaging app as the primary interface; making gateway the default aligns the path of least resistance with the dominant usage pattern, and is consistent with the post-MVP Discord control plane direction. This commits D-89 (platform credential declaration UX) and D-90 (in-session approval routing) to MVP-blocking polish — they are not deferrable, since gateway-default puts both surfaces on the day-one path. The empty-platforms refusal is preferred over silent fallback because gateway-vs-interactive is a meaningful behavior difference and a misconfigured profile should fail loudly, not silently land the user in the wrong mode.
@@ -958,6 +1312,12 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-89: Platform credential declaration UX in gateway mode
+
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
 
 **Decision:** The active platform set is declared in Whizzard's `harnesses.json`, not parsed from Hermes's `config.yaml`. Capability visibility, per-launch restriction, and OneCLI-mediated credential fetch follow.
 
@@ -975,6 +1335,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-90: In-session approval routing in gateway mode
 
+**Type:** adapter
+
+**Tags:** hermes
+
+**Door Type:** one-way (commits Whizzard to this Hermes integration shape).
+
 **Decision:** Whizzard does not override or route Hermes's in-session approval system; it stays out of the harness-native behavioral control surface (per D-24). The Hermes adapter's posture toward Hermes approvals is:
 
 1. **No mode override.** Whizzard does not inject `--yolo`, does not rewrite the approval-mode field, and does not provide a Whizzard-side equivalent. Whatever the user configured in Hermes (`manual` / `smart` / `off` / `cron`) is what runs.
@@ -990,9 +1356,13 @@ All three existing-user migration shapes are first-class supported paths:
 
 ---
 
-## 11. NanoClaw lessons applied
-
 ### D-91: Adopt the OneCLI Agent Vault pattern (validated)
+
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
 
 **Decision:** Whizzard's vault direction is the OneCLI Agent Vault pattern — credentials never enter the container; outbound HTTPS is routed through a host-side gateway that injects credentials per request.
 
@@ -1004,6 +1374,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-92: Mount allowlist outside the project root is an explicit principle
 
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
+
 **Decision:** Elevate "the allowlist that defines an agent's permissions must live outside any agent-writable mount" to a named architectural principle, not just an emergent property of the current config layout.
 
 **Rationale:** NanoClaw's external `~/.config/nanoclaw/mount-allowlist.json` is a deliberate defensive choice; making it a named principle prevents future drift.
@@ -1013,6 +1389,12 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-93: Whizzard's container hardening is stronger than NanoClaw's, intentionally
+
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
 
 **Decision:** Keep `--cap-drop=ALL`, `--read-only`, `no-new-privileges`, tmpfs mounts, and profile-driven network policy as Whizzard differentiators; NanoClaw lacks these and the gap is real.
 
@@ -1024,6 +1406,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-94: Whizzard does not adopt NanoClaw's branch-based skill distribution
 
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
+
 **Decision:** If Whizzard ever supports skills/extensions, they will be installable artifacts, not git-branch grafts.
 
 **Rationale:** NanoClaw's branch-grafting model fits their fork-and-customize UX; Whizzard's "policy layer that wraps any harness" UX needs a different distribution shape.
@@ -1033,6 +1421,12 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-95: Whizzard does not adopt NanoClaw's multi-channel adapter framework
+
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
 
 **Decision:** Multi-channel messaging (Discord/Telegram/Slack routing into agents) is harness territory, not Whizzard territory.
 
@@ -1044,6 +1438,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-96: Whizzard does not adopt `bypassPermissions` posture for adapters
 
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
+
 **Decision:** Adapters must not paper over a harness's own permission model with bypass flags.
 
 **Rationale:** NanoClaw can use `bypassPermissions: true` because the container is its boundary. Whizzard wraps existing harnesses; harness-level permission posture is the harness's call.
@@ -1053,6 +1453,12 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-97: NanoClaw adapter is post-v1, not MVP
+
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
 
 **Decision:** A NanoClaw harness adapter is on the long-term roadmap but not in MVP or v1 scope.
 
@@ -1064,6 +1470,12 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-98: OneCLI vault as v1-must-have (promoted from post-MVP backlog)
 
+**Type:** adapter
+
+**Tags:** nanoclaw
+
+**Door Type:** one-way (commits Whizzard to lessons from NanoClaw's design).
+
 **Decision:** Vault-mediated credentials are promoted from "post-MVP backlog" to "v1-must-have" based on NanoClaw's production validation.
 
 **Rationale:** Production-proven pattern; the gap between env-var injection (MVP) and vault-mediated (v1) is the difference between "credentials in process env" and "agent literally cannot exfiltrate."
@@ -1074,9 +1486,11 @@ All three existing-user migration shapes are first-class supported paths:
 
 ---
 
-## 12. MVP scope and ordering
-
 ### D-99: MVP definition is "9 capabilities" (numbered list in mvp_build_plan)
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** The MVP is operational when it can do nine specified things — generic shell launch, named mounts, ro/rw modes, profile-driven network, safety policy, dry-run, session logs, generic adapter, image management.
 
@@ -1090,6 +1504,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-100: MVP build order is Stage 1 → Stage 11
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** Stages run in order: shell, mounts, profiles, dry-run, logging, safety, generic adapter, Hermes, MCP read-only, presets, image management.
 
 **Rationale:** Each stage builds on the previous; rearranging would force out-of-order dependencies.
@@ -1099,6 +1517,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** superseded by D-138
 
 ### D-101: MVP is a personal daily-driver milestone, not the OSS-launch milestone
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** The current MVP is a local-testing milestone for personal use. OSS-launch is a later, broader milestone.
 
@@ -1110,6 +1532,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-102: Day-1 OSS value prop is the B+D combination
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** OSS positioning is "B" (define what your agent can touch, see, and do by shaping the environment, not approving every action) plus "D" (switch between named, scoped agent contexts faster than you can type the docker command).
 
 **Rationale:** The combined frame is sharper than either alone; D specifically pulls preset support up into MVP scope.
@@ -1119,6 +1545,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-103: Presets pulled into MVP as Stage 10
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** Presets (named bundles of profile + harness + mounts + duration + env) are now MVP scope as Stage 10, not post-MVP §7.
 
@@ -1130,6 +1560,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-104: Whiz MCP server (read-only subset) pulled into MVP as Stage 9
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** A read-only Whiz MCP surface — `whiz_status`, `whiz_audit_self`, `whiz_emit_event`, `whiz_list_presets` — is MVP scope as Stage 9.
 
 **Rationale:** Cooperation layer is a first-class part of the design; the read-only subset has no enforcement implications and lands cheaply.
@@ -1139,6 +1573,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-105: Explicit non-MVP features (named list)
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** GUI, Discord control plane, MCP gateway adapter, per-agent orchestration, breaker engine, shadow-home system, file-tree mount picker, AI risk scoring, and VM orchestration are explicitly out of MVP.
 
@@ -1150,6 +1588,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-106: MVP design discipline — useful, understandable, secure-enough, low-friction, extensible
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** The MVP success criteria are these five qualities, in that priority order.
 
 **Rationale:** Forces narrow scope; "secure enough" is deliberate (vs. "maximally secure") to keep the MVP shippable.
@@ -1159,6 +1601,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-107: Dry-run preview must include duration
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** The dry-run output must explicitly show the effective session duration limit.
 
@@ -1170,6 +1616,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-108: Banner shows profile, network, duration, broad-mount override, image, mounts, harness, session ID
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** The pre-launch and dry-run banner enumerates these fields.
 
 **Rationale:** "What you see is what is granted" — visible permissions are the affordance.
@@ -1179,6 +1629,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-137: All five personal-use candidate items pulled into MVP
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** All five additional control items surfaced as MVP candidates — mid-session stop+restart with capability adjustment, request-side MCP tools, OneCLI vault integration, Discord/mobile control plane, idle timeout — are pulled into MVP scope.
 
@@ -1190,6 +1644,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-138: MVP build order is extended to 17 stages
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** MVP build order is Stage 1 → Stage 17. New stages relative to D-100: Stage 11 = OneCLI vault integration, Stage 12 = stop+restart mechanism + local TTY approval flow, Stage 13 = Whiz MCP server request-side tools, Stage 14 = duration + idle timeout enforcement, Stage 15 = Discord control plane (read-only), Stage 16 = Discord control plane (write + approve flow), Stage 17 = image management (was Stage 11; defers to last).
 
 **Rationale:** Dependency-respecting ordering for the expanded MVP. Vault lands at Stage 11 because it's the strongest single argument for Whizzard's security thesis. Stop+restart precedes request-side MCP because the tools depend on the mechanism. Discord splits into read-only and write/approve stages so the simpler read piece can validate the bot framework before the higher-risk approval flow lands. Image management defers to the end as polish-relative-to-functionality.
@@ -1199,6 +1657,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** superseded by D-143
 
 ### D-139: Discord control plane write + approve flow is in MVP
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** The Discord control plane write/approve flow — start, stop, extend, switch profile, approve mount addition, with single-use time-bounded tokens validated against the initiator's Discord ID — is in MVP scope as Stage 16.
 
@@ -1210,6 +1672,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-140: MVP capability set is extended beyond the foundational nine
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** MVP capability set is the original 9 capabilities (D-99) plus: mid-session capability adjustment via stop+restart, agent-facing MCP cooperation surface (read-only and request-side), OneCLI vault credential isolation, Discord/mobile control plane (read + write/approve), idle timeout enforcement.
 
 **Rationale:** D-101 established that MVP is the personal daily-driver threshold; D-137 commits the additional items. This decision is the named extension to the original capability list.
@@ -1220,6 +1686,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-141: Whizzard adopts a hybrid generalization path — agent-focused at MVP, explicit "general" mode at OSS-launch
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** Whizzard's MVP remains agent-focused (Hermes/NanoClaw harness adapters anchor the audience). At OSS-launch, an explicit "general process" mode is added: `harnesses.json` schema accepts any executable, presets shaped for non-agent OSS tools (e.g., "try-untrusted-cli"), marketing positions both agent and general use cases. The architectural foundation already supports this — most stages are harness-neutral; only the Whiz MCP cooperation layer (Stages 9, 14) is agent-specific.
 
 **Rationale:** Three options were considered: A) stay agent-focused with sibling project later, B) general from the start, C) hybrid — agent at MVP, general at OSS-launch. C wins because it preserves MVP focus (sharp use cases drive design) while leaving the broader OSS-tool audience addressable when polish lands. B risks losing focus pre-MVP; A leaves a real gap on the table — there's no good cross-platform low-friction security-shaped container layer for individual developers (firejail/bwrap are Linux-only and config-tedious; Docker alone has no policy/preset/audit layering; devcontainers and Distrobox aren't security-shaped).
@@ -1229,6 +1699,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-142: Slash command surface — A, B, C in MVP; D post-MVP
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** Four slash-command surfaces were considered:
 
@@ -1245,6 +1719,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-143: MVP build order extended to 18 stages
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** MVP build order is now Stage 1 → Stage 18. Stage 10 expands to include CLI brevity (D-142 A); new Stage 11 is Host-side Claude Code Slash Commands (D-142 C); subsequent stages renumber by +1: Stage 12 = OneCLI vault (was 11), Stage 13 = stop+restart + local TTY approval (was 12), Stage 14 = Whiz MCP request-side (was 13), Stage 15 = duration + idle timeout (was 14), Stage 16 = Discord control plane read-only (was 15), Stage 17 = Discord control plane write+approve (was 16), Stage 18 = image management (was 17).
 
 **Rationale:** Slash command surface decisions per D-142. CLI brevity (A) is pure UX with the same theme as presets — folding into Stage 10 keeps stage count from inflating without sacrificing clarity. Claude Code slash commands (C) merit their own stage because the deliverable is a distinct `.claude/skills/` bundle with its own test surface. Image management still defers to last (D-138 rationale unchanged).
@@ -1254,6 +1732,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active; supersedes D-138
 
 ### D-144: Consolidate naming to single "Whizzard" — drop the Airlock/Whizzard split
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** Drop the two-component naming split. The whole project is named "Whizzard" — orchestrator, policy engine, and containment layer all under one name. The "Airlock" sub-component name is retired. Architecture layers within Whizzard remain (Whizzard Core / Harness Adapter / Execution Backend), but they're internal layering rather than separately-named user-facing components. "Whizzard" itself remains a working placeholder; long-term name TBD.
 
@@ -1265,6 +1747,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-145: GitHub repository will rename from `basicagentauth` to `whizzard`
 
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
+
 **Decision:** The GitHub repository will be renamed from the placeholder `basicagentauth` to `whizzard`. Rename happens between Claude sessions (executed by the user via `gh repo rename whizzard` from the local working dir, plus `git remote set-url origin git@github.com:BuckG71/whizzard.git`).
 
 **Rationale:** Consolidate naming with D-144. The placeholder repo name added confusion when discussing the project. "Whizzard" is the working name across docs, code, and config; the repo name should match.
@@ -1274,6 +1760,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active; supersedes D-01
 
 ### D-146: Local working directory rename `airlock-warlock` → `whizzard` happens between sessions
+
+**Type:** scope
+
+**Door Type:** two-way (MVP scope evolves with iteration).
 
 **Decision:** The local working directory at `/Users/bg1971/ai-sandbox/airlock-warlock` will be renamed to `/Users/bg1971/ai-sandbox/whizzard`. The rename is executed between Claude Code sessions (not mid-session), to avoid breaking the current session's working-directory binding. Steps: end current Claude session; remove the `crazy-ellis-b21769` worktree (`git worktree remove`); rename the parent directory; start a new Claude Code session pointed at the new path.
 
@@ -1285,9 +1775,11 @@ All three existing-user migration shapes are first-class supported paths:
 
 ---
 
-## 13. Post-MVP & beyond
-
 ### D-109: v1.0 has eight named goals
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** v1.0 goals are: per-agent capability scoping, Discord/mobile control plane, multi-harness rollout, MCP gateway direction, session duration as enforced primitive, image management at runtime, quick-access presets, repo onboarding.
 
@@ -1301,6 +1793,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-110: Per-agent policy with local approval before Discord exists
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** `approval_required: true` on agent policies must have a local terminal-prompt approval path that exists before any Discord bot ships. `--pre-approve` flag for scripted contexts.
 
 **Rationale:** Without local approval, the policy setting is unusable during the v1 build phase; Discord approval is additive, not foundational.
@@ -1310,6 +1806,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-111: Discord control bot is policy-restricted
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** The Discord bot may start/stop/revoke sessions, request approvals, display status/logs, switch profiles, launch presets — but may NOT execute arbitrary shell, mount arbitrary paths, grant unrestricted permissions, or expose secrets.
 
@@ -1321,6 +1821,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-112: Discord prefers slash commands over `!` legacy commands
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** Slash commands are the preferred Discord syntax; legacy `!` is optional support.
 
 **Rationale:** Structured inputs, lower parser surface, mobile-friendly, autocomplete; slash commands are the platform's native gesture.
@@ -1330,6 +1834,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-113: Discord approval tokens are single-use, time-bounded, identity-bound
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** "approve NNNN" tokens must be single-use, expire within ~5 minutes, and only accepted from the Discord user who initiated the request.
 
@@ -1341,6 +1849,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-114: Duration hierarchy is session-flag → preset → agent-policy → profile-default
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** Effective duration is resolved in this priority order, with "no duration" meaning unlimited (logged as such).
 
 **Rationale:** Allows fine-grained override at the moment of launch while preserving sane policy defaults.
@@ -1350,6 +1862,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-115: Adapter `pre_terminate` hook ships in v1
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** v1 adds an adapter-level `pre_terminate` callback distinct from `wrap_up`, allowing structured state checkpointing (e.g., serializing conversation history).
 
@@ -1361,6 +1877,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-116: Full session checkpointing (serialize/resume) is v2
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** v1 ships only the hooks for checkpointing; full serialize-and-resume across sessions is v2.
 
 **Rationale:** Hook surface is the small piece; the actual serialize/resume is a much larger commitment.
@@ -1370,6 +1890,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-117: Quick-access presets are a security feature, not just usability
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** Frame presets as security infrastructure, because secure workflows fail when they are too painful.
 
@@ -1381,6 +1905,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-118: Repo onboarding (docs + setup script) is part of v1, not optional polish
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** v1 ships a getting-started guide, setup script/Makefile target, worked example, profile docs, and a "what is and isn't protected" note.
 
 **Rationale:** Misconfiguration weakens containment; bad setup docs are a security failure, not a docs failure. The setup path should be opinionated.
@@ -1390,6 +1918,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-119: Phase 3 Breaker uses deterministic heuristics initially, not AI scoring
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** Initial Breaker implementation uses deterministic heuristics for behavioral interruption; autonomous AI behavioral scoring is explicitly out of initial scope.
 
@@ -1401,6 +1933,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-120: Phase 4 Shadow Home does NOT prove safety
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** Frame the Shadow Home / decoy environment as a behavior-observation tool, not a safety proof. A malicious system could behave benignly during testing.
 
 **Rationale:** Setting expectations correctly; over-claiming on shadow execution would mislead users about residual risk.
@@ -1410,6 +1946,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-121: Mount-picker / file-tree browser is post-v1 backlog and human-only
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** A graphical mount picker is post-v1; agents themselves never browse the host filesystem tree.
 
@@ -1421,6 +1961,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-122: Session replay / audit visualization is post-v1
 
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
+
 **Decision:** Visual session replay (commands, mounts, network, approvals, breaker events) is post-v1 backlog.
 
 **Rationale:** JSONL is sufficient for daily use; visualization is polish.
@@ -1430,6 +1974,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-123: AppArmor/SELinux, time-of-day windows, bandwidth caps, multi-party approval, identity-provider integrations are deprioritized indefinitely
+
+**Type:** scope
+
+**Door Type:** two-way (post-MVP scope is intentionally fluid).
 
 **Decision:** These items appear in the control surface but are explicitly deprioritized.
 
@@ -1441,9 +1989,11 @@ All three existing-user migration shapes are first-class supported paths:
 
 ---
 
-## 14. Process & collaboration
-
 ### D-124: MVP focus rule — push back on doc tweaks until MVP is operational
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** Until MVP is operational, the assistant pushes back on documentation-only edits and steers toward implementation. Backlog additions are an explicit exception.
 
@@ -1455,6 +2005,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-125: One topic at a time
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** Surfacing a multi-item list is fine, but discuss and resolve them one at a time before moving on.
 
 **Rationale:** Avoids parallel half-resolved threads; matches the user's working style.
@@ -1464,6 +2018,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-126: Don't push to close items
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** Stop ending responses with "ready to close X?" prompts; topics close naturally when both parties feel done.
 
@@ -1475,6 +2033,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-127: Session-handoff doc convention
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** When approaching the context-window limit, write a comprehensive handoff document (`docs/session_handoff.md`) including verbatim recent turns so a fresh session can resume without re-deriving context.
 
 **Rationale:** Cross-session continuity for a long-running design conversation.
@@ -1484,6 +2046,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-128: Plan-vs-task distinction (plan = stable; task = in-flight)
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** Source docs (plans) remain authoritative for narrative and rationale; in-flight conversation captures the moment-to-moment decisions, which are then promoted to docs only when stable.
 
@@ -1495,6 +2061,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-129: Decisions are append-only with status updates, not deletion
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** This decisions document is append-only; superseded entries stay in place with their status changed, not removed.
 
 **Rationale:** Stable cross-references; lets future work cite "D-NN as superseded by D-MM" without breaking links.
@@ -1504,6 +2074,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-147: Merge doc-only commits into main immediately
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** Doc-only commits (anything touching only `docs/**`, `README.md`, comment-only changes) are fast-forward merged into `main` immediately after commit, without separate confirmation. Code changes still pause for explicit confirmation. Mixed commits follow the code-change path.
 
@@ -1515,6 +2089,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-148: Pause at UX-shaped stages to design before coding
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** Stages whose primary deliverable is a user-facing surface — profiles, presets, CLI shortcuts, slash commands, Discord control plane — open with a design conversation before implementation. List candidate affordances, rank by frequency × friction-saved, cut anything below the bar, confirm the slate before code lands. Currently applies to MVP Stages 10 (Presets + CLI ergonomics), 11 (Claude Code slash commands), 16, 17 (Discord), and any future stage introducing user-facing surfaces.
 
 **Rationale:** UX surfaces compound. Bad shortcuts become muscle memory; missing presets become daily papercuts. Once shipped, these are hard to change without breaking habits. Friction at these surfaces undermines the project's core value prop. Throughput on these stages matters less than getting affordances right.
@@ -1524,6 +2102,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-149: `session_handoff.md` is overwriteable, not append-only
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** `docs/session_handoff.md` captures the current snapshot needed to start a fresh Claude Code session and is rewritten end-to-end each session. It is not a log; do not append. Prior versions are recoverable via `git show <hash>:docs/session_handoff.md` if a rollback is ever needed. Other docs (notably `decisions.md`) remain append-only — this convention applies only to the handoff file.
 
@@ -1535,6 +2117,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-150: `HANDOFF.md` is append-only — supersedes D-149
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** The handoff doc, renamed `docs/HANDOFF.md`, is append-only. New entries go at the top; prior entries are preserved verbatim. Each entry follows the structure defined by the `/handoff` skill (Goal / Active task / Tried & rejected / Resume protocol) with a target length under 250 words.
 
 **Rationale:** D-149's overwriteable framing was correct for the prior `session_handoff.md` format, which captured comprehensive narrative context (~3000 words) where accumulated entries would have bloated the file unusably. The new HANDOFF format under the `/handoff` skill captures different and much shorter content (~150–250 words/entry), so the bloat concern that justified overwrite no longer applies. Append-only enables cross-session decision archaeology and matches the behavior of every other long-lived doc in the project (`DECISIONS.md`, `STAGE_VALIDATION.md`).
@@ -1544,6 +2130,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** active
 
 ### D-151: Markdown filenames in this project are uppercase
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** All markdown filenames in the Whizzard repository are uppercase by convention. Examples: `README.md`, `HANDOFF.md`, `DECISIONS.md`, `ARCHITECTURE.md`, `MVP_BUILD_PLAN.md`. Underscores separate words within the name. Bulk rename of existing lowercase files and the corresponding cross-reference updates are tracked as a separate cleanup commit.
 
@@ -1557,6 +2147,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-152: Defense-in-depth against bundled-test-file Skill attacks
 
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
+
 **Decision:** (1) `pyproject.toml` declares `norecursedirs = [".agents", ".claude", ".cursor"]` in addition to `testpaths = ["tests"]`, so pytest cannot auto-discover test files inside skill / agent / IDE state directories even if `testpaths` is later broadened. (2) Any Anthropic Skills (or equivalent agent-extension bundles) installed into this repository must be pinned to a specific commit hash, not a branch. (3) Before merging any commit that introduces files under `.agents/`, `.claude/skills/`, or `.cursor/skills/`, reviewers must check for the file shapes that ride the developer-toolchain execution surface — `*.test.*`, `*.spec.*`, `conftest.py`, `__tests__/`, `*.config.*` — and treat any presence as a finding requiring justification.
 
 **Rationale:** Per Gecko Security's disclosure (VentureBeat, 2026-05-09), public Anthropic Skill scanners inspect the agent-execution surface (`SKILL.md`, agent-invoked scripts) but not the developer-toolchain surface (test files auto-discovered by Jest/Vitest/pytest with full local permissions). Whizzard's structural containment addresses the agent-execution side but does not bound the developer toolchain — `npm test` / `pytest` runs on the host, not inside a cell. The MVP scope does not extend to sandboxing developer tooling, so we defend project hygiene through configuration and review. Audit at decision time: `.claude/` contained only `.DS_Store` and `settings.local.json`; `.agents/` and `.cursor/` did not exist; no findings.
@@ -1569,6 +2163,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-153: Harness-specific identifiers appear only in adapter modules
 
+**Type:** architecture
+
+**Door Type:** one-way (harness-isolation rule; reversing would require re-introducing harness identifiers into core).
+
 **Decision:** Harness-specific paths, filenames, environment variable names, schema field names, and CLI flag names appear only in adapter modules (`whizzard/adapters/<harness>.py`) and the corresponding adapter subcommand surface in `whizzard/cli.py`. Whizzard's core modules — `config.py`, `docker_cmd.py`, `mounts.py`, `safety.py`, `session_log.py`, `harness_config.py` — must not reference Hermes/OpenClaw/etc.-specific identifiers (examples: `config.yaml`, `state.db`, `gateway.lock`, `HERMES_HOME`, `DISCORD_BOT_TOKEN`, `--platforms`). Permitted core knowledge: the harness *type* names registered in `harnesses.json` (currently `"shell"` and `"agent"` per D-34) and the adapter Protocol method names (D-28). Those are the abstraction surface; everything below them is adapter-private.
 
 **Rationale:** D-10 ("Whizzard core stays harness-neutral") is a stance; this decision makes it a reviewable, lint-checkable rule. Without an explicit isolation rule, harness-specific identifiers drift into core as convenient shortcuts ("just read `config.yaml` here, we only have Hermes anyway"), and reverting that drift later becomes a real refactor. Naming the files subject to the rule — and the categories of identifier the rule covers — keeps the adapter pattern load-bearing for the lifetime of the project, including future post-MVP adapters (OpenClaw, NanoClaw, etc.). The adapter Protocol (D-28) is the contract between core and adapters; this is the rule that protects the contract from erosion.
@@ -1580,6 +2178,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Notes:** Enforcement is per-PR review for MVP. A lint check (grep-based) is plausible post-MVP if drift becomes a recurring issue.
 
 ### D-154: Upstream-change detection and adapter maintenance pipeline
+
+**Type:** process
+
+**Door Type:** two-way (process can be revised).
 
 **Decision:** Each Whizzard adapter ships with an automated upstream-change-detection pipeline that follows a "detect/test/report (automated) → fix/ship (human-in-loop)" pattern:
 
@@ -1614,7 +2216,7 @@ All three existing-user migration shapes are first-class supported paths:
 
 ---
 
-## 15. Open / unresolved
+## Open / unresolved
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
@@ -1627,6 +2229,10 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-130: Personal-use MVP threshold — additional ○ items to pull in
 
+**Type:** scope
+
+**Door Type:** two-way (MVP threshold candidates; superseded by D-137).
+
 **Decision:** Which additional surface items rise to MVP for the personal-use threshold (candidates: stop+restart capability adjustment, request-side MCP tools, OneCLI vault, Discord read-only status, idle timeout) is unresolved.
 
 **Source:** docs/control_surface.md (Open items #1)
@@ -1634,6 +2240,10 @@ All three existing-user migration shapes are first-class supported paths:
 **Status:** superseded by D-137
 
 ### D-131: OSS-launch milestone scope
+
+**Type:** scope
+
+**Door Type:** two-way (OSS-launch milestone scope; still open).
 
 **Decision:** The OSS-launch milestone scope (distinct from MVP) is unresolved; needs definition once MVP is operational.
 
@@ -1659,6 +2269,10 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 ### D-132: Sidecar-proxy mechanism in OSS-launch
 
+**Type:** architecture
+
+**Door Type:** one-way (sidecar-proxy mechanism would be a deep architectural commitment).
+
 **Decision:** Whether to introduce a sidecar-proxy mechanism in OSS-launch (which unlocks egress allowlists, MCP tool shaping, traffic logging, vault generalization) is unresolved.
 
 **Source:** docs/control_surface.md (Open items #3)
@@ -1667,6 +2281,10 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 ### D-133: Failure-mode semantics across new controls
 
+**Type:** architecture
+
+**Door Type:** one-way (framework-level failure-mode policy is a foundational commitment).
+
 **Decision:** Whether to define a single framework-level violation policy (kill / pause / quarantine / continue+log) or per-feature policies is unresolved.
 
 **Source:** docs/control_surface.md (Open items #4)
@@ -1674,6 +2292,10 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 **Status:** open
 
 ### D-134: OneCLI direct integration for MVP credential injection
+
+**Type:** adapter
+
+**Door Type:** two-way (OneCLI integration is the MVP delivery mechanism; alternative paths exist).
 
 **Decision:** Whizzard integrates with OneCLI directly for MVP credential injection. The Hermes adapter (and any future agent adapter that needs platform credentials) fetches secrets via OneCLI at adapter launch time rather than reading from long-lived host environment variables. The integration is a shell-out to the `onecli` CLI from the adapter; no embedded SDK in the Python codebase.
 
@@ -1702,6 +2324,10 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 ### D-135: Read-only project-root mounting as a Whizzard pattern
 
+**Type:** architecture
+
+**Door Type:** two-way (read-only project-root mounting can be enabled or disabled per pattern).
+
 **Decision:** Whether Whizzard should support / recommend NanoClaw's read-only project-root + selective writable subdirs pattern for "containerize my own dev project" use cases is unresolved.
 
 **Source:** docs/archive/nanoclaw_research.md (Things to learn from NanoClaw)
@@ -1709,6 +2335,10 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 **Status:** open
 
 ### D-136: NanoClaw upstream collaboration
+
+**Type:** process
+
+**Door Type:** two-way (upstream collaboration scope can evolve).
 
 **Decision:** Whether to pursue collaboration with NanoClaw upstream (offering Whizzard hardening as a complement to their scope-reduction model) is unresolved.
 
