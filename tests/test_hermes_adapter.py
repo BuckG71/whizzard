@@ -6,7 +6,10 @@ Subsequent milestones (gateway.lock check, --platforms restriction,
 wrap_up via /quit) add their own coverage.
 """
 
+import json
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -178,6 +181,100 @@ def test_fetch_secret_raises_secret_missing_on_nonzero_return(monkeypatch):
 
     with pytest.raises(OneCLISecretMissingError, match="DISCORD_BOT_TOKEN"):
         hermes_module._fetch_secret_via_onecli("DISCORD_BOT_TOKEN")
+
+
+# --- preflight / gateway.lock concurrency guard (D-87, Milestone 4) ---
+
+
+def test_hermes_preflight_returns_ok_when_no_hermes_home_configured():
+    # Without hermes_home set, there's no profile to check — skip the lock check.
+    result = HermesAdapter().preflight()
+    assert result.ok is True
+    assert result.reason == ""
+    assert result.cleanup_note == ""
+
+
+def test_hermes_preflight_returns_ok_when_no_lock_file(tmp_path):
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is True
+
+
+def test_hermes_preflight_blocks_when_pid_alive(tmp_path, monkeypatch):
+    lock_data = {"pid": 12345, "kind": "hermes-gateway", "argv": []}
+    (tmp_path / "gateway.lock").write_text(json.dumps(lock_data))
+    monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: True)
+
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+
+    assert result.ok is False
+    assert "12345" in result.reason
+    assert str(tmp_path) in result.reason
+    assert "profile create" in result.reason  # remediation hint is present
+
+
+def test_hermes_preflight_clears_stale_lock_and_proceeds(tmp_path, monkeypatch):
+    lock_path = tmp_path / "gateway.lock"
+    lock_data = {"pid": 999999, "kind": "hermes-gateway", "argv": []}
+    lock_path.write_text(json.dumps(lock_data))
+    monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: False)
+
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+
+    assert result.ok is True
+    assert "999999" in result.cleanup_note
+    assert "stale" in result.cleanup_note.lower()
+    assert not lock_path.exists()  # cleaned up
+
+
+def test_hermes_preflight_treats_malformed_lock_as_no_lock(tmp_path):
+    (tmp_path / "gateway.lock").write_text("not valid json {{{")
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    # Malformed → proceed; Hermes will overwrite on its own launch.
+    assert result.ok is True
+
+
+def test_hermes_preflight_treats_lock_without_pid_as_no_lock(tmp_path):
+    (tmp_path / "gateway.lock").write_text(json.dumps({"kind": "hermes-gateway"}))
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is True
+
+
+def test_resolve_hermes_home_expands_tilde(monkeypatch):
+    monkeypatch.setenv("HOME", "/Users/testuser")
+    result = hermes_module._resolve_hermes_home({"hermes_home": "~/.hermes-bot"})
+    assert result == Path("/Users/testuser/.hermes-bot")
+
+
+def test_resolve_hermes_home_returns_none_when_missing():
+    assert hermes_module._resolve_hermes_home({}) is None
+
+
+def test_resolve_hermes_home_returns_none_when_empty_string():
+    assert hermes_module._resolve_hermes_home({"hermes_home": ""}) is None
+
+
+def test_is_pid_alive_returns_false_for_dead_pid(monkeypatch):
+    def fake_kill(pid, sig):
+        raise ProcessLookupError()
+    monkeypatch.setattr(os, "kill", fake_kill)
+    assert hermes_module._is_pid_alive(99999999) is False
+
+
+def test_is_pid_alive_returns_true_for_signalable_pid(monkeypatch):
+    monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+    assert hermes_module._is_pid_alive(1) is True
+
+
+def test_is_pid_alive_returns_true_when_permission_denied(monkeypatch):
+    def fake_kill(pid, sig):
+        raise PermissionError()
+    monkeypatch.setattr(os, "kill", fake_kill)
+    assert hermes_module._is_pid_alive(1) is True
 
 
 def test_hermes_working_dir_defaults_none():

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from whizzard.adapters.base import (
     HarnessAdapter,
+    PreflightResult,
     WrapUpResult,
     WrapUpStatus,
 )
@@ -62,6 +63,9 @@ class GenericShellAdapter:
 
     def active_capabilities(self) -> list[str]:
         return []
+
+    def preflight(self) -> PreflightResult:
+        return PreflightResult(ok=True)
 
 
 # Sanity check the Protocol contract at import time.

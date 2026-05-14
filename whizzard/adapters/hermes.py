@@ -13,18 +13,23 @@ credential injection. The gateway.lock pre-check and wrap_up() via
 
 from __future__ import annotations
 
+import json
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from whizzard.adapters.base import (
     HarnessAdapter,
+    PreflightResult,
     WrapUpResult,
     WrapUpStatus,
 )
 
 
 _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
+_GATEWAY_LOCK_FILENAME = "gateway.lock"
 
 # Hermes convention (per hermes_research.md L17): each platform's credential
 # is consumed from an env var named `<PLATFORM>_BOT_TOKEN`. OneCLI secret
@@ -42,6 +47,41 @@ class OneCLISecretMissingError(Exception):
 
 def _env_var_for_platform(platform: str) -> str:
     return f"{platform.upper()}_BOT_TOKEN"
+
+
+def _resolve_hermes_home(config: dict) -> Path | None:
+    raw = config.get("hermes_home")
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def _read_gateway_lock(hermes_home: Path) -> dict | None:
+    """Return parsed gateway.lock JSON, or None if absent or unparseable.
+
+    Per real-install inspection: gateway.lock holds JSON like
+    `{"pid": <int>, "kind": "hermes-gateway", "argv": [...], "start_time": ...}`.
+    Malformed lock files are treated as absent — Hermes overwrites on start.
+    """
+    lock_path = hermes_home / _GATEWAY_LOCK_FILENAME
+    if not lock_path.exists():
+        return None
+    try:
+        return json.loads(lock_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Probe whether `pid` exists. Signal 0 is a no-op delivery check."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Process exists; we just can't signal it. Still alive.
+        return True
 
 
 def _fetch_secret_via_onecli(name: str) -> str:
@@ -127,10 +167,47 @@ class HermesAdapter:
         return None
 
     def active_capabilities(self) -> list[str]:
-        # Skeleton: returns []. Action 3 fills this with the config.yaml-derived
-        # platform list ("platforms: discord, slack") plus the approval-mode
-        # warning string from D-90.
+        # Skeleton: returns []. A later milestone fills this with the
+        # declared platform list plus the approval-mode warning string (D-90).
         return []
+
+    def preflight(self) -> PreflightResult:
+        # D-87: refuse to launch when a live gateway already holds the lock
+        # on this profile. Stale locks (pid not alive) are cleared and the
+        # launch proceeds. Missing HERMES_HOME → no lock to check; let
+        # downstream code surface that configuration gap if it matters.
+        hermes_home = _resolve_hermes_home(self.config)
+        if hermes_home is None:
+            return PreflightResult(ok=True)
+
+        lock = _read_gateway_lock(hermes_home)
+        if lock is None:
+            return PreflightResult(ok=True)
+
+        pid = lock.get("pid")
+        if not isinstance(pid, int):
+            return PreflightResult(ok=True)
+
+        if _is_pid_alive(pid):
+            return PreflightResult(
+                ok=False,
+                reason=(
+                    f"Hermes gateway already running on this profile "
+                    f"(pid {pid}, HERMES_HOME={hermes_home}). "
+                    f"Stop the running gateway, or create a sibling profile "
+                    f"via `whiz hermes profile create <name> --clone-from default`."
+                ),
+            )
+
+        # Stale lock — best-effort cleanup so we don't re-announce next launch.
+        try:
+            (hermes_home / _GATEWAY_LOCK_FILENAME).unlink()
+        except OSError:
+            pass
+        return PreflightResult(
+            ok=True,
+            cleanup_note=f"Cleared stale gateway.lock (pid {pid} no longer alive).",
+        )
 
 
 # Sanity check the Protocol contract at import time.

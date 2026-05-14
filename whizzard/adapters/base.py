@@ -30,6 +30,20 @@ class WrapUpResult:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class PreflightResult:
+    """Outcome of an adapter's pre-launch checks.
+
+    `ok=True` means launch may proceed. `reason` is the human-readable
+    explanation when blocking. `cleanup_note` is set when the adapter
+    took a recovery action during preflight (e.g., cleared a stale lock)
+    and the launch is proceeding.
+    """
+    ok: bool
+    reason: str = ""
+    cleanup_note: str = ""
+
+
 @runtime_checkable
 class HarnessAdapter(Protocol):
     """Contract for harness adapters.
@@ -98,5 +112,17 @@ class HarnessAdapter(Protocol):
         etc. (D-89, D-90). Content is adapter-specific; the surface is
         generic. Adapters with no capability surface (generic shell) return
         an empty list.
+        """
+        ...
+
+    def preflight(self) -> PreflightResult:
+        """Run harness-specific pre-launch checks.
+
+        Called by Whizzard core before container start. Adapters return
+        a PreflightResult; if `ok` is False, core blocks the launch and
+        surfaces `reason` to the user. If `ok` is True with a non-empty
+        `cleanup_note`, core prints it so the user sees what the adapter
+        recovered from before proceeding (e.g., a stale lock that was
+        cleared per D-87).
         """
         ...

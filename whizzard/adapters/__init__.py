@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from whizzard.adapters.base import (
     HarnessAdapter,
+    PreflightResult,
     WrapUpResult,
     WrapUpStatus,
 )
@@ -17,6 +18,7 @@ from whizzard.adapters.hermes import (
 
 __all__ = [
     "HarnessAdapter",
+    "PreflightResult",
     "WrapUpResult",
     "WrapUpStatus",
     "GenericShellAdapter",
