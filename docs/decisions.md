@@ -965,9 +965,9 @@ All three existing-user migration shapes are first-class supported paths:
 2. **Pre-launch capability-visibility banner.** Before container start, Whizzard prints the active capabilities (e.g., `Active platforms: discord, slack`). Content comes from a new adapter Protocol method (e.g., `active_capabilities() -> list[str]`); core prints harness-neutrally.
 3. **Per-launch restriction via `--platforms <comma-list>`.** The flag lives under the `whiz hermes` subcommand surface (Hermes-specific, not a core flag — see D-153). It can only shrink the set defined in `config.yaml`; attempting to expand beyond `config.yaml` errors before launch.
 4. **Missing-credential warnings.** If `config.yaml` lists a platform but the corresponding host env var (e.g., `DISCORD_BOT_TOKEN`) is unset, Whizzard warns pre-launch. Hermes would fail to initialize the platform anyway; surfacing earlier improves UX and gives the user a clean abort path.
-5. **Credential source for MVP: host environment variables.** Whizzard reads the relevant tokens from its own shell environment and passes them through to the cell. Vault-mediated credentials (D-91, D-134) are the post-MVP path.
+5. **Credential source for MVP: OneCLI fetch at launch (per D-134).** The Hermes adapter shells out to OneCLI for each active platform's credential at launch time and injects the fetched values as env vars (`DISCORD_BOT_TOKEN`, etc.) into the cell. No long-lived host environment variables are required. D-91's literal "credentials never enter the container" guarantee does not apply to gateway-style harnesses (the agent itself opens the platform connection from inside the cell); for Hermes, OneCLI's role is delivery mechanism only — see D-134 for the scoping nuance.
 
-**Rationale:** Reading `config.yaml` as the source of truth avoids duplicating Hermes's native declaration mechanism — D-10 (harness-neutral core) is preserved because the read happens in the adapter, not core. The visibility banner translates Whizzard's "explicit, human-readable permission boundary" framing (D-11) to the platform-credential capability, which would otherwise be silently inherited from a config file the user may not remember editing. The `--platforms` per-launch restriction gives users a "downgrade for this session" handle without forcing a config edit. Bounding `--platforms` to restriction-only (never expansion) preserves the config-yaml-as-ceiling model and keeps the permission boundary monotonic per launch. Host env vars are the minimum-viable credential source for MVP; OneCLI vault generalization is deferred per D-91. The `--platforms` flag being Hermes-subcommand-scoped (not a core flag) avoids premature abstraction — when a second agent adapter lands, its analog can take whatever shape fits, without retrofitting a generic surface.
+**Rationale:** Reading `config.yaml` as the source of truth avoids duplicating Hermes's native declaration mechanism — D-10 (harness-neutral core) is preserved because the read happens in the adapter, not core. The visibility banner translates Whizzard's "explicit, human-readable permission boundary" framing (D-11) to the platform-credential capability, which would otherwise be silently inherited from a config file the user may not remember editing. The `--platforms` per-launch restriction gives users a "downgrade for this session" handle without forcing a config edit. Bounding `--platforms` to restriction-only (never expansion) preserves the config-yaml-as-ceiling model and keeps the permission boundary monotonic per launch. OneCLI is the credential source for MVP (D-134) — fetch at launch, inject as env var, no long-lived host env vars. The `--platforms` flag being Hermes-subcommand-scoped (not a core flag) avoids premature abstraction — when a second agent adapter lands, its analog can take whatever shape fits, without retrofitting a generic surface.
 
 **Source:** docs/HANDOFF.md (2026-05-14T14:14Z entry); docs/archive/hermes_research.md (Open question 4, L200); conversation 2026-05-14.
 
@@ -1622,7 +1622,6 @@ All three existing-user migration shapes are first-class supported paths:
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism in OSS-launch
 - **D-133** — Failure-mode semantics across new controls
-- **D-134** — OneCLI direct integration in MVP credential injection
 - **D-135** — Read-only project-root mounting as a Whizzard pattern
 - **D-136** — NanoClaw upstream collaboration
 
@@ -1676,11 +1675,30 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 ### D-134: OneCLI direct integration for MVP credential injection
 
-**Decision:** Whether to integrate with OneCLI directly for MVP-era credential injection (before the full vault backlog item lands) is unresolved.
+**Decision:** Whizzard integrates with OneCLI directly for MVP credential injection. The Hermes adapter (and any future agent adapter that needs platform credentials) fetches secrets via OneCLI at adapter launch time rather than reading from long-lived host environment variables. The integration is a shell-out to the `onecli` CLI from the adapter; no embedded SDK in the Python codebase.
 
-**Source:** docs/archive/nanoclaw_research.md (Open question 1)
+**Scope clarification re: D-91.** D-91 specifies "credentials never enter the container; outbound HTTPS routed through a host-side gateway that injects per request." That pattern fits "agent uses external API" use cases (NanoClaw's primary shape). It does not fit "agent IS the gateway" use cases (Hermes), where the agent itself opens the platform connection from inside the cell and consumes the credential at WebSocket setup time — no outbound HTTPS request exists to proxy. For gateway-style harnesses, OneCLI's role is **delivery mechanism only**: fetch on launch, inject as env var into the cell, container exits and the env var dies with it. This preserves OneCLI's security value (no long-lived host env var, per-launch credential lifetime, central revocation/rotation via OneCLI) without claiming the literal "never enter container" guarantee that D-91 cannot deliver for gateway-style harnesses.
 
-**Status:** open
+**Pattern:**
+1. At adapter launch, Whizzard reads the harness profile config (e.g., `<HERMES_HOME>/config.yaml`) for active platforms.
+2. For each active platform, the adapter shells out to OneCLI (exact CLI surface — likely `onecli secrets get <name>` or equivalent — to be confirmed against the installed OneCLI version during implementation).
+3. Fetched credentials are passed into the container as env vars (`DISCORD_BOT_TOKEN`, etc.) at container start.
+4. No host-side long-lived env vars are required.
+
+**Failure modes:**
+- OneCLI not installed → clear "install OneCLI" error pre-launch.
+- Requested secret not in vault → clear error naming the platform and the secret key; user instructed to register the secret first via OneCLI.
+- OneCLI returns non-zero unexpectedly → fail loud, do not launch.
+
+**Rationale:** D-91 (active) committed to OneCLI as the architectural direction. The open question in D-134 was *when* (MVP or post-MVP). Resolving toward MVP-inclusion: (a) gets users off the "DISCORD_BOT_TOKEN permanently exported in your shell rc" failure mode immediately, (b) makes per-launch credential lifetime the default behavior from day one rather than a migration users have to opt into later, (c) aligns Whizzard's positioning as a safety tool with what users would reasonably expect at first contact, and (d) the implementation cost is bounded — shell-out to an external CLI is a small wrapper function, not a deep dependency. NanoClaw is the proof-point that OneCLI integration works in practice (nanoclaw_research.md L153–170, L211).
+
+**Source:** docs/archive/nanoclaw_research.md (L153–170, L211, L254); D-91 (vault direction); D-89 (platform credential UX); conversation 2026-05-14.
+
+**Status:** active
+
+**Notes:**
+- Confirms the architectural intent of D-91 while accurately scoping where its literal "never enter container" guarantee applies.
+- Adds OneCLI as an MVP pre-condition for the Hermes adapter. Users installing `whizzard[hermes]` need OneCLI on their PATH; the adapter surfaces a clear error if it's missing.
 
 ### D-135: Read-only project-root mounting as a Whizzard pattern
 
@@ -1725,6 +1743,5 @@ The following decisions are currently **open**. Any work that depends on them sh
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
-- **D-134** — OneCLI direct integration in MVP credential injection
 - **D-135** — Read-only project-root mounting pattern adoption
 - **D-136** — NanoClaw upstream collaboration
