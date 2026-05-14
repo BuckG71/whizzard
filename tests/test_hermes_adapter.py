@@ -16,10 +16,14 @@ import pytest
 from whizzard.adapters import (
     HarnessAdapter,
     HermesAdapter,
+    HermesProfileExistsError,
+    HermesProfileNameError,
+    HermesProfileSourceMissingError,
     OneCLINotInstalledError,
     OneCLISecretMissingError,
     WrapUpStatus,
     build_adapter,
+    create_hermes_profile,
 )
 from whizzard.adapters import hermes as hermes_module
 
@@ -275,6 +279,150 @@ def test_is_pid_alive_returns_true_when_permission_denied(monkeypatch):
         raise PermissionError()
     monkeypatch.setattr(os, "kill", fake_kill)
     assert hermes_module._is_pid_alive(1) is True
+
+
+# --- Profile creation (D-86, Milestone 5) ---------------------------------
+
+
+def _seed_default_profile(parent: Path) -> Path:
+    """Build a realistic mini Hermes profile at <parent>/.hermes for tests."""
+    home = parent / ".hermes"
+    home.mkdir()
+    (home / "config.yaml").write_text("approvals:\n  mode: manual\n")
+    (home / "SOUL.md").write_text("# Soul\nbe helpful\n")
+    (home / "auth.json").write_text('{"discord": {"token": "secret"}}')
+    (home / "auth.lock").write_text("")
+    (home / ".env").write_text("DISCORD_BOT_TOKEN=secret-not-allowed-in-clone\n")
+    (home / "state.db").write_bytes(b"\x00" * 16)
+    (home / "state.db-shm").write_bytes(b"\x00" * 4)
+    (home / "state.db-wal").write_bytes(b"\x00" * 4)
+    (home / "gateway.lock").write_text('{"pid": 99}')
+    (home / "gateway.pid").write_text('{"pid": 99}')
+    (home / "gateway_state.json").write_text('{"running": true}')
+    (home / ".DS_Store").write_bytes(b"")
+    (home / "memories").mkdir()
+    (home / "memories" / "MEMORY.md").write_text("# Memory\n")
+    (home / "skills").mkdir()
+    (home / "skills" / ".curator_state").write_text("{}")
+    (home / "skills" / ".usage.json").write_text("{}")
+    (home / "skills" / "example").mkdir()
+    (home / "skills" / "example" / "SKILL.md").write_text("# Example\n")
+    (home / "sessions").mkdir()
+    (home / "sessions" / "old-session.json").write_text("{}")
+    (home / "logs").mkdir()
+    (home / "logs" / "old.log").write_text("noise\n")
+    (home / ".git").mkdir()
+    (home / ".git" / "HEAD").write_text("ref: refs/heads/main")
+    return home
+
+
+def test_create_profile_empty_when_no_clone(tmp_path):
+    result = create_hermes_profile("scratch", no_clone=True, parent_dir=tmp_path)
+    assert result.path == tmp_path / ".hermes-scratch"
+    assert result.path.is_dir()
+    assert result.source is None
+    assert list(result.path.iterdir()) == []  # truly empty
+
+
+def test_create_profile_bare_clones_from_default_when_present(tmp_path):
+    _seed_default_profile(tmp_path)
+    result = create_hermes_profile("whizzard-cell", parent_dir=tmp_path)
+
+    assert result.path == tmp_path / ".hermes-whizzard-cell"
+    assert result.source == tmp_path / ".hermes"
+
+    # Carried over (configuration / curated content):
+    assert (result.path / "config.yaml").read_text().startswith("approvals:")
+    assert (result.path / "SOUL.md").exists()
+    assert (result.path / "memories" / "MEMORY.md").exists()
+    assert (result.path / "skills" / "example" / "SKILL.md").exists()
+
+    # Excluded — security:
+    assert not (result.path / "auth.json").exists()
+    assert not (result.path / "auth.lock").exists()
+    assert not (result.path / ".env").exists()
+
+    # Excluded — per-instance runtime state:
+    assert not (result.path / "state.db").exists()
+    assert not (result.path / "state.db-shm").exists()
+    assert not (result.path / "state.db-wal").exists()
+    assert not (result.path / "gateway.lock").exists()
+    assert not (result.path / "gateway.pid").exists()
+    assert not (result.path / "gateway_state.json").exists()
+    assert not (result.path / "sessions").exists()
+    assert not (result.path / "logs").exists()
+    assert not (result.path / ".git").exists()
+    assert not (result.path / ".DS_Store").exists()
+
+    # Excluded — curator state inside skills/:
+    assert not (result.path / "skills" / ".curator_state").exists()
+    assert not (result.path / "skills" / ".usage.json").exists()
+
+
+def test_create_profile_bare_degrades_to_empty_when_no_default(tmp_path):
+    # No ~/.hermes seeded → bare command falls through to empty.
+    result = create_hermes_profile("scratch", parent_dir=tmp_path)
+    assert result.path.is_dir()
+    assert result.source is None
+    assert list(result.path.iterdir()) == []
+
+
+def test_create_profile_explicit_clone_from_named_source(tmp_path):
+    # Seed a non-default profile to clone from.
+    other = tmp_path / ".hermes-base"
+    other.mkdir()
+    (other / "config.yaml").write_text("model: claude-sonnet-4-6\n")
+    (other / "auth.json").write_text('{"token": "secret"}')
+
+    result = create_hermes_profile("derived", clone_from="base", parent_dir=tmp_path)
+
+    assert result.source == other
+    assert (result.path / "config.yaml").exists()
+    assert not (result.path / "auth.json").exists()
+
+
+def test_create_profile_explicit_clone_from_missing_source_raises(tmp_path):
+    with pytest.raises(HermesProfileSourceMissingError, match="does-not-exist"):
+        create_hermes_profile(
+            "derived", clone_from="does-not-exist", parent_dir=tmp_path
+        )
+
+
+def test_create_profile_refuses_existing_target(tmp_path):
+    (tmp_path / ".hermes-already-there").mkdir()
+    with pytest.raises(HermesProfileExistsError, match="already exists"):
+        create_hermes_profile("already-there", no_clone=True, parent_dir=tmp_path)
+
+
+def test_create_profile_refuses_default_name(tmp_path):
+    with pytest.raises(HermesProfileNameError, match="reserved"):
+        create_hermes_profile("default", parent_dir=tmp_path)
+
+
+def test_create_profile_refuses_slash_in_name(tmp_path):
+    with pytest.raises(HermesProfileNameError, match="invalid profile name"):
+        create_hermes_profile("foo/bar", parent_dir=tmp_path)
+
+
+def test_create_profile_refuses_leading_dot(tmp_path):
+    with pytest.raises(HermesProfileNameError, match="invalid profile name"):
+        create_hermes_profile(".hidden", parent_dir=tmp_path)
+
+
+def test_create_profile_refuses_empty_name(tmp_path):
+    with pytest.raises(HermesProfileNameError, match="invalid profile name"):
+        create_hermes_profile("", parent_dir=tmp_path)
+
+
+def test_hermes_profile_path_maps_default_to_hermes_dir(tmp_path):
+    assert hermes_module._hermes_profile_path("default", tmp_path) == tmp_path / ".hermes"
+
+
+def test_hermes_profile_path_maps_named_to_suffixed_dir(tmp_path):
+    assert (
+        hermes_module._hermes_profile_path("whizzard-cell", tmp_path)
+        == tmp_path / ".hermes-whizzard-cell"
+    )
 
 
 def test_hermes_working_dir_defaults_none():
