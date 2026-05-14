@@ -1024,7 +1024,62 @@ whizzard harnesses init --force
 
 ## Stage 8 — Hermes Integration
 
-*(To be added once Stage 8 lands.)*
+The Hermes adapter and supporting plumbing land in five code milestones (M1–M5)
+plus two integration milestones (M6 wrap_up, M7 packaging). The first six
+are validated by the unit test suite; the live end-to-end check (M6 manual
+smoke) requires a built image and the user's Hermes install.
+
+### Unit-test-validated milestones (run `pytest tests/`)
+
+- [ ] M1: `HermesAdapter` exists, satisfies the `HarnessAdapter` Protocol, and is returned by `build_adapter("agent", ...)` instead of `UnknownHarnessTypeError`. (`test_hermes_adapter.py`, `test_adapters.py`)
+- [ ] M2: `active_capabilities() -> list[str]` is on the Protocol; `GenericShellAdapter` returns `[]`; `HermesAdapter` returns a list of strings (skeleton populated by later work). (`test_adapters.py`, `test_hermes_adapter.py`)
+- [ ] M3: `HermesAdapter.container_env()` reads `self.config["platforms"]` (declared in `harnesses.json` per D-89 amended), shells out to OneCLI to fetch each platform's credential, returns the env dict. OneCLI-not-installed and secret-not-in-vault errors fire fast. (`test_hermes_adapter.py`)
+- [ ] M4: `preflight()` checks `<HERMES_HOME>/gateway.lock`. Live pid → block with profile + pid + remediation message. Dead pid → cleared, proceed with `cleanup_note`. Missing or malformed lock → proceed. (`test_hermes_adapter.py`)
+- [ ] M5: `whiz hermes profile create <name>` creates `~/.hermes-<name>/`. Bare clones from default (or degrades to empty); `--clone-from <src>` selects source; `--no-clone` forces empty. `auth.json` and per-instance runtime state are excluded from clones (D-80). Reserved/invalid names refused. Existing targets refused. (`test_hermes_adapter.py`)
+- [ ] M6 (code): `HermesAdapter.wrap_up()` uses `docker stop --time=<grace>` + container exit-code inspection. Clean SIGTERM exit → SUCCESS; SIGKILL exit code 137 → TIMEOUT; docker missing or stop fails → ERROR. Bounded by grace + 5s slack. (`test_hermes_adapter.py`)
+- [ ] CLI surface: `whiz hermes profile create --help` shows the subcommand tree; --clone-from / --no-clone mutual-exclusion fires; success message names the created path and announces clone source (if any).
+- [ ] `harnesses.json` validation: `platforms` is accepted as an optional list of strings; non-list and non-string-entry values produce clean errors with no traceback. (`test_harness_config.py`)
+
+### Manual end-to-end smoke (M6 integration, requires built image + Hermes)
+
+These are the steps that prove the adapter actually drives a real Hermes
+container. They are NOT part of the automated suite — run them manually
+once the prerequisites are in place.
+
+Prerequisites:
+- `whizzard image build` has produced a working Whizzard image.
+- A Hermes profile exists, either at `~/.hermes/` (default) or created via `whiz hermes profile create <name>`.
+- For gateway-mode tests: relevant platform credentials are registered in OneCLI (e.g., `onecli secrets create DISCORD_BOT_TOKEN`).
+- A `harnesses.json` entry of `type: "agent"` declaring the harness's `hermes_home` (and `platforms` if gateway mode is intended).
+
+Steps:
+
+```sh
+# Interactive mode — cheapest smoke, no platform creds needed.
+whizzard run --harness <hermes-harness-name>
+# Expected: container starts, Hermes interactive prompt appears,
+# `/quit` (typed into Hermes) exits cleanly.
+
+# Gateway mode — verifies OneCLI fetch + platform connection.
+whizzard run --harness <hermes-harness-name>
+# Expected: container starts in gateway mode, Hermes connects to the
+# declared platforms (visible in Hermes logs / platform side), env
+# vars are populated via OneCLI rather than from host env. wrap_up
+# via Whizzard's stop path drains turns and exits within grace.
+
+# Concurrency guard — D-87.
+# 1. Launch the same harness twice in two terminals; second launch is
+#    refused with a clear message naming the running pid and pointing
+#    to `whiz hermes profile create <name> --clone-from default`.
+# 2. Kill the first container manually; the host gateway.lock now points
+#    to a dead pid; the next launch announces "Cleared stale gateway.lock"
+#    and proceeds.
+```
+
+### Outstanding for full Stage-8 closeout (M7)
+
+- [ ] `pyproject.toml` declares `[project.optional-dependencies] hermes = [...]` with the Hermes Python package and a tested-against version range (requires confirming Hermes's distribution shape — pip package name vs. git URL vs. local install).
+- [ ] `whiz hermes` launch-surface CLI (vs. `whiz run --harness <name>`) — design call: do we add explicit `whiz hermes <profile>` sugar, or does `whiz run --harness <name>` cover it? Either works for M6 smoke testing.
 
 ---
 
