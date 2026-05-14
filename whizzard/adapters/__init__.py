@@ -8,7 +8,11 @@ from whizzard.adapters.base import (
     WrapUpStatus,
 )
 from whizzard.adapters.generic import GenericShellAdapter
-from whizzard.adapters.hermes import HermesAdapter
+from whizzard.adapters.hermes import (
+    HermesAdapter,
+    OneCLINotInstalledError,
+    OneCLISecretMissingError,
+)
 
 
 __all__ = [
@@ -17,6 +21,8 @@ __all__ = [
     "WrapUpStatus",
     "GenericShellAdapter",
     "HermesAdapter",
+    "OneCLINotInstalledError",
+    "OneCLISecretMissingError",
     "build_adapter",
 ]
 
