@@ -2220,7 +2220,6 @@ All three existing-user migration shapes are first-class supported paths:
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
-- **D-130** — Personal-use MVP threshold candidates
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism in OSS-launch
 - **D-133** — Failure-mode semantics across new controls
