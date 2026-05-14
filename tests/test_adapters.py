@@ -1,10 +1,16 @@
-"""Stage 7: adapter interface and generic-shell adapter tests."""
+"""Stage 7: adapter interface and generic-shell adapter tests.
+
+Hermes-adapter-specific tests live in `test_hermes_adapter.py`. This file
+covers the Protocol contract, the generic shell adapter, and the factory
+dispatch (`build_adapter`) for all currently-supported harness types.
+"""
 
 import pytest
 
 from whizzard.adapters import (
     GenericShellAdapter,
     HarnessAdapter,
+    HermesAdapter,
     UnknownHarnessTypeError,
     WrapUpResult,
     WrapUpStatus,
@@ -77,9 +83,12 @@ def test_build_adapter_defaults_to_shell_when_type_missing():
     assert isinstance(adapter, GenericShellAdapter)
 
 
-def test_build_adapter_rejects_agent_type_until_stage_8():
-    with pytest.raises(UnknownHarnessTypeError, match="Stage 8"):
-        build_adapter("hermes", {"type": "agent", "start_command": "hermes chat"})
+def test_build_adapter_returns_hermes_for_agent_type():
+    adapter = build_adapter(
+        "hermes", {"type": "agent", "start_command": "hermes gateway run"}
+    )
+    assert isinstance(adapter, HermesAdapter)
+    assert adapter.name == "hermes"
 
 
 def test_build_adapter_rejects_unknown_type():

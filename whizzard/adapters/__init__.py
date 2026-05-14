@@ -8,6 +8,7 @@ from whizzard.adapters.base import (
     WrapUpStatus,
 )
 from whizzard.adapters.generic import GenericShellAdapter
+from whizzard.adapters.hermes import HermesAdapter
 
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "WrapUpResult",
     "WrapUpStatus",
     "GenericShellAdapter",
+    "HermesAdapter",
     "build_adapter",
 ]
 
@@ -26,9 +28,10 @@ class UnknownHarnessTypeError(Exception):
 def build_adapter(name: str, config: dict) -> HarnessAdapter:
     """Construct an adapter for the named harness from its config dict.
 
-    Stage 7 supports `type: "shell"`. Stage 8 will add `type: "agent"`
-    for the Hermes adapter and beyond. Unknown types raise so the user
-    sees a clear error rather than silently getting a generic shell.
+    `type: "shell"` returns the generic shell adapter (Stage 7).
+    `type: "agent"` returns the Hermes adapter (Stage 8). When future
+    agent adapters land (OpenClaw, NanoClaw), a sub-discriminator will
+    be needed; for MVP, agent-type maps to Hermes.
     """
     harness_type = config.get("type", "shell")
 
@@ -36,10 +39,7 @@ def build_adapter(name: str, config: dict) -> HarnessAdapter:
         return GenericShellAdapter(name=name, config=config)
 
     if harness_type == "agent":
-        raise UnknownHarnessTypeError(
-            f"harness {name!r} has type 'agent' but no agent adapter is "
-            f"implemented yet (lands in Stage 8 with the Hermes adapter)"
-        )
+        return HermesAdapter(name=name, config=config)
 
     raise UnknownHarnessTypeError(
         f"harness {name!r} has unknown type {harness_type!r}; "
