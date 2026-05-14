@@ -959,13 +959,19 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-89: Platform credential declaration UX in gateway mode
 
-**Decision:** How the user declares which platforms are active in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid) is unresolved.
+**Decision:** Config-implicit with visibility and per-launch restriction:
 
-**Rationale:** Open design question; current lean is "hybrid: config defaults, CLI overrides" but not committed.
+1. **Source of truth: Hermes's `config.yaml` (inside `HERMES_HOME`).** The Hermes adapter reads it pre-launch to identify the configured platform set and inject the corresponding credential env vars into the cell. Whizzard core never reads `config.yaml` directly (see D-153 for the isolation rule).
+2. **Pre-launch capability-visibility banner.** Before container start, Whizzard prints the active capabilities (e.g., `Active platforms: discord, slack`). Content comes from a new adapter Protocol method (e.g., `active_capabilities() -> list[str]`); core prints harness-neutrally.
+3. **Per-launch restriction via `--platforms <comma-list>`.** The flag lives under the `whiz hermes` subcommand surface (Hermes-specific, not a core flag — see D-153). It can only shrink the set defined in `config.yaml`; attempting to expand beyond `config.yaml` errors before launch.
+4. **Missing-credential warnings.** If `config.yaml` lists a platform but the corresponding host env var (e.g., `DISCORD_BOT_TOKEN`) is unset, Whizzard warns pre-launch. Hermes would fail to initialize the platform anyway; surfacing earlier improves UX and gives the user a clean abort path.
+5. **Credential source for MVP: host environment variables.** Whizzard reads the relevant tokens from its own shell environment and passes them through to the cell. Vault-mediated credentials (D-91, D-134) are the post-MVP path.
 
-**Source:** docs/session_handoff.md (Stage 8 open #4); docs/archive/hermes_research.md (Open question 4)
+**Rationale:** Reading `config.yaml` as the source of truth avoids duplicating Hermes's native declaration mechanism — D-10 (harness-neutral core) is preserved because the read happens in the adapter, not core. The visibility banner translates Whizzard's "explicit, human-readable permission boundary" framing (D-11) to the platform-credential capability, which would otherwise be silently inherited from a config file the user may not remember editing. The `--platforms` per-launch restriction gives users a "downgrade for this session" handle without forcing a config edit. Bounding `--platforms` to restriction-only (never expansion) preserves the config-yaml-as-ceiling model and keeps the permission boundary monotonic per launch. Host env vars are the minimum-viable credential source for MVP; OneCLI vault generalization is deferred per D-91. The `--platforms` flag being Hermes-subcommand-scoped (not a core flag) avoids premature abstraction — when a second agent adapter lands, its analog can take whatever shape fits, without retrofitting a generic surface.
 
-**Status:** open
+**Source:** docs/HANDOFF.md (2026-05-14T14:14Z entry); docs/archive/hermes_research.md (Open question 4, L200); conversation 2026-05-14.
+
+**Status:** active
 
 ### D-90: In-session approval routing in gateway mode
 
@@ -1556,14 +1562,24 @@ All three existing-user migration shapes are first-class supported paths:
 
 **Notes:** `.agents/` is *not* added to `.gitignore` because Skills are intended to be committed and shared per upstream convention; the defense lives in test-runner config and pre-merge review.
 
+### D-153: Harness-specific identifiers appear only in adapter modules
+
+**Decision:** Harness-specific paths, filenames, environment variable names, schema field names, and CLI flag names appear only in adapter modules (`whizzard/adapters/<harness>.py`) and the corresponding adapter subcommand surface in `whizzard/cli.py`. Whizzard's core modules — `config.py`, `docker_cmd.py`, `mounts.py`, `safety.py`, `session_log.py`, `harness_config.py` — must not reference Hermes/OpenClaw/etc.-specific identifiers (examples: `config.yaml`, `state.db`, `gateway.lock`, `HERMES_HOME`, `DISCORD_BOT_TOKEN`, `--platforms`). Permitted core knowledge: the harness *type* names registered in `harnesses.json` (currently `"shell"` and `"agent"` per D-34) and the adapter Protocol method names (D-28). Those are the abstraction surface; everything below them is adapter-private.
+
+**Rationale:** D-10 ("Whizzard core stays harness-neutral") is a stance; this decision makes it a reviewable, lint-checkable rule. Without an explicit isolation rule, harness-specific identifiers drift into core as convenient shortcuts ("just read `config.yaml` here, we only have Hermes anyway"), and reverting that drift later becomes a real refactor. Naming the files subject to the rule — and the categories of identifier the rule covers — keeps the adapter pattern load-bearing for the lifetime of the project, including future post-MVP adapters (OpenClaw, NanoClaw, etc.). The adapter Protocol (D-28) is the contract between core and adapters; this is the rule that protects the contract from erosion.
+
+**Source:** conversation 2026-05-14 (during D-89 resolution; Bryan's question on whether config.yaml dependency violates D-10).
+
+**Status:** active
+
+**Notes:** Enforcement is per-PR review for MVP. A lint check (grep-based) is plausible post-MVP if drift becomes a recurring issue.
+
 ---
 
 ## 15. Open / unresolved
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
-- **D-88** — Default mode (interactive vs. gateway) for Hermes adapter
-- **D-89** — Platform credential declaration UX in gateway mode
 - **D-90** — In-session approval routing in gateway mode
 - **D-130** — Personal-use MVP threshold candidates
 - **D-131** — OSS-launch milestone scope
@@ -1653,7 +1669,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-89** — Platform credential declaration in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid) — promoted to MVP-blocking by D-88
 - **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass) — promoted to MVP-blocking by D-88
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
