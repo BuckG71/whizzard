@@ -69,6 +69,12 @@ class HermesAdapter:
     def health_check_command(self) -> list[str] | None:
         return None
 
+    def active_capabilities(self) -> list[str]:
+        # Skeleton: returns []. Action 3 fills this with the config.yaml-derived
+        # platform list ("platforms: discord, slack") plus the approval-mode
+        # warning string from D-90.
+        return []
+
 
 # Sanity check the Protocol contract at import time.
 _: HarnessAdapter = HermesAdapter()

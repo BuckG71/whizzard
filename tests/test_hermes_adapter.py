@@ -63,3 +63,10 @@ def test_hermes_wrap_up_not_yet_implemented():
 
 def test_hermes_health_check_is_none():
     assert HermesAdapter().health_check_command() is None
+
+
+def test_hermes_active_capabilities_returns_list_of_strings():
+    # Skeleton: empty. Action 3 populates from config.yaml + approval mode.
+    caps = HermesAdapter().active_capabilities()
+    assert isinstance(caps, list)
+    assert all(isinstance(c, str) for c in caps)

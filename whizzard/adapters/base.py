@@ -89,3 +89,14 @@ class HarnessAdapter(Protocol):
         after launch. Adapters that don't need a health check return None.
         """
         ...
+
+    def active_capabilities(self) -> list[str]:
+        """Human-readable capability strings for the pre-launch banner.
+
+        Whizzard prints these before container start so the user sees what
+        the harness is about to do — connected platforms, approval mode,
+        etc. (D-89, D-90). Content is adapter-specific; the surface is
+        generic. Adapters with no capability surface (generic shell) return
+        an empty list.
+        """
+        ...

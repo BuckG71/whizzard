@@ -72,6 +72,11 @@ def test_generic_health_check_is_none():
     assert GenericShellAdapter().health_check_command() is None
 
 
+def test_generic_active_capabilities_is_empty():
+    # Generic shell exposes no capability surface for the pre-launch banner.
+    assert GenericShellAdapter().active_capabilities() == []
+
+
 def test_build_adapter_returns_generic_for_shell_type():
     adapter = build_adapter("test", {"type": "shell", "start_command": "/bin/bash"})
     assert isinstance(adapter, GenericShellAdapter)
