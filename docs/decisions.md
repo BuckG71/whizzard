@@ -929,13 +929,23 @@ All three existing-user migration shapes are first-class supported paths:
 
 ### D-87: Concurrency exclusivity vs. host-side Hermes
 
-**Decision:** Whether Whizzard refuses to launch a contained Hermes when the host already has a gateway running on the same Hermes profile is unresolved.
+**Decision:** `whiz hermes <profile>` refuses to launch when a live gateway is already holding `<profile>`'s lock. The block applies symmetrically to host-vs-cell and cell-vs-cell contention.
 
-**Rationale:** Open design question; concurrent same-profile use can corrupt state.db.
+**Detection:** Pre-launch, check `<HERMES_HOME>/gateway.lock`. If present, read `<HERMES_HOME>/gateway.pid` and probe pid liveness (signal 0). Live pid → block with a clear error message naming the profile and conflicting pid. Lock exists but pid is dead → treat as stale, ignore, and announce the cleanup as the launch proceeds.
 
-**Source:** docs/session_handoff.md (Stage 8 open #2); docs/archive/hermes_research.md (Open question 2)
+**Mode coverage:**
+- **Gateway mode** (D-88 default): `gateway.lock` pre-check is the enforcement point. This is the primary case.
+- **Interactive mode** (`--interactive`): no `gateway.lock` is written, so Whizzard does not pre-check. Hermes's own SQLite WAL + fcntl locking on `state.db` handles contention. Defense in depth, not duplicate enforcement.
 
-**Status:** open
+**No `--force` escape valve in MVP.** A user who legitimately needs a parallel session is steered to `whiz hermes profile create <sibling> --clone-from <profile>` (D-86) — the supported path is sibling profiles, not concurrent processes on one profile.
+
+**Error UX:** The block message names the profile, the conflicting pid, and the two supported remediations (stop the host gateway / create a sibling profile via D-86).
+
+**Rationale:** Concurrent writers to Hermes's `state.db` and gateway state files corrupt or deadlock the profile (hermes_research.md L31–41, L76). Using Hermes's existing `gateway.lock` rather than process scanning or SQLite-lock probing keeps detection cheap, robust to Hermes version drift, and consistent with the lifecycle files Hermes already maintains. Stale-pid auto-detection avoids leaving users blocked by crashed/forgotten host processes. No `--force` for MVP keeps the corruption-protection guarantee absolute — the cost of a false positive (rare, recoverable) is low; the cost of letting two processes mangle one profile is high. The interactive-mode carve-out leans on Hermes's own internal locking rather than re-implementing it at the Whizzard layer.
+
+**Source:** docs/HANDOFF.md (2026-05-14T14:14Z entry); docs/archive/hermes_research.md (Open question 2, L41, L76, L200, L219); conversation 2026-05-14
+
+**Status:** active
 
 ### D-88: Default mode (interactive vs. gateway) for the Hermes adapter
 
@@ -1552,7 +1562,6 @@ All three existing-user migration shapes are first-class supported paths:
 
 (Status: open across the document — collected here for visibility. Full entries above.)
 
-- **D-87** — Concurrency exclusivity vs. host-side Hermes
 - **D-88** — Default mode (interactive vs. gateway) for Hermes adapter
 - **D-89** — Platform credential declaration UX in gateway mode
 - **D-90** — In-session approval routing in gateway mode
@@ -1644,7 +1653,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-87** — Concurrency exclusivity (refuse contained launch if host-side Hermes uses same profile, vs. document only)
 - **D-89** — Platform credential declaration in gateway mode (config-implicit / CLI allowlist / harness preset / hybrid) — promoted to MVP-blocking by D-88
 - **D-90** — In-session approval routing in gateway mode (platform-routed vs. `--yolo` bypass) — promoted to MVP-blocking by D-88
 - **D-131** — OSS-launch milestone scope
