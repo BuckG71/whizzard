@@ -1,5 +1,44 @@
 # Session Handoff Log
 
+## 2026-05-14T18:28Z — Stage 8 build: code milestones 1–6 shipped; awaits Hermes E2E smoke + packaging
+
+### Goal
+Same as prior: ship Stage 8 Hermes adapter end-to-end per `docs/STAGE_8_BUILD_PLAN.md`.
+
+### Done since prior entry
+- **Action 3 / M3 (439d062)** — `HermesAdapter.container_env()` reads `self.config["platforms"]`, shells out to OneCLI per platform (`<PLATFORM>_BOT_TOKEN` convention), returns env dict; passthrough of `config["env"]` preserved. New exceptions `OneCLINotInstalledError`, `OneCLISecretMissingError`. `harness_config.py` validates `platforms` field.
+- **D-89 amendment (b70b4c0)** — option 3: declarations live in `harnesses.json`, not parsed from `config.yaml`. Pivot driven by real-install inspection of `~/.hermes/config.yaml` revealing no parseable active-platforms field. Avoids replicating Hermes-internal logic per D-153.
+- **D-134 resolved (4690708)** — OneCLI integrated in MVP credential injection. Scoped clarification of D-91 for gateway-style harnesses ("delivery mechanism only," not "never enter container").
+- **M4 (298ae06)** — `preflight() -> PreflightResult` added to the Protocol. `GenericShellAdapter.preflight()` is always ok. `HermesAdapter.preflight()` reads `gateway.lock` JSON, probes pid liveness via signal 0, blocks on live pid, clears stale pid + announces.
+- **M5 (05779b6)** — `whiz hermes profile create <name>` CLI verb. Convention: `default` = `~/.hermes`; other names = `~/.hermes-<name>`. `--clone-from` / `--no-clone`. Clones explicitly exclude `auth.json` (D-80) + per-instance runtime state. Reserved/invalid names + existing targets refused.
+- **M6 code (3ac596c)** — `wrap_up()` via `docker stop --time=<grace>` + container exit-code inspection. SIGKILL exit 137 → TIMEOUT; clean exit → SUCCESS; docker errors → ERROR. Resolves the original `/quit`-vs-SIGTERM open question (`/quit` is chat-mode stdin, not a host-runnable command; Hermes's existing SIGTERM handler is the canonical channel).
+- **`docs/stage_validation.md`** — Stage 8 section written; previously a placeholder.
+
+Test suite: **185 passing** (was 142 at start of autonomous block). All new test coverage uses `monkeypatch` + `tmp_path`; no real Hermes / Docker / OneCLI binaries required for unit tests.
+
+### Active task
+Stage 8 code is functionally complete for all autonomously-doable work. The remaining items need user input or environment:
+
+1. **M6 manual end-to-end smoke test.** Requires the Whizzard Docker image to be built and a real Hermes harness configured in `harnesses.json`. Per the new Stage 8 validation section in `docs/stage_validation.md`, the smoke covers: interactive mode launch (cheapest, no platform creds), gateway mode launch (verifies OneCLI fetch), and the concurrency guard (D-87 live-pid block + stale-pid cleanup).
+2. **M7 packaging — `pyproject.toml` extras.** Needs the Hermes Python package name + tested-against version range. Bryan's install at `~/.hermes/hermes-agent/` is a directory tree (`hermes_cli/main.py` is invoked by absolute path in `gateway_state.json`), so the distribution shape isn't pip-package-on-PyPI. Unclear what the right pin looks like — needs Bryan's input.
+3. **CLI launch surface — `whiz hermes <profile>` vs. `whiz run --harness <name>`.** Either works for the smoke test. Design call deferred; current code path is `whiz run --harness <name>` which already dispatches to `HermesAdapter` through `build_adapter("agent", ...)`. Adding `whiz hermes <profile>` sugar is straightforward if/when wanted.
+
+### Tried & rejected (this session)
+- **Parsing `config.yaml` for active platforms** (original D-89 design intent). Inspection of real `config.yaml` showed it has no parseable active-platforms field — activation involves top-level platform sections, `toolsets:` entries, and internal `check_<platform>_requirements()` logic. Replicating that would violate D-153. Pivoted to harnesses.json declaration (D-89 amended).
+- **`docker exec <container> /quit` for wrap_up.** `/quit` is a Hermes chat-mode slash command consumed by Hermes's own stdin, not a host-side command runnable via `docker exec`. Switched to `docker stop --time=<grace>` which delivers SIGTERM and falls back to SIGKILL — clean fit with Hermes's existing SIGTERM handler (drains turns, writes state, exits).
+- **Host env vars as MVP credential source.** Resolved D-134 toward OneCLI inclusion in MVP. Gets users off long-lived `.env` plaintext from day one; bounded incremental security but real (no transformational, since for gateway-style harnesses creds still enter the container — D-91's literal "never enter" guarantee scoped to API-using agents).
+
+### Resume protocol
+1. **Read `docs/STAGE_8_BUILD_PLAN.md`** for current shape and the M7 outstanding items (now mirrored in `docs/stage_validation.md` Stage 8 section as "Outstanding for full Stage-8 closeout").
+2. **Run `pytest tests/`** to confirm the 185 passing baseline.
+3. **Decide on M7 packaging shape with Bryan** — specifically how Hermes is distributed (PyPI? git URL? local install assumed?). This determines what `[project.optional-dependencies] hermes` should declare.
+4. **Schedule the M6 manual E2E smoke** when the image is built and a Hermes harness is configured in `harnesses.json`. The validation steps are documented under "Manual end-to-end smoke (M6 integration...)" in `docs/stage_validation.md`.
+5. **Optional follow-on:** wire up the `whiz hermes <profile>` launch-surface sugar if you want a more Hermes-native CLI verb (vs. the existing `whiz run --harness <name>` which already works).
+
+Prior entries below are reference only. `docs/HANDOFF.md` is append-only per D-150.
+
+---
+
 ## 2026-05-14T16:32Z — Stage 8 build paused mid-Action-3 awaiting ~/.hermes access
 
 ### Goal
