@@ -1605,6 +1605,22 @@ All three existing-user migration shapes are first-class supported paths:
 
 **Status:** open
 
+**Notes (2026-05-14, repo-structure sub-question):**
+
+One input toward eventual scope: how to structure the OSS repo(s) so that updates to one harness don't compromise other users' installs. Three options considered:
+
+1. **Single repo, single package (current state).** Simple, but every adapter's runtime deps are pulled in on `pip install whizzard`, including for users who only want generic shell.
+2. **Single repo, Python packaging extras.** `pip install whizzard` ships core + generic shell; `pip install whizzard[hermes]` adds Hermes adapter and its deps; `pip install whizzard[openclaw]` likewise. Adapter modules guard top-level imports of harness-specific libraries; tests use `pytest.importorskip` so absent extras don't fail CI. One issue tracker, one docs site, one PyPI listing. Adapter Protocol changes (D-28) remain atomic across all adapters in a single PR.
+3. **Multi-repo (core + per-adapter).** Independent release cadences per adapter, hard maintainer-ownership boundaries. Costs: cross-repo Protocol-change coordination, version-skew risk between core and adapter, fragmented discoverability for new users, multiplied CI/issue-tracker/release infrastructure.
+
+**Current lean:** Option 2 (monorepo + extras) at OSS launch. The adapter pattern (D-28) plus the isolation rule (D-153) already provide architectural change isolation — repo separation primarily adds independent release versioning and dep isolation, both achievable via extras with significantly less coordination overhead at the project's current scale (one main maintainer, MVP slate of 1–3 adapters). Option 3 becomes attractive *post-launch* if specific pressure shows up: third-party adapter maintainers needing repo autonomy, or genuine adapter-vs-core release-cadence conflicts.
+
+**Why this lean preserves optionality:** D-153 plus the adapter Protocol mean adapter modules are already structurally separable — own file, own optional-dep block, no core imports leaking harness-specific identifiers. If a repo split is needed later, it is a mechanical move (lift the adapter file + its `pyproject.toml` block into a new repo) rather than a refactor. Staying in one repo at launch does not lock in the choice.
+
+**Open sub-question:** does the OSS-launch milestone include adopting an extras-based packaging structure (`whizzard[hermes]`) at launch time, or wait until a second adapter actually lands and forces the question?
+
+**Source:** conversation 2026-05-14 (during D-89 discussion; Bryan's question on adapter repo isolation).
+
 ### D-132: Sidecar-proxy mechanism in OSS-launch
 
 **Decision:** Whether to introduce a sidecar-proxy mechanism in OSS-launch (which unlocks egress allowlists, MCP tool shaping, traffic logging, vault generalization) is unresolved.
