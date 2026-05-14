@@ -5,15 +5,16 @@ Stage 8 design decisions (D-86 through D-90). Per D-153, harness-specific
 identifiers — config.yaml, gateway.lock, HERMES_HOME, platform tokens — live
 inside this module and the `whiz hermes` subcommand surface. Core stays neutral.
 
-This module currently lands as a skeleton (Action 1 of the Stage 8 build plan):
-Protocol-shape implementations exist, but container_env() reading config.yaml,
-the gateway.lock pre-launch check, and wrap_up() via `docker exec /quit` are
-filled in by subsequent build-plan actions.
+Build-plan status: Actions 1 (skeleton) and 2 (active_capabilities Protocol)
+are done. Action 3 (this commit) implements container_env() with OneCLI-mediated
+credential injection. The gateway.lock pre-check and wrap_up() via
+`docker exec /quit` arrive in subsequent build-plan milestones.
 """
 
 from __future__ import annotations
 
 import shlex
+import subprocess
 from dataclasses import dataclass, field
 
 from whizzard.adapters.base import (
@@ -24,6 +25,54 @@ from whizzard.adapters.base import (
 
 
 _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
+
+# Hermes convention (per hermes_research.md L17): each platform's credential
+# is consumed from an env var named `<PLATFORM>_BOT_TOKEN`. OneCLI secret
+# names use the same string — one identifier across both surfaces.
+_ONECLI_TIMEOUT_SECONDS = 30
+
+
+class OneCLINotInstalledError(Exception):
+    """`onecli` is not on PATH. The Hermes adapter requires it for D-134."""
+
+
+class OneCLISecretMissingError(Exception):
+    """OneCLI returned non-zero fetching a secret — usually not-registered."""
+
+
+def _env_var_for_platform(platform: str) -> str:
+    return f"{platform.upper()}_BOT_TOKEN"
+
+
+def _fetch_secret_via_onecli(name: str) -> str:
+    """Fetch `name` from OneCLI's vault. Raises on missing-binary or non-zero.
+
+    Tests monkeypatch this function (or `subprocess.run`) to avoid invoking
+    a real OneCLI install.
+    """
+    try:
+        result = subprocess.run(
+            ["onecli", "secrets", "get", name],
+            capture_output=True,
+            text=True,
+            timeout=_ONECLI_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except FileNotFoundError as e:
+        raise OneCLINotInstalledError(
+            "`onecli` not found on PATH. The Hermes adapter requires OneCLI "
+            "for credential injection (per D-134). Install OneCLI and retry."
+        ) from e
+
+    if result.returncode != 0:
+        raise OneCLISecretMissingError(
+            f"OneCLI failed to fetch secret {name!r} "
+            f"(exit code {result.returncode}). "
+            f"stderr: {result.stderr.strip() or '(empty)'}. "
+            f"Register via: onecli secrets create {name}"
+        )
+
+    return result.stdout.rstrip("\n")
 
 
 @dataclass
@@ -47,10 +96,18 @@ class HermesAdapter:
         return shlex.split(cmd)
 
     def container_env(self) -> dict[str, str]:
-        # Skeleton: passes through config-declared env only. Action 3 replaces
-        # this with config.yaml reading + platform-token injection (D-89).
-        env = self.config.get("env", {}) or {}
-        return {str(k): str(v) for k, v in env.items()}
+        # Platforms come from `harnesses.json["platforms"]` (D-89 amended).
+        # Each platform's credential is fetched on-demand from OneCLI (D-134)
+        # — no long-lived host env vars. Non-platform `env` from harness
+        # config is passed through alongside.
+        env: dict[str, str] = {}
+        for platform in self.config.get("platforms", []) or []:
+            var = _env_var_for_platform(platform)
+            env[var] = _fetch_secret_via_onecli(var)
+        extra = self.config.get("env", {}) or {}
+        for k, v in extra.items():
+            env[str(k)] = str(v)
+        return env
 
     def working_dir(self) -> str | None:
         wd = self.config.get("working_dir")

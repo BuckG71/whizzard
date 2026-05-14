@@ -95,6 +95,42 @@ def test_load_rejects_non_dict_env(tmp_path: Path):
         load_harnesses(f)
 
 
+def test_load_accepts_platforms_list(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "hermes-bot": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "platforms": ["discord", "slack"],
+        },
+    })
+    harnesses = load_harnesses(f)
+    assert harnesses["hermes-bot"]["platforms"] == ["discord", "slack"]
+
+
+def test_load_rejects_non_list_platforms(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "x": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "platforms": "discord",
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="platforms must be a list of strings"):
+        load_harnesses(f)
+
+
+def test_load_rejects_non_string_platform_entries(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "x": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "platforms": ["discord", 42],
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="platforms must be a list of strings"):
+        load_harnesses(f)
+
+
 def test_load_rejects_empty_harnesses(tmp_path: Path):
     f = _write(tmp_path / "harnesses.json", {})
     with pytest.raises(HarnessConfigError, match="at least one"):

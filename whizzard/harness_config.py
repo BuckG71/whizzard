@@ -15,7 +15,8 @@ or fall back to bundled defaults. Validate the schema (per architecture.md):
           "working_dir": "/path/in/c",     # optional
           "health_check": "...",           # optional
           "startup_timeout_seconds": 30,   # optional
-          "env": { "K": "V", ... }         # optional
+          "env": { "K": "V", ... },        # optional
+          "platforms": ["discord", ...]    # optional (Stage 8 / agent harnesses)
         },
         ...
       }
@@ -68,6 +69,14 @@ def _validate_spec(name: str, spec: dict) -> None:
     # env must be a dict if present
     if "env" in spec and not isinstance(spec["env"], dict):
         raise HarnessConfigError(f"harness {name!r}: env must be an object")
+
+    # platforms (D-89, agent harnesses) must be a list of strings if present
+    if "platforms" in spec:
+        plats = spec["platforms"]
+        if not isinstance(plats, list) or not all(isinstance(p, str) for p in plats):
+            raise HarnessConfigError(
+                f"harness {name!r}: platforms must be a list of strings"
+            )
 
 
 def load_harnesses(path: Path | None = None) -> dict[str, dict]:
