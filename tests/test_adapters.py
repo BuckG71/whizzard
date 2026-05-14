@@ -77,6 +77,13 @@ def test_generic_active_capabilities_is_empty():
     assert GenericShellAdapter().active_capabilities() == []
 
 
+def test_generic_preflight_always_ok():
+    result = GenericShellAdapter().preflight()
+    assert result.ok is True
+    assert result.reason == ""
+    assert result.cleanup_note == ""
+
+
 def test_build_adapter_returns_generic_for_shell_type():
     adapter = build_adapter("test", {"type": "shell", "start_command": "/bin/bash"})
     assert isinstance(adapter, GenericShellAdapter)
