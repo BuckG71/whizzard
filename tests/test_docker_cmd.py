@@ -171,3 +171,56 @@ def test_argv_includes_harness_label():
 def test_argv_default_harness_label_is_generic():
     argv = build_run_argv(get_profile("default"))
     assert "whizzard.harness=generic" in " ".join(argv)
+
+
+# --- Stage 9: MCP mounts when the adapter opts in ----------------------
+
+
+def test_argv_no_mcp_mounts_for_generic_adapter(tmp_path, monkeypatch):
+    # GenericShellAdapter.mcp_env returns {} — no MCP mounts should appear.
+    monkeypatch.setenv("WHIZZARD_HOME", str(tmp_path))
+    argv = build_run_argv(get_profile("default"), session_id="sess-1")
+    joined = " ".join(argv)
+    assert "/run/whiz" not in joined
+
+
+def test_argv_no_mcp_mounts_when_session_id_absent(tmp_path, monkeypatch):
+    # Even with an MCP-capable adapter, without session_id no mounts go in.
+    from whizzard.adapters import HermesAdapter
+    monkeypatch.setenv("WHIZZARD_HOME", str(tmp_path))
+    argv = build_run_argv(get_profile("default"), adapter=HermesAdapter())
+    joined = " ".join(argv)
+    assert "/run/whiz" not in joined
+
+
+def test_argv_includes_mcp_mounts_for_hermes_with_session_id(tmp_path, monkeypatch):
+    from whizzard.adapters import HermesAdapter
+    # Use a fresh WHIZZARD_HOME so the test doesn't write into the user's
+    # real ~/.whizzard. Reload modules that captured the env at import time.
+    import importlib
+    import whizzard.config
+    import whizzard.snapshot
+    import whizzard.session_log
+    import whizzard.docker_cmd
+    monkeypatch.setenv("WHIZZARD_HOME", str(tmp_path))
+    importlib.reload(whizzard.config)
+    importlib.reload(whizzard.snapshot)
+    importlib.reload(whizzard.session_log)
+    importlib.reload(whizzard.docker_cmd)
+    from whizzard.docker_cmd import build_run_argv as build_run_argv_reloaded
+
+    argv = build_run_argv_reloaded(
+        get_profile("default"),
+        adapter=HermesAdapter(),
+        session_id="sess-mcp-1",
+    )
+    joined = " ".join(argv)
+
+    # Per-session dir mounted at /run/whiz (rw)
+    assert "/run/whiz:rw" in joined
+    assert "sess-mcp-1" in joined  # session dir path contains session_id
+    # Audit log mounted at /run/whiz/audit.jsonl (ro)
+    assert "/run/whiz/audit.jsonl:ro" in joined
+    # MCP env vars present
+    assert "WHIZ_SNAPSHOT_PATH=/run/whiz/snapshot.json" in joined
+    assert "WHIZ_SESSION_ID=sess-mcp-1" in joined

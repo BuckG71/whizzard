@@ -50,6 +50,7 @@ from whizzard.mounts import (
 )
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
 from whizzard.session_log import SESSIONS_LOG, new_session_id
+from whizzard.snapshot import write_snapshot
 
 
 app = typer.Typer(
@@ -227,6 +228,18 @@ def run_cmd(
             f"build it with: [bold]whizzard image build[/bold]"
         )
         raise typer.Exit(code=125)
+
+    # Stage 9 / D-156: write the per-session state snapshot before launch.
+    # The in-cell MCP server reads this via WHIZ_SNAPSHOT_PATH (set by the
+    # adapter's mcp_env). The same per-session directory holds the agent's
+    # event file, which the cell writes and Whizzard merges into the audit
+    # log at session_end (D-156 event-merge pattern, see docker_cmd).
+    write_snapshot(
+        session_id=session_id,
+        profile=prof,
+        resolved_mounts=resolved,
+        harness_name=adapter.name,
+    )
 
     result = run_shell(
         prof,

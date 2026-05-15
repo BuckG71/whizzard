@@ -18,12 +18,13 @@ from whizzard.adapters import GenericShellAdapter, HarnessAdapter
 from whizzard.config import Profile, STATE_DIR
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
+    SESSIONS_LOG,
     log_session_end,
     log_session_start,
     merge_agent_events,
     new_session_id,
 )
-from whizzard.snapshot import event_log_path
+from whizzard.snapshot import event_log_path, session_dir
 
 
 WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
@@ -139,10 +140,28 @@ def build_run_argv(
     # for deterministic argv (helps tests). mcp_env keys override container_env
     # keys on collision — the MCP wiring is Whizzard's, not the harness's.
     combined_env: dict[str, str] = dict(adapter.container_env())
+    mcp_env: dict[str, str] = {}
     if session_id:
-        combined_env.update(adapter.mcp_env(session_id))
+        mcp_env = adapter.mcp_env(session_id)
+        combined_env.update(mcp_env)
     for k, v in sorted(combined_env.items()):
         argv += ["-e", f"{k}={v}"]
+
+    # Stage 9 / D-156: when the adapter wants MCP, mount the per-session
+    # state directory (snapshot + events) and the host audit log into the
+    # cell so the in-cell MCP server can read/write through the conventional
+    # /run/whiz/ paths declared in mcp_env. Mounts only happen when the
+    # adapter opts in (non-empty mcp_env).
+    if mcp_env and session_id:
+        sess_dir = session_dir(session_id)
+        sess_dir.mkdir(parents=True, exist_ok=True)
+        argv += ["-v", f"{sess_dir}:/run/whiz:rw"]
+        # Touch the audit log so the bind mount has a target file even on
+        # first-ever run. The host writes to it normally; the cell sees a
+        # read-only overlay at /run/whiz/audit.jsonl.
+        SESSIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
+        SESSIONS_LOG.touch(exist_ok=True)
+        argv += ["-v", f"{SESSIONS_LOG}:/run/whiz/audit.jsonl:ro"]
 
     wd = adapter.working_dir()
     if wd:
