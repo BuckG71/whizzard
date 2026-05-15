@@ -20,8 +20,10 @@ from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
     log_session_end,
     log_session_start,
+    merge_agent_events,
     new_session_id,
 )
+from whizzard.snapshot import event_log_path
 
 
 WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
@@ -237,6 +239,15 @@ def run_shell(
             container_id = cidfile.read_text().strip() or None
         finally:
             cidfile.unlink(missing_ok=True)
+
+    # Stage 9 / D-156: merge any agent-emitted events from this session's
+    # event file into the main audit log BEFORE writing session_end. Agent
+    # events are timestamped during the session, so they belong between
+    # session_start and session_end in temporal order.
+    merge_agent_events(
+        session_id=session_id,
+        event_log_path=event_log_path(session_id),
+    )
 
     log_session_end(
         session_id=session_id,

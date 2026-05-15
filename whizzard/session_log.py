@@ -98,3 +98,50 @@ def log_session_end(
         },
         path=path,
     )
+
+
+def merge_agent_events(
+    session_id: str,
+    event_log_path: Path,
+    target_log: Path | None = None,
+) -> int:
+    """Merge agent-emitted events from a per-session file into the audit log.
+
+    Stage 9 (D-156): the in-cell MCP server's `whiz_emit_event` writes
+    agent-authored entries to a per-session ephemeral file. At session_end,
+    Whizzard reads that file and merges entries into the main audit log.
+    Each entry already has `origin: agent` from the cell-side write (per
+    D-12: agent-authored entries are clearly distinguished from
+    Whizzard-authored entries so they're never confused for system events).
+
+    Defensive behavior:
+    - Missing event file → return 0 (the agent may simply not have emitted)
+    - Malformed JSON lines → skipped quietly (the cell may have crashed
+      mid-write)
+    - Entries with wrong session_id → skipped (defensive against any
+      cross-session leakage that shouldn't happen but might)
+    - origin marker enforced — entries without `origin` get `agent` added
+
+    Returns the count of entries merged.
+    """
+    if not event_log_path.exists():
+        return 0
+    merged = 0
+    try:
+        content = event_log_path.read_text()
+    except OSError:
+        return 0
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("session_id") != session_id:
+            continue
+        entry.setdefault("origin", "agent")
+        append_event(entry, path=target_log)
+        merged += 1
+    return merged
