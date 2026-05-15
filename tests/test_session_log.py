@@ -9,6 +9,7 @@ from whizzard.session_log import (
     append_event,
     log_session_end,
     log_session_start,
+    merge_agent_events,
     new_session_id,
 )
 
@@ -183,3 +184,89 @@ def test_start_and_end_appear_in_order(tmp_path: Path):
     assert json.loads(lines[0])["event"] == "session_start"
     assert json.loads(lines[1])["event"] == "session_end"
     assert json.loads(lines[0])["session_id"] == json.loads(lines[1])["session_id"]
+
+
+# --- merge_agent_events (Stage 9 M4) --------------------------------------
+
+
+def test_merge_agent_events_returns_zero_when_file_missing(tmp_path: Path):
+    missing = tmp_path / "no-events.jsonl"
+    target = tmp_path / "audit.jsonl"
+    merged = merge_agent_events("sess-1", missing, target_log=target)
+    assert merged == 0
+    assert not target.exists()  # nothing was written
+
+
+def test_merge_agent_events_appends_entries_to_audit_log(tmp_path: Path):
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        json.dumps({"session_id": "sess-1", "event_type": "ping", "origin": "agent"}) + "\n"
+        + json.dumps({"session_id": "sess-1", "event_type": "pong", "origin": "agent"}) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merged = merge_agent_events("sess-1", event_file, target_log=target)
+
+    assert merged == 2
+    lines = target.read_text().splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["event_type"] == "ping"
+    assert json.loads(lines[1])["event_type"] == "pong"
+
+
+def test_merge_agent_events_skips_wrong_session_id(tmp_path: Path):
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        json.dumps({"session_id": "sess-1", "event_type": "mine", "origin": "agent"}) + "\n"
+        + json.dumps({"session_id": "OTHER", "event_type": "leak", "origin": "agent"}) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merged = merge_agent_events("sess-1", event_file, target_log=target)
+
+    assert merged == 1
+    lines = target.read_text().splitlines()
+    assert json.loads(lines[0])["event_type"] == "mine"
+
+
+def test_merge_agent_events_skips_malformed_lines(tmp_path: Path):
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        json.dumps({"session_id": "sess-1", "event_type": "ok"}) + "\n"
+        + "this is garbage\n"
+        + "\n"  # empty line
+        + json.dumps({"session_id": "sess-1", "event_type": "also-ok"}) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merged = merge_agent_events("sess-1", event_file, target_log=target)
+
+    assert merged == 2
+
+
+def test_merge_agent_events_enforces_origin_marker(tmp_path: Path):
+    """Entries written without `origin` get `agent` added defensively."""
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        # No origin field — should be added on merge
+        json.dumps({"session_id": "sess-1", "event_type": "no-origin"}) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merge_agent_events("sess-1", event_file, target_log=target)
+
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["origin"] == "agent"
+
+
+def test_merge_agent_events_preserves_existing_origin(tmp_path: Path):
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        json.dumps({"session_id": "sess-1", "event_type": "tagged", "origin": "agent"}) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merge_agent_events("sess-1", event_file, target_log=target)
+
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["origin"] == "agent"
