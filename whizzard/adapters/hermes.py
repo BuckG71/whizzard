@@ -21,6 +21,13 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from whizzard.adapters._credentials import (
+    CredentialUnavailableError,
+    OneCLINotInstalledError,
+    OneCLISecretMissingError,
+    SecretFetchResult,
+    fetch_secret,
+)
 from whizzard.adapters.base import (
     HarnessAdapter,
     PreflightResult,
@@ -185,20 +192,12 @@ def create_profile(
     return HermesProfileCreated(path=target, source=source)
 
 
-# --- OneCLI credential plumbing (D-89, D-134) ------------------------------
-
 # Hermes convention (per hermes_research.md L17): each platform's credential
 # is consumed from an env var named `<PLATFORM>_BOT_TOKEN`. OneCLI secret
-# names use the same string — one identifier across both surfaces.
-_ONECLI_TIMEOUT_SECONDS = 30
-
-
-class OneCLINotInstalledError(Exception):
-    """`onecli` is not on PATH. The Hermes adapter requires it for D-134."""
-
-
-class OneCLISecretMissingError(Exception):
-    """OneCLI returned non-zero fetching a secret — usually not-registered."""
+# names use the same string — one identifier across both the OneCLI surface
+# and the container env. Credential fetching itself lives in `_credentials`
+# (Stage 12 generalization) — this module owns only the Hermes-specific
+# platform → env-var-name convention.
 
 
 def _env_var_for_platform(platform: str) -> str:
@@ -240,37 +239,6 @@ def _is_pid_alive(pid: int) -> bool:
         return True
 
 
-def _fetch_secret_via_onecli(name: str) -> str:
-    """Fetch `name` from OneCLI's vault. Raises on missing-binary or non-zero.
-
-    Tests monkeypatch this function (or `subprocess.run`) to avoid invoking
-    a real OneCLI install.
-    """
-    try:
-        result = subprocess.run(
-            ["onecli", "secrets", "get", name],
-            capture_output=True,
-            text=True,
-            timeout=_ONECLI_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except FileNotFoundError as e:
-        raise OneCLINotInstalledError(
-            "`onecli` not found on PATH. The Hermes adapter requires OneCLI "
-            "for credential injection (per D-134). Install OneCLI and retry."
-        ) from e
-
-    if result.returncode != 0:
-        raise OneCLISecretMissingError(
-            f"OneCLI failed to fetch secret {name!r} "
-            f"(exit code {result.returncode}). "
-            f"stderr: {result.stderr.strip() or '(empty)'}. "
-            f"Register via: onecli secrets create {name}"
-        )
-
-    return result.stdout.rstrip("\n")
-
-
 @dataclass
 class HermesAdapter:
     """Adapter for the Hermes agent harness.
@@ -282,6 +250,10 @@ class HermesAdapter:
 
     name: str = "hermes"
     config: dict = field(default_factory=dict)
+    # Records the credential source per platform after `container_env` runs,
+    # so `active_capabilities` can surface which platforms came via OneCLI
+    # vs the host-env fallback (Stage 12, D-134 visibility piece).
+    _credential_sources: dict[str, str] = field(default_factory=dict)
 
     def start_command(self) -> list[str]:
         cmd = self.config.get("start_command")
@@ -293,13 +265,16 @@ class HermesAdapter:
 
     def container_env(self) -> dict[str, str]:
         # Platforms come from `harnesses.json["platforms"]` (D-89 amended).
-        # Each platform's credential is fetched on-demand from OneCLI (D-134)
-        # — no long-lived host env vars. Non-platform `env` from harness
-        # config is passed through alongside.
+        # Each platform's credential is fetched via the shared utility
+        # (Stage 12): OneCLI first, host env as fallback per D-134's
+        # "OneCLI not installed" failure-mode note.
         env: dict[str, str] = {}
+        self._credential_sources.clear()
         for platform in self.config.get("platforms", []) or []:
             var = _env_var_for_platform(platform)
-            env[var] = _fetch_secret_via_onecli(var)
+            result = fetch_secret(var)
+            env[var] = result.value
+            self._credential_sources[platform] = result.source
         extra = self.config.get("env", {}) or {}
         for k, v in extra.items():
             env[str(k)] = str(v)
@@ -394,9 +369,25 @@ class HermesAdapter:
         return None
 
     def active_capabilities(self) -> list[str]:
-        # Skeleton: returns []. A later milestone fills this with the
-        # declared platform list plus the approval-mode warning string (D-90).
-        return []
+        # Surfaces what the cell is about to do: declared platforms plus
+        # the credential-source breakdown when `container_env` has run.
+        # Approval-mode warning per D-90 is added by a later build step
+        # (it requires reading `approvals.mode` from `config.yaml`).
+        caps: list[str] = []
+        platforms = self.config.get("platforms", []) or []
+        if platforms:
+            caps.append(f"platforms: {', '.join(platforms)}")
+        if self._credential_sources:
+            host_env_platforms = [
+                p for p, src in self._credential_sources.items() if src == "host-env"
+            ]
+            if host_env_platforms:
+                caps.append(
+                    "WARNING: credentials for "
+                    f"{', '.join(host_env_platforms)} came from host env "
+                    "(OneCLI fallback per D-134)"
+                )
+        return caps
 
     def preflight(self) -> PreflightResult:
         # D-87: refuse to launch when a live gateway already holds the lock
