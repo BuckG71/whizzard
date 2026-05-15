@@ -13,6 +13,8 @@ The MVP exists to prove that useful autonomous agents can coexist with practical
 
 The MVP is a **personal daily-driver milestone, not the OSS-launch milestone** (D-101). OSS-launch scope is defined separately once MVP is operational.
 
+**Future versions** (per D-155): v1.0 adds a NanoClaw adapter; v2.0 adds a Whizzard-native secure-by-design harness. Other harnesses (OpenClaw, Claude Code, Codex, Cursor, etc.) are community-maintained via the adapter Protocol (D-28) as the open contract. The core-maintained slate is intentionally capped at three.
+
 The MVP is operational when the system can:
 
 **Foundational capabilities (Stages 1–9):**
@@ -175,7 +177,7 @@ Instead:
 Hermes adapter → Whizzard core
 ```
 
-Profile-based isolation: Whizzard mounts a single Hermes profile directory as `HERMES_HOME` rather than mounting individual subdirectories of `~/.hermes`. Credentials inject via env vars; `auth.json` never enters the cell. Wrap-up uses `/quit` via `docker exec`. Five Stage 8 design questions remain open at the time of this writing — see D-86 through D-90.
+Profile-based isolation: Whizzard mounts a single Hermes profile directory as `HERMES_HOME` rather than mounting individual subdirectories of `~/.hermes`. Credentials inject via env vars; `auth.json` never enters the cell. Stage 8 design is resolved (D-86 through D-90 all `active` as of 2026-05-14); see `STAGE_8_BUILD_PLAN.md` for the build-state detail.
 
 ### Stage 9 — Whiz MCP Server (Read-Only Subset)
 
@@ -230,13 +232,24 @@ The Stage 11 deliverable is the skill bundle plus the read-only operations. Muta
 
 No new pip dependencies; the skills shell out to `whizzard`.
 
-### Stage 12 — OneCLI Vault Integration
+### Stage 12 — OneCLI Credential Plumbing (Cross-Adapter Generalization + Fallback)
 
-Goal: real API credentials never enter the container.
+Goal: make OneCLI credential injection a reusable adapter utility, with a clean fallback when OneCLI isn't available.
 
-Mechanism: outbound HTTPS routed through the OneCLI gateway proxy via `HTTPS_PROXY` env var + CA cert mount. Per-agent OneCLI identity. If OneCLI is not installed on the host, fall back to env-var injection with a warning logged to the session record.
+Stage 8 shipped OneCLI integration scoped to the Hermes adapter — the credential-fetch shell-out and per-platform `<PLATFORM>_BOT_TOKEN` injection live in `whizzard/adapters/hermes.py` (per D-89 amended and D-134). Stage 12 generalizes the pieces that aren't Hermes-specific into a shared adapter utility so future adapters (v1.0 NanoClaw, v2.0 Whizzard-native harness, community adapters) can use the same primitives without re-implementing them.
 
-Promoted to MVP from post-v1 backlog based on the NanoClaw research findings (D-91, D-98). Lands here rather than later because credential isolation is the strongest single argument for Whiz's security thesis (D-102 / B).
+Deliverables:
+
+- **Extract `_fetch_secret_via_onecli` and related helpers** from the Hermes adapter into a shared adapter utility module (e.g., `whizzard/adapters/_onecli.py`). Surface stays adapter-private per D-153 — core modules don't reference it — but the utility is shared across adapters.
+- **Env-var fallback path.** When OneCLI isn't installed (or returns no matching secret), fall back to reading the corresponding env var directly from the host with a warning logged to the session record. Per D-134's "OneCLI not installed" failure-mode note.
+- **Pre-launch surfacing.** `active_capabilities()` on each adapter using the utility flags whether credentials came via OneCLI, host env, or neither (the last is an error).
+- **Refactor Hermes adapter** to consume the extracted utility (delete the duplicate code from `adapters/hermes.py`).
+
+**NOT in this stage:** the proxy-based "credentials never enter container" pattern from D-91. That pattern applies to "agent uses external API" use cases (NanoClaw shape — D-91's scope per D-134's clarification), which lands in v1.0 alongside the NanoClaw adapter, not MVP.
+
+The original Stage 12 framing (proxy pattern via `HTTPS_PROXY`) was based on D-91's literal "credentials never enter container" guarantee. D-134 clarified that for gateway-style harnesses — Hermes, the MVP target — OneCLI's role is delivery-mechanism only, not proxy-based interception. The proxy pattern is preserved for v1.0 NanoClaw adoption per D-155's slate.
+
+Promoted to MVP per D-98 (vault is v1-must-have). Lands at this position because credential isolation hygiene — even bounded — is the strongest single argument for Whiz's security thesis (D-102 / B).
 
 ### Stage 13 — Stop+Restart Mechanism + Local TTY Approval Flow
 
