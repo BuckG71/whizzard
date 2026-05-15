@@ -576,3 +576,31 @@ def test_hermes_active_capabilities_no_warning_when_all_onecli(monkeypatch):
     caps = adapter.active_capabilities()
 
     assert not any("WARNING" in c for c in caps)
+
+
+def test_hermes_active_capabilities_mentions_mcp_availability():
+    caps = HermesAdapter().active_capabilities()
+    assert any("MCP" in c and "read-only" in c for c in caps)
+
+
+def test_hermes_mcp_env_returns_in_cell_paths_and_session_id():
+    from whizzard.mcp_server import (
+        ENV_AUDIT_LOG_PATH,
+        ENV_EVENT_LOG_PATH,
+        ENV_SESSION_ID,
+        ENV_SNAPSHOT_PATH,
+    )
+
+    env = HermesAdapter().mcp_env("session-abc-123")
+
+    # Session id must be passed through.
+    assert env[ENV_SESSION_ID] == "session-abc-123"
+    # In-cell paths use the conventional /run/whiz/ location.
+    assert env[ENV_SNAPSHOT_PATH] == "/run/whiz/snapshot.json"
+    assert env[ENV_AUDIT_LOG_PATH] == "/run/whiz/audit.jsonl"
+    assert env[ENV_EVENT_LOG_PATH] == "/run/whiz/events.jsonl"
+    # Exactly these four keys; no leakage.
+    assert set(env.keys()) == {
+        ENV_SNAPSHOT_PATH, ENV_AUDIT_LOG_PATH,
+        ENV_EVENT_LOG_PATH, ENV_SESSION_ID,
+    }

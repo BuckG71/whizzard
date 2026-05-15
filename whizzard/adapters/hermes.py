@@ -34,6 +34,22 @@ from whizzard.adapters.base import (
     WrapUpResult,
     WrapUpStatus,
 )
+from whizzard.mcp_server import (
+    ENV_AUDIT_LOG_PATH,
+    ENV_EVENT_LOG_PATH,
+    ENV_SESSION_ID,
+    ENV_SNAPSHOT_PATH,
+)
+
+
+# In-cell paths where Whizzard mounts per-session state for the MCP server.
+# These are conventional and known by the adapter so it can wire the env
+# vars; the actual `-v` docker mounts that put files at these paths come
+# from core's `docker_cmd` (Stage 9 M5).
+_IN_CELL_WHIZ_DIR = "/run/whiz"
+_IN_CELL_SNAPSHOT_PATH = f"{_IN_CELL_WHIZ_DIR}/snapshot.json"
+_IN_CELL_AUDIT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/audit.jsonl"
+_IN_CELL_EVENT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/events.jsonl"
 
 
 _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
@@ -369,14 +385,19 @@ class HermesAdapter:
         return None
 
     def active_capabilities(self) -> list[str]:
-        # Surfaces what the cell is about to do: declared platforms plus
-        # the credential-source breakdown when `container_env` has run.
-        # Approval-mode warning per D-90 is added by a later build step
-        # (it requires reading `approvals.mode` from `config.yaml`).
+        # Surfaces what the cell is about to do: declared platforms,
+        # credential-source breakdown when `container_env` has run, and
+        # Whiz MCP server availability. Approval-mode warning per D-90 is
+        # added by a later build step (it requires reading `approvals.mode`
+        # from `config.yaml`).
         caps: list[str] = []
         platforms = self.config.get("platforms", []) or []
         if platforms:
             caps.append(f"platforms: {', '.join(platforms)}")
+        caps.append(
+            "Whiz MCP server: read-only tools available "
+            "(whiz_status, whiz_audit_self, whiz_emit_event, whiz_list_presets)"
+        )
         if self._credential_sources:
             host_env_platforms = [
                 p for p, src in self._credential_sources.items() if src == "host-env"
@@ -388,6 +409,20 @@ class HermesAdapter:
                     "(OneCLI fallback per D-134)"
                 )
         return caps
+
+    def mcp_env(self, session_id: str) -> dict[str, str]:
+        # Per D-156: the Whiz MCP server runs in-cell, reading state from
+        # mounted paths and writing agent-emitted events to a per-session
+        # file (merged into the host audit log at session_end). Adapter
+        # tells the cell where to find each path via env vars; core mounts
+        # the host paths into the cell at the conventional /run/whiz/
+        # locations (Stage 9 M5).
+        return {
+            ENV_SNAPSHOT_PATH: _IN_CELL_SNAPSHOT_PATH,
+            ENV_AUDIT_LOG_PATH: _IN_CELL_AUDIT_LOG_PATH,
+            ENV_EVENT_LOG_PATH: _IN_CELL_EVENT_LOG_PATH,
+            ENV_SESSION_ID: session_id,
+        }
 
     def preflight(self) -> PreflightResult:
         # D-87: refuse to launch when a live gateway already holds the lock

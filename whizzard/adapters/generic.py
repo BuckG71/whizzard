@@ -67,6 +67,10 @@ class GenericShellAdapter:
     def preflight(self) -> PreflightResult:
         return PreflightResult(ok=True)
 
+    def mcp_env(self, session_id: str) -> dict[str, str]:
+        # Generic shell has no agent; no MCP server to configure.
+        return {}
+
 
 # Sanity check the Protocol contract at import time.
 _: HarnessAdapter = GenericShellAdapter()

@@ -132,8 +132,14 @@ def build_run_argv(
         argv += ["-v", mount.docker_volume_arg(mode)]
         argv += ["--label", f"whizzard.mount.{mount.name}={mode}"]
 
-    # Adapter-driven env injection. Sorted for deterministic argv (helps tests).
-    for k, v in sorted(adapter.container_env().items()):
+    # Adapter-driven env injection. Combines harness-config env (`container_env`)
+    # with optional Whiz MCP server env (`mcp_env`) per Stage 9 / D-156. Sorted
+    # for deterministic argv (helps tests). mcp_env keys override container_env
+    # keys on collision — the MCP wiring is Whizzard's, not the harness's.
+    combined_env: dict[str, str] = dict(adapter.container_env())
+    if session_id:
+        combined_env.update(adapter.mcp_env(session_id))
+    for k, v in sorted(combined_env.items()):
         argv += ["-e", f"{k}={v}"]
 
     wd = adapter.working_dir()

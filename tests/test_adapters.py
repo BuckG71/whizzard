@@ -84,6 +84,11 @@ def test_generic_preflight_always_ok():
     assert result.cleanup_note == ""
 
 
+def test_generic_mcp_env_is_empty():
+    # Generic shell has no agent; no MCP server to configure.
+    assert GenericShellAdapter().mcp_env("any-session-id") == {}
+
+
 def test_build_adapter_returns_generic_for_shell_type():
     adapter = build_adapter("test", {"type": "shell", "start_command": "/bin/bash"})
     assert isinstance(adapter, GenericShellAdapter)

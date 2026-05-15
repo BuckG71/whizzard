@@ -126,3 +126,15 @@ class HarnessAdapter(Protocol):
         cleared per D-87).
         """
         ...
+
+    def mcp_env(self, session_id: str) -> dict[str, str]:
+        """Env vars for the in-cell Whiz MCP server (Stage 9, D-156).
+
+        Called by Whizzard core at launch with the session id. Adapters
+        that want the Whiz MCP server running inside their cell return
+        env vars naming the in-cell paths the server reads (snapshot,
+        audit log, event file) plus the session id. Adapters that don't
+        use MCP return an empty dict; core combines this with
+        `container_env()` for the actual `-e` flags.
+        """
+        ...
