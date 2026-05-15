@@ -1,5 +1,36 @@
 # Session Handoff Log
 
+## 2026-05-15T02:35Z — Stage 12 shipped; build plan aligned; ready to start Stage 9 together
+
+### Goal
+Same as prior: ship Stage 8–18 per `docs/MVP_BUILD_PLAN.md`. Today closed several strategic threads and shipped Stage 12 autonomously. Tomorrow opens with Stage 9 (Whiz MCP server, read-only subset) as a paired build.
+
+### Done since prior entry
+- **Build-plan alignment** (commit e6b04db): MVP Definition references D-155 (v1/v2 slate); Stage 8 "open questions" framing replaced; Stage 12 re-scoped from D-91 proxy pattern → cross-adapter OneCLI delivery utility per D-134.
+- **D-155 captured** (b677d5e): core-maintained adapter slate is small and curated — generic + Hermes (MVP), NanoClaw (v1.0), native harness (v2.0); others community-maintained via the Protocol. Supersedes D-35 and D-97.
+- **D-156 captured** (76ffb39): Whiz MCP server runs in-cell with launch-time snapshot, not host-side socket. Stage 9 architecture settled.
+- **Stage 12 shipped** (979aaba): extracted OneCLI plumbing to `whizzard/adapters/_credentials.py`, added env-var fallback per D-134, surfaced credential source in `active_capabilities`. 194 tests pass.
+
+Strategic threads closed today (not new commits — discussion artifacts already in decisions.md): harness-vs-wrapper question (stay wrapper for MVP, native harness at v2.0); maintenance-burden question (cap core slate at 3); NanoClaw-as-MVP-adapter question (no — harder, not easier, despite smaller codebase).
+
+### Active task
+Start Stage 9 together. Per D-156, the architecture is settled: in-cell Python MCP server, launch-time state snapshot, mounted live audit logs, event-file write-back for `whiz_emit_event` (merged into host log at session_end). Four tools: `whiz_status`, `whiz_audit_self`, `whiz_emit_event`, `whiz_list_presets` (stub).
+
+### Tried & rejected this session
+- **Pivoting MVP adapter to NanoClaw**: smaller codebase doesn't translate to easier adapter; host-side router/delivery mismatch with Whizzard containment; Hermes is the user's daily-driver (D-101 alignment). Stuck with Hermes for MVP per D-155.
+- **Forking NanoClaw for a secure-by-design harness**: inherits patterns Whizzard explicitly rejected (D-94, D-95, D-96), language mismatch, threat-model mismatch. Native v2.0 harness inspired by NanoClaw, not forked from it.
+- **Host-side MCP server with Unix socket / port IPC**: new attack surface, per-session authorization complexity, long-lived host daemon Whizzard doesn't currently have. In-cell snapshot per D-156.
+
+### Resume protocol
+1. Read `docs/STAGE_8_BUILD_PLAN.md` for Stage 8 outstanding (M6 manual smoke, M7 packaging — neither blocks Stage 9).
+2. Stage 9 architecture is settled per D-156. Implementation plan to write: probably ~3-4 milestones (scaffold the in-cell MCP server module + snapshot writer + the four tools + Hermes adapter wiring). Comparable scale to Stage 8 but with less design ambiguity.
+3. Stage 9 design pause is *not* required per D-148 (it's not in the named list 10/11/16/17). But the in-cell architecture call was treated as a design point and is now captured.
+4. Bryan said "we will work on stage 9 together tomorrow" — paired build, not autonomous.
+
+Prior entries below are reference only.
+
+---
+
 ## 2026-05-14T20:46Z — DECISIONS.md migrated to flat+tags schema; Stage 8 unchanged
 
 ### Goal
