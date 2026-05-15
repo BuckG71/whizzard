@@ -1,5 +1,39 @@
 # Session Handoff Log
 
+## 2026-05-15T03:05Z — Stage 9 shipped autonomously after the prior handoff
+
+### Goal
+Same as prior: ship Stage 8–18 per `docs/MVP_BUILD_PLAN.md`. Stage 9 (Whiz MCP server, read-only subset) was originally scheduled as a paired build for tomorrow; Bryan opted to keep going and have me ship it autonomously after Stage 12 landed.
+
+### Done since prior entry (Stage 9 autonomous build)
+Five milestones, five commits:
+- **M1 — MCP server module (c6ba14b):** `whizzard/mcp_server.py` with four tool functions. Tools read env vars for paths; `main()` lazily imports the `mcp` SDK so tests don't need it. 13 tests.
+- **M2 — Snapshot writer (4841a2a):** `whizzard/snapshot.py` writes per-session state JSON at launch to `<WHIZZARD_HOME>/sessions/<session_id>/snapshot.json`. 12 tests.
+- **M3 — Adapter wiring (2adc3a0):** Added `mcp_env(session_id)` to the HarnessAdapter Protocol. Generic returns `{}`; Hermes returns four WHIZ_* env vars pointing at conventional in-cell `/run/whiz/` paths. Hermes `active_capabilities` mentions MCP. 3 tests.
+- **M4 — Event-merge (f765572):** `session_log.merge_agent_events` reads per-session event file and appends to audit log with `origin: agent` enforced. Wired into `docker_cmd.run_shell` before `log_session_end`. 6 tests.
+- **M5 — Launch integration (16a30ed):** `cli.py` calls `write_snapshot` before launch. `docker_cmd.build_run_argv` adds the `-v /run/whiz` mounts when `mcp_env` is non-empty + session_id present. `pyproject.toml` adds `mcp>=1.0` as core dep. 3 tests.
+
+Tests: **231 passing** (was 207 at start of Stage 9 — +24 net new). Stage 9 is end-to-end functional on the Whizzard side; the cell-side needs `mcp` in the image and a user-added Hermes `config.yaml` MCP server entry for live verification (documented in `docs/stage_validation.md` Stage 9 section, just added).
+
+### Active task
+**Tomorrow:** paired conversation on what's next. Build-plan-order says Stage 10 (Presets + CLI ergonomics) — which is on the D-148 "design-pause-before-coding" list, so it needs a design conversation first. Options:
+
+1. **Stage 10** — design conversation about which presets to ship, CLI shortcut shape (`whiz r` / `whiz s` / `whiz p` per D-142 A), smart defaults.
+2. **Skip ahead to autonomous-able non-blocked stages** (Stage 12 done; Stage 15 idle timeout, Stage 18 image management still available).
+3. **M6/M7 manual smoke for Stage 8/9** if you want to validate end-to-end before going further.
+
+### Tried & rejected this session
+- See prior entry for the substantive strategic threads (harness vs wrapper, NanoClaw fork, NanoClaw as MVP adapter, host-side MCP). All closed today; nothing new rejected during the autonomous Stage 9 build.
+
+### Resume protocol
+1. Skim the five Stage 9 commits to confirm the shape matches expectations.
+2. Decide on next stage per the three options above (or whatever else).
+3. Stage 9 manual smoke (real Hermes container with `mcp` installed + config.yaml MCP entry) can happen any time the image build is updated.
+
+Prior entries below are reference only.
+
+---
+
 ## 2026-05-15T02:35Z — Stage 12 shipped; build plan aligned; ready to start Stage 9 together
 
 ### Goal
