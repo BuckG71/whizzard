@@ -1,9 +1,10 @@
-"""Hermes adapter tests — Stage 8.
+"""Hermes adapter tests — Stages 8 + 12.
 
-Covers build-plan Actions 1 (skeleton), 2 (active_capabilities Protocol),
-and 3 (container_env with OneCLI-mediated credential injection).
-Subsequent milestones (gateway.lock check, --platforms restriction,
-wrap_up via /quit) add their own coverage.
+Covers Stage 8 build-plan Actions 1–6 (skeleton, Protocol extension,
+container_env, preflight, profile create, wrap_up) plus the Stage 12
+generalization that moved OneCLI plumbing into `_credentials.py`. The
+adapter now consumes `fetch_secret` from the shared utility; tests for
+the utility itself live in `test_credentials_utility.py`.
 """
 
 import json
@@ -14,13 +15,13 @@ from pathlib import Path
 import pytest
 
 from whizzard.adapters import (
+    CredentialUnavailableError,
     HarnessAdapter,
     HermesAdapter,
     HermesProfileExistsError,
     HermesProfileNameError,
     HermesProfileSourceMissingError,
-    OneCLINotInstalledError,
-    OneCLISecretMissingError,
+    SecretFetchResult,
     WrapUpStatus,
     build_adapter,
     create_hermes_profile,
@@ -67,8 +68,8 @@ def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     }
     monkeypatch.setattr(
         hermes_module,
-        "_fetch_secret_via_onecli",
-        lambda name: fake_vault[name],
+        "fetch_secret",
+        lambda name: SecretFetchResult(value=fake_vault[name], source="onecli"),
     )
 
     adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
@@ -80,12 +81,27 @@ def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     }
 
 
-def test_hermes_container_env_passes_through_non_platform_env(monkeypatch):
-    # When `platforms` is absent, OneCLI is not invoked at all.
-    def fail_if_called(name):
-        pytest.fail(f"OneCLI should not be invoked when no platforms declared (got {name!r})")
+def test_hermes_container_env_records_credential_source(monkeypatch):
+    def fake_fetch(name):
+        # discord via OneCLI, slack via host-env (mixed sources)
+        if name == "DISCORD_BOT_TOKEN":
+            return SecretFetchResult(value="d", source="onecli")
+        return SecretFetchResult(value="s", source="host-env")
 
-    monkeypatch.setattr(hermes_module, "_fetch_secret_via_onecli", fail_if_called)
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+    adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
+    adapter.container_env()
+
+    assert adapter._credential_sources == {"discord": "onecli", "slack": "host-env"}
+
+
+def test_hermes_container_env_passes_through_non_platform_env(monkeypatch):
+    # When `platforms` is absent, fetch_secret is not invoked at all.
+    def fail_if_called(name):
+        pytest.fail(f"fetch_secret should not be invoked when no platforms declared (got {name!r})")
+
+    monkeypatch.setattr(hermes_module, "fetch_secret", fail_if_called)
 
     adapter = HermesAdapter(config={"env": {"FOO": "bar", "BAZ": 1}})
     assert adapter.container_env() == {"FOO": "bar", "BAZ": "1"}
@@ -94,8 +110,8 @@ def test_hermes_container_env_passes_through_non_platform_env(monkeypatch):
 def test_hermes_container_env_combines_platforms_and_passthrough_env(monkeypatch):
     monkeypatch.setattr(
         hermes_module,
-        "_fetch_secret_via_onecli",
-        lambda name: f"value-of-{name}",
+        "fetch_secret",
+        lambda name: SecretFetchResult(value=f"value-of-{name}", source="onecli"),
     )
 
     adapter = HermesAdapter(
@@ -112,25 +128,16 @@ def test_hermes_container_env_combines_platforms_and_passthrough_env(monkeypatch
     }
 
 
-def test_hermes_container_env_raises_when_onecli_not_installed(monkeypatch):
+def test_hermes_container_env_propagates_credential_unavailable(monkeypatch):
+    # When neither OneCLI nor host env has the credential, fetch_secret
+    # raises CredentialUnavailableError; the adapter doesn't swallow it.
     def fake_fetch(name):
-        raise OneCLINotInstalledError("onecli not on PATH")
+        raise CredentialUnavailableError(f"no source has {name}")
 
-    monkeypatch.setattr(hermes_module, "_fetch_secret_via_onecli", fake_fetch)
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
 
     adapter = HermesAdapter(config={"platforms": ["discord"]})
-    with pytest.raises(OneCLINotInstalledError):
-        adapter.container_env()
-
-
-def test_hermes_container_env_raises_when_secret_missing(monkeypatch):
-    def fake_fetch(name):
-        raise OneCLISecretMissingError(f"no such secret {name!r}")
-
-    monkeypatch.setattr(hermes_module, "_fetch_secret_via_onecli", fake_fetch)
-
-    adapter = HermesAdapter(config={"platforms": ["discord"]})
-    with pytest.raises(OneCLISecretMissingError):
+    with pytest.raises(CredentialUnavailableError):
         adapter.container_env()
 
 
@@ -139,52 +146,6 @@ def test_env_var_for_platform_uppercases_with_suffix():
     assert hermes_module._env_var_for_platform("discord") == "DISCORD_BOT_TOKEN"
     assert hermes_module._env_var_for_platform("slack") == "SLACK_BOT_TOKEN"
     assert hermes_module._env_var_for_platform("telegram") == "TELEGRAM_BOT_TOKEN"
-
-
-def test_fetch_secret_calls_onecli_with_expected_argv(monkeypatch):
-    captured = {}
-
-    class _Result:
-        returncode = 0
-        stdout = "the-secret-value\n"
-        stderr = ""
-
-    def fake_run(argv, **kwargs):
-        captured["argv"] = argv
-        captured["kwargs"] = kwargs
-        return _Result()
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    secret = hermes_module._fetch_secret_via_onecli("DISCORD_BOT_TOKEN")
-
-    assert captured["argv"] == ["onecli", "secrets", "get", "DISCORD_BOT_TOKEN"]
-    assert captured["kwargs"]["timeout"] == hermes_module._ONECLI_TIMEOUT_SECONDS
-    assert captured["kwargs"]["capture_output"] is True
-    assert captured["kwargs"]["text"] is True
-    assert secret == "the-secret-value"
-
-
-def test_fetch_secret_raises_onecli_not_installed_on_filenotfound(monkeypatch):
-    def fake_run(argv, **kwargs):
-        raise FileNotFoundError("[Errno 2] No such file or directory: 'onecli'")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    with pytest.raises(OneCLINotInstalledError, match="onecli"):
-        hermes_module._fetch_secret_via_onecli("DISCORD_BOT_TOKEN")
-
-
-def test_fetch_secret_raises_secret_missing_on_nonzero_return(monkeypatch):
-    class _Result:
-        returncode = 1
-        stdout = ""
-        stderr = "secret not found in vault"
-
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _Result())
-
-    with pytest.raises(OneCLISecretMissingError, match="DISCORD_BOT_TOKEN"):
-        hermes_module._fetch_secret_via_onecli("DISCORD_BOT_TOKEN")
 
 
 # --- preflight / gateway.lock concurrency guard (D-87, Milestone 4) ---
@@ -574,7 +535,44 @@ def test_hermes_health_check_is_none():
 
 
 def test_hermes_active_capabilities_returns_list_of_strings():
-    # Skeleton: empty. Action 3 populates from config.yaml + approval mode.
     caps = HermesAdapter().active_capabilities()
     assert isinstance(caps, list)
     assert all(isinstance(c, str) for c in caps)
+
+
+def test_hermes_active_capabilities_surfaces_declared_platforms():
+    adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
+    caps = adapter.active_capabilities()
+    assert any("discord" in c and "slack" in c for c in caps)
+
+
+def test_hermes_active_capabilities_warns_when_host_env_fallback_used(monkeypatch):
+    # Mixed sources: discord via OneCLI, slack via host-env → warning lists slack.
+    def fake_fetch(name):
+        if name == "DISCORD_BOT_TOKEN":
+            return SecretFetchResult(value="d", source="onecli")
+        return SecretFetchResult(value="s", source="host-env")
+
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+    adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
+    adapter.container_env()  # populates _credential_sources
+    caps = adapter.active_capabilities()
+
+    assert any("WARNING" in c and "slack" in c for c in caps)
+    # discord came from OneCLI — should NOT appear in the warning.
+    assert not any("WARNING" in c and "discord" in c for c in caps)
+
+
+def test_hermes_active_capabilities_no_warning_when_all_onecli(monkeypatch):
+    monkeypatch.setattr(
+        hermes_module,
+        "fetch_secret",
+        lambda name: SecretFetchResult(value="x", source="onecli"),
+    )
+
+    adapter = HermesAdapter(config={"platforms": ["discord"]})
+    adapter.container_env()
+    caps = adapter.active_capabilities()
+
+    assert not any("WARNING" in c for c in caps)
