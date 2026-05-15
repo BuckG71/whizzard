@@ -1083,6 +1083,90 @@ whizzard run --harness <hermes-harness-name>
 
 ---
 
-## Stage 9 — Image Management
+## Stage 9 — Whiz MCP Server (Read-Only Subset)
 
-*(To be added once Stage 9 lands.)*
+Stage 9 ships an in-cell MCP server that exposes four read-only tools to
+the contained agent for introspection of Whizzard-imposed constraints
+(D-25, D-156). Architecture: in-cell Python child process, launch-time
+state snapshot, mounted live audit log, event-file write-back merged into
+the host log at session_end.
+
+### Unit-test-validated milestones (run `pytest tests/`)
+
+- [ ] M1: `whizzard/mcp_server.py` exists with four tool functions:
+  `tool_whiz_status`, `tool_whiz_audit_self`, `tool_whiz_emit_event`,
+  `tool_whiz_list_presets`. Tools read env vars (`WHIZ_SNAPSHOT_PATH`,
+  `WHIZ_AUDIT_LOG_PATH`, `WHIZ_EVENT_LOG_PATH`, `WHIZ_SESSION_ID`) for
+  paths. `main()` lazily imports the `mcp` SDK so tests don't need it.
+  (`test_mcp_server.py`)
+- [ ] M2: `whizzard/snapshot.py` writes per-session state to
+  `<WHIZZARD_HOME>/sessions/<session_id>/snapshot.json` at launch.
+  Snapshot includes session_id, profile, mounts, harness, timestamp.
+  Helper functions for `session_dir`, `snapshot_path`, `event_log_path`.
+  (`test_snapshot.py`)
+- [ ] M3: Adapter Protocol has `mcp_env(session_id) -> dict[str, str]`.
+  Generic shell returns `{}`. Hermes returns the four WHIZ_* env vars
+  pointing at the conventional in-cell `/run/whiz/` paths. Hermes's
+  `active_capabilities` mentions MCP availability. (`test_adapters.py`,
+  `test_hermes_adapter.py`)
+- [ ] M4: `session_log.merge_agent_events(session_id, event_log_path,
+  target_log)` reads the per-session event file and appends entries to
+  the audit log. Defensive: missing-file returns 0, wrong session_id
+  skipped, malformed lines skipped, `origin: agent` marker enforced.
+  Called from `docker_cmd.run_shell` before `log_session_end`.
+  (`test_session_log.py`)
+- [ ] M5: `whizzard/cli.py` calls `write_snapshot` before launch.
+  `docker_cmd.build_run_argv` adds `-v <host_session_dir>:/run/whiz:rw`
+  and `-v <audit_log>:/run/whiz/audit.jsonl:ro` only when adapter's
+  `mcp_env` is non-empty and `session_id` is present. `pyproject.toml`
+  declares `mcp>=1.0` as a core dep. (`test_docker_cmd.py`)
+
+### Manual end-to-end smoke (requires built image + Hermes + mcp SDK in cell)
+
+These steps prove the MCP server actually serves the agent inside the
+cell. They are NOT part of the automated suite.
+
+Prerequisites:
+- Whizzard execution image has `mcp` SDK installed (add to `docker/Dockerfile`).
+- Hermes is configured with the Whiz MCP server entry. Per D-156, the
+  user adds an entry to their Hermes profile's `config.yaml` pointing
+  Hermes's MCP client at the in-cell Whiz server (auto-wiring is a
+  follow-up):
+
+```yaml
+# In <HERMES_HOME>/config.yaml
+mcp_servers:
+  whiz:
+    command: ["python", "-m", "whizzard.mcp_server"]
+```
+
+Steps:
+
+```sh
+# Launch a Hermes session with MCP wiring active
+whizzard run --harness <hermes-harness-name>
+
+# Inside the agent's session, the agent should be able to call:
+#   whiz_status — returns the cell's profile, mounts, harness, session id
+#   whiz_audit_self — returns this session's audit-log entries
+#   whiz_emit_event(event_type, detail) — agent records a note
+#   whiz_list_presets — returns empty list (Stage 10 dependency)
+
+# After session exits, check that agent-emitted events are merged
+# into the host audit log with `origin: agent`:
+cat ~/.whizzard/logs/sessions.jsonl | grep '"origin":"agent"'
+```
+
+### Outstanding for full closeout
+
+- [ ] Docker image build: install `mcp` in the cell image (probably part
+  of Stage 18 image management when the Dockerfile gets its full overhaul).
+- [ ] Auto-wire Hermes's `config.yaml` MCP server entry (currently
+  manual). Could be a `whiz hermes profile create` flag or a separate
+  command.
+
+---
+
+## Stage 18 — Image Management
+
+*(To be added once Stage 18 lands. This section previously sat at "Stage 9 — Image Management" before the renumbering per D-76 → D-143, which moved image management from Stage 9 to Stage 11 to Stage 18.)*
