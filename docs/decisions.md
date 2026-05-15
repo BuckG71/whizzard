@@ -2238,6 +2238,33 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 - Naming for the native harness needs to be settled before v2.0 implementation to avoid product-name overloading.
 - The three-harness cap reflects current maintenance capacity; the slate can grow if overhead proves manageable in practice (additional contributors, mature upstream-change automation per D-154, or community-adapter learnings that surface a high-value harness worth core-team adoption).
 
+### D-156: Whiz MCP server runs in-cell with launch-time snapshot
+
+**Type:** architecture
+
+**Door Type:** two-way for Stage 9 (the in-cell MCP server is structurally separable — the agent's MCP-client config can be redirected to a host-side socket later if pressure shifts), but becomes effectively one-way once Stage 13/14 mutating tools layer on the event-file request channel and downstream adapters wire to it.
+
+**Decision:** The Whiz MCP server runs as a Python child process inside the execution cell. At cell launch, Whizzard writes a state snapshot — profile, mounts, network policy, expiry, harness, session_id — into a mounted location the cell reads. The MCP server serves Stage 9 read-only tools from this snapshot plus mounted live-appended audit logs. `whiz_emit_event` writes to a per-session ephemeral event file inside the cell; Whizzard's termination flow merges those events into the host-side audit log on session_end. Future Stage 13/14 mutating tools (`whiz_request_mount`, `whiz_request_extend`) use the same event-file pattern: the agent writes a "request" event to a known path, Whizzard host-side reads it (inotify or short-interval polling) and processes; responses flow back as events the agent sees.
+
+**Rejected: host-side MCP server with cell connecting via Unix socket or localhost port.** Reasons:
+
+- New host-cell IPC surface adds attack surface and lifecycle complexity (socket-file management, permissions, cross-platform fragility — Unix sockets work clean on Linux/macOS but not Windows).
+- Per-session authorization required to prevent cross-session state leakage; the in-cell snapshot model gets this isolation for free, structurally.
+- Long-lived host daemon adds host-side state Whizzard doesn't currently have (Whizzard is CLI-driven; introducing a daemon is a larger lift than the value justifies here).
+- Live host-side state can leak information across sessions if not carefully scoped; the snapshot model is naturally per-session.
+- Doesn't buy advantages that matter for Stage 9's read-only tool set — snapshot semantics are *correct*, not limiting (the cell IS what was launched).
+
+**Rationale:** The in-cell model aligns with D-21 (host = control plane, container = execution plane) — the MCP server is just another in-cell tool, not a new control-plane component. Architecturally simpler, avoids cross-platform IPC complexity, gets per-session state isolation structurally rather than through authorization logic. The "live state" advantage of the host-side model doesn't translate into actual Stage 9 benefits: `whiz_status` returning launch-time state is correct; `whiz_audit_self` reads from a mounted live-appended log without IPC; `whiz_emit_event` event-merging at session_end is fine for non-time-critical agent reflections. The Stage 13/14 extensibility concern has a clean in-cell-compatible answer in the event-file request channel pattern, which scales to mutating tools without rewriting Stage 9.
+
+**Source:** conversation 2026-05-14 (Stage 9 pre-implementation design discussion, post-build-plan alignment).
+
+**Status:** active
+
+**Notes:**
+- Per D-153, the MCP-server implementation lives in adapter-or-utility space, not Whizzard core. The Hermes adapter owns the wiring to point Hermes's MCP-client config at the in-cell server. Generic shell adapter doesn't use the MCP server (no agent).
+- The in-cell server is structurally separable. If future pressure (e.g., Stage 14 mutating tools requiring synchronous host responses that the event-file channel can't deliver cleanly) makes host-side MCP attractive, the agent's MCP-client config changes; the rest of the design holds.
+- Image bloat is marginal — Python is already in the execution image (Hermes is Python). MCP SDK is small.
+
 ---
 
 ## Open / unresolved
