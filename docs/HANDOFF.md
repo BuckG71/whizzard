@@ -1,5 +1,56 @@
 # Session Handoff Log
 
+## 2026-05-15T03:39Z — Stage 8 HERMES_HOME gap identified; M6 inserted; manual smoke blocked on it
+
+### Goal
+Same as prior: ship Stage 8–18 per `docs/MVP_BUILD_PLAN.md`. Stage 8 + Stage 9 + Stage 12 are shipped (code); Stage 8's manual smoke is blocked on a newly-identified wiring gap that needs to land before end-to-end validation is meaningful.
+
+### What surfaced this session
+- Bryan asked whether state and memory persist across cell terminations when the cell uses a cloned Hermes profile.
+- The design answer is yes (D-79: HERMES_HOME bind mount → host-side persistence). The *implementation* answer is no: the current Stage 8 Hermes adapter has `hermes_home` in its config (used host-side for the D-87 gateway.lock pre-check) but **never mounts that path into the cell or sets `HERMES_HOME` in the cell's env**. Without that wiring, the cell's Hermes process has no profile to attach to — memories, state.db, skills, sessions would all be ephemeral with the container.
+- Concretely: this is the gap that prevents the M6 manual-smoke from being runnable, and would have been caught the moment anyone tried to launch end-to-end with a real container. Unit tests don't catch it because they mock the docker invocation.
+
+### Done this session
+- **`docs/STAGE_8_BUILD_PLAN.md` updated** — inserted new **M6: HERMES_HOME mount + env-var wiring (D-79)** as outstanding work. Renumbered old M6 → M7 (manual interactive smoke, now blocked on the new M6) and old M7 → M8 (packaging closeout). Updated "Next 3 actions" to be the three concrete sub-pieces of M6. Updated "Where to resume" to reflect the new state.
+
+### Active task
+**Land Stage 8 M6 (HERMES_HOME mount + env-var wiring).** Three sub-pieces, autonomous-able:
+1. Extend `HarnessAdapter` Protocol with `container_mounts() -> list[ContainerMount]`; implement on `GenericShellAdapter` (returns `[]`) and `HermesAdapter` (returns the HERMES_HOME mount). Extend `HermesAdapter.container_env` to set `HERMES_HOME=<in-cell-path>`. Unit tests.
+2. Wire `docker_cmd.build_run_argv` to call `adapter.container_mounts()` and emit `-v` flags. Unit tests.
+3. Wire D-56's scoped UID parity for the HERMES_HOME mount (write-through for self-improvement). Currently a captured design decision without code.
+
+After M6 ships, M7 manual smoke becomes runnable for the first time.
+
+### Outstanding items carried from prior handoffs
+From 2026-05-15T03:05Z (Stage 9 autonomous build):
+- **Stage 9 manual smoke** — requires `mcp` SDK in execution image + user-added Whiz MCP server entry in Hermes profile's `config.yaml`. Documented in `docs/stage_validation.md` Stage 9 section. Now also blocked on Stage 8 M6 (since the cell needs HERMES_HOME wired before any end-to-end run works).
+- **Stage 9 auto-wiring** of the Hermes `config.yaml` MCP server entry (currently manual) — small follow-up; could be a `whiz hermes profile create` flag or a separate command.
+
+From 2026-05-15T02:35Z (Stage 12 + alignment):
+- **Stage 8 M8 (was M7): packaging closeout** — `pyproject.toml` `[project.optional-dependencies] hermes = [...]` needs the Hermes Python distribution shape. Bryan's install at `~/.hermes/hermes-agent/` is a directory tree (not pip-installable). Open question what the right pin shape is.
+- **Optional**: `whiz hermes <profile>` launch-surface sugar vs. existing `whiz run --harness <name>`. Either works for the smoke test.
+
+From 2026-05-15T03:05Z (next-stage options):
+- **Stage 10 (Presets + CLI ergonomics)** — D-148 design pause required before coding.
+- **Stage 11 (Claude Code slash commands)** — D-148 design pause required.
+- **Stage 15 (Duration + idle timeout)** — autonomous-able if host-side detection is chosen.
+- **Stage 18 (Image management)** — autonomous-able; deliberately last per D-143 but can land any time.
+
+### Tried & rejected this session
+- **Treat the HERMES_HOME wiring as separately captured / out-of-scope for Stage 8.** It's clearly Stage 8 territory per D-79; inserting as a new M6 rather than punting was the right call.
+- **Renumber milestones to keep M6 as "manual smoke"** — would have obscured the fact that the smoke is gated on the wiring work, and would have buried the new work in unnumbered "outstanding" prose. Explicit renumbering makes the dependency visible.
+
+### Resume protocol
+1. Read the updated `docs/STAGE_8_BUILD_PLAN.md` "Next 3 actions" — they are the three concrete sub-pieces of M6.
+2. M6 is small (~150-300 lines + tests) and autonomous-able. Comparable scale to a single Stage 9 milestone.
+3. After M6 ships, decide whether to attempt M7 manual smoke (requires user setup: build image with `mcp` SDK, add MCP server entry to a Hermes profile's `config.yaml`, register Discord token in OneCLI per D-134 — Bryan already has the last one).
+4. The other outstanding stages (10, 11, 15, 18) are independent of Stage 8 M6 and can come in any order.
+5. `docs/HANDOFF.md` is append-only per D-150. Prior entries are reference only.
+
+Prior entries below are reference only.
+
+---
+
 ## 2026-05-15T03:05Z — Stage 9 shipped autonomously after the prior handoff
 
 ### Goal
