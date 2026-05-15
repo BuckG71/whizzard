@@ -509,7 +509,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/architecture.md; docs/post_mvp_spec.md §3
 
-**Status:** active
+**Status:** superseded by D-155 (which locks in the core-maintained slate as Hermes at MVP, NanoClaw at v1.0, native harness at v2.0; OpenClaw moves to the community-maintained tier).
 
 ### D-36: MCP gateway adapter is post-v1 backlog
 
@@ -1466,7 +1466,7 @@ All three existing-user migration shapes are first-class supported paths:
 
 **Source:** docs/archive/nanoclaw_research.md (How NanoClaw fits as a harness)
 
-**Status:** active
+**Status:** superseded by D-155 (which commits NanoClaw to v1.0 specifically, rather than vague "post-v1").
 
 ### D-98: OneCLI vault as v1-must-have (promoted from post-MVP backlog)
 
@@ -2213,6 +2213,30 @@ All three existing-user migration shapes are first-class supported paths:
 **Notes:**
 - Implementation is a post-MVP / OSS-launch concern; this decision frames the policy now so MVP code is structured to enable it later — adapter tests should be organized into smoke / unit / integration tiers, and `pyproject.toml` should declare version ranges per adapter from the start.
 - Related to D-131 (OSS-launch milestone scope); this pipeline is one of the operational ingredients OSS launch requires.
+
+### D-155: Core-maintained adapter slate is small and curated; native harness lands at v2.0
+
+**Type:** scope
+
+**Door Type:** two-way for the slate composition and maintenance policy (both reorganizable); the v2.0 native-harness commitment becomes closer to one-way once that product ships and acquires users.
+
+**Decision:** Whizzard's core-maintained adapter slate is fixed at three harnesses across the project's planned releases:
+- **MVP** ships Whizzard core + the generic shell adapter + the Hermes adapter.
+- **v1.0** adds the NanoClaw adapter (supersedes D-97, which had it as vague "post-v1").
+- **v2.0** adds a Whizzard-native secure-by-design harness (working name "Whizzard Harness"; a proper product name is deferred to closer to v2.0 implementation to avoid overloading "Whizzard" between the wrapper and the harness component).
+
+Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not core-maintained. The adapter Protocol (D-28) is the open contract; third parties can ship adapters as separate packages (e.g., `whizzard-adapter-<name>`) at their own release cadences. The core team supports the three named harnesses; the ecosystem maintains the long tail.
+
+**Rationale:** Wrapper projects scale linearly in upstream-change-detection and adapter-maintenance burden as they expand their supported harness set — the "Linux-distro maintainer trap." Capping the core-maintained slate at three keeps the burden tractable for a solo or small-team project. The choice of slate reflects three different things: Hermes is the user's daily-driver and the Stage 8 work; NanoClaw is the closest peer and pairs well with Whizzard's hardening differential (D-93); the native harness is the secure-by-design hedge against the wrapper-only positioning being long-term unsustainable, and provides a reference implementation of what "secure agent harness" means. The community-adapter path (Protocol-as-contract, third-party packages) preserves cross-harness reach for users who want it, without committing the core team to maintaining adapters for harnesses they don't use. The "not an agent platform" stance (D-16) is preserved — a single native harness sitting alongside the wrapper isn't an agent platform, it's a complementary product.
+
+**Source:** conversation 2026-05-14 (during the maintenance-burden discussion that explored harness-vs-wrapper positioning).
+
+**Status:** active; supersedes D-35 and D-97.
+
+**Notes:**
+- The native harness commitment is deferred to v2.0 deliberately — it doesn't block MVP or v1.0 launches, and gives time for the wrapper position to prove out before adding a second product to the surface.
+- Naming for the native harness needs to be settled before v2.0 implementation to avoid product-name overloading.
+- The three-harness cap reflects current maintenance capacity; the slate can grow if overhead proves manageable in practice (additional contributors, mature upstream-change automation per D-154, or community-adapter learnings that surface a high-value harness worth core-team adoption).
 
 ---
 
