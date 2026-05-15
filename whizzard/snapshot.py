@@ -1,0 +1,93 @@
+"""Per-session state snapshot for the in-cell MCP server (D-156).
+
+Whizzard writes a JSON snapshot of the launch-time session state into a
+per-session directory before container start. The Hermes adapter (and
+future MCP-using adapters) mount that directory into the cell so the
+in-cell MCP server (`whizzard/mcp_server.py`) can read it.
+
+Snapshot layout:
+
+    <WHIZZARD_HOME>/sessions/<session_id>/
+        snapshot.json   ← written here by `write_snapshot`
+        events.jsonl    ← written by the in-cell MCP server as the agent
+                          emits events; merged into the host audit log at
+                          session_end (see `session_log.py`)
+
+Snapshot content is read-only from the cell's perspective; the event file
+is the cell-writable channel back to host. Per D-12, the snapshot does
+*not* include anything that would let the agent influence its own
+permission boundary — only descriptive fields (what is, not what could be).
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from whizzard.config import WHIZZARD_HOME
+from whizzard.mounts import Mount, MountMode
+
+
+SESSIONS_DIR = WHIZZARD_HOME / "sessions"
+
+
+def session_dir(session_id: str, whizzard_home: Path | None = None) -> Path:
+    """Per-session state directory: ``<WHIZZARD_HOME>/sessions/<session_id>``."""
+    base = (whizzard_home or WHIZZARD_HOME) / "sessions"
+    return base / session_id
+
+
+def snapshot_path(session_id: str, whizzard_home: Path | None = None) -> Path:
+    """Path to the JSON snapshot file for a session."""
+    return session_dir(session_id, whizzard_home) / "snapshot.json"
+
+
+def event_log_path(session_id: str, whizzard_home: Path | None = None) -> Path:
+    """Path to the per-session agent-event file the cell writes to."""
+    return session_dir(session_id, whizzard_home) / "events.jsonl"
+
+
+def write_snapshot(
+    session_id: str,
+    profile,
+    resolved_mounts: list[tuple[Mount, MountMode]],
+    harness_name: str,
+    whizzard_home: Path | None = None,
+) -> Path:
+    """Write the launch-time state snapshot for the cell's MCP server.
+
+    Returns the path to the written file. Creates the per-session directory
+    if it doesn't exist. Profile is typed `Any` to avoid a hard import of
+    `whizzard.config.Profile` in this module's signature; the caller passes
+    a `Profile` instance.
+    """
+    directory = session_dir(session_id, whizzard_home)
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / "snapshot.json"
+
+    payload: dict[str, Any] = {
+        "session_id": session_id,
+        "profile": {
+            "name": profile.name,
+            "network_enabled": profile.network_enabled,
+            "duration_seconds": profile.duration_seconds,
+            "allow_broad_mount": profile.allow_broad_mount,
+            "description": profile.description,
+        },
+        "mounts": [
+            {
+                "name": m.name,
+                "host_path": str(m.host_path),
+                "container_path": m.container_path(),
+                "mode": str(mode),
+            }
+            for m, mode in resolved_mounts
+        ],
+        "harness": harness_name,
+        "snapshot_written_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    target.write_text(json.dumps(payload, indent=2))
+    return target
