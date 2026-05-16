@@ -1167,6 +1167,77 @@ cat ~/.whizzard/logs/sessions.jsonl | grep '"origin":"agent"'
 
 ---
 
+## Stage 10 — Presets and CLI Ergonomics
+
+Shipped 2026-05-16 (commits 51a236c, 97a1bc5, 4f1eaf6, fd7014d). Design
+conversation per D-148 resolved four items across 2026-05-15/16:
+preset slate, CLI shortcut shape, smart defaults, preset config schema.
+
+### Unit-test-validated milestones (run `pytest tests/`)
+
+- [ ] **#1 hermes preset + default profile change (D-157).** `default`
+  profile's `allow_broad_mount` flips to `true` to support broad-mount
+  presets (D-157 supersedes D-38 on this field). Bundled `claude-projects`
+  and `ai-sandbox` mounts added. (`test_config.py`, `test_mounts.py`)
+- [ ] **#2 preset machinery.** `whizzard/preset_config.py` with
+  `Preset` dataclass, omit-to-inherit override semantics, bundled
+  `_DEFAULT_PRESETS` (`hermes` + `shell`), strict `validate_references()`
+  against profile/harness/mount/platform-ceiling. (`test_preset_config.py`)
+- [ ] **#3 preset CLI subapp.** `whiz preset list | show | init |
+  launch`. Bundled `hermes-cell` harness so `hermes` preset validates
+  out of the box. Preset launch passes `allow_broad_mount=True` to
+  `_perform_launch` as the user's persistent intent declaration; profile
+  gate (first gate per D-46) is the referenced profile's setting.
+  Platforms field on the preset restricts the harness's ceiling
+  (D-89 amended). (`test_preset_cli.py`)
+- [ ] **#4 CLI brevity + smart defaults.** `whiz r/s/p/m/pr` shortcuts.
+  Bare `whiz` → status (rather than help; `whiz --help` is the explicit
+  help path). Bare `whiz r` → launch most-recent preset (parsed from
+  sessions.jsonl `preset` field; `log_session_start` gains the field).
+  `whiz r --profile X` → `whiz run --profile X`. Positional + run-flags
+  mix errors. (`test_cli_brevity_and_status.py`)
+- [ ] **#5 status command + `whiz` script alias.** Active sessions list
+  with running indicator + active-session count + last-10 history table.
+  Harness name extracted from `session_start` argv label. `pyproject.toml`
+  adds `whiz = "whizzard.cli:app"` script entry alongside `whizzard`.
+  (`test_cli_brevity_and_status.py`)
+
+### Manual end-to-end smoke
+
+These verify the launch ergonomics with a real container. Require the
+prerequisites already noted in Stage 8 / Stage 9 (built image, OneCLI,
+HERMES_HOME wiring per the still-outstanding Stage 8 M6).
+
+```sh
+# Initialize bundled config (one-time, if not already done)
+whiz preset init           # writes ~/.whizzard/config/presets.json
+whiz mounts list           # confirm claude-projects + ai-sandbox visible
+whiz pr                    # profiles list — confirm default has allow_broad_mount on
+
+# Daily-driver launch
+whiz r hermes              # or just `whiz r` if hermes was the last preset
+
+# Status check
+whiz                       # bare: status output
+whiz s                     # alias: same
+
+# Inspect a preset
+whiz p hermes              # show details
+whiz p                     # list all
+```
+
+### Outstanding for full closeout
+
+- [ ] **Stage 10 launch validates end-to-end only after Stage 8 M6 lands**
+  (HERMES_HOME mount + env-var wiring per the prior handoff entry). Until
+  M6, `whiz r hermes` will launch a container but Hermes inside won't have
+  its profile mounted.
+- [ ] Personal-config path: user updates `~/.whizzard/config/profiles.json`
+  to pick up D-157's `allow_broad_mount: true` on `default` (either by
+  manual edit or `whiz profiles init --force`).
+
+---
+
 ## Stage 18 — Image Management
 
 *(To be added once Stage 18 lands. This section previously sat at "Stage 9 — Image Management" before the renumbering per D-76 → D-143, which moved image management from Stage 9 to Stage 11 to Stage 18.)*

@@ -191,26 +191,41 @@ Tools shipped at this stage (cooperation layer, all read-only):
 
 The MCP server is a first-class part of the design (D-25). Mutate-side tools come at Stage 13.
 
-### Stage 10 — Presets and CLI Ergonomics
+### Stage 10 — Presets and CLI Ergonomics [SHIPPED 2026-05-16]
 
 Goal: deliver the day-1 OSS value-prop "switch between named, scoped agent contexts" (the **D** half of D-102's B+D combination), with low-friction CLI ergonomics so common operations require minimal typing.
 
-Deliverables:
+Design conversation per D-148 ran 2026-05-15/16 resolving four items: bundled preset slate, CLI shortcut shape, smart defaults, and preset config schema. See `decisions.md` D-157 for the default-profile change that fell out (allow_broad_mount flipped to true for Bryan's daily-driver setup).
 
-**Presets** — named bundles of profile + harness + mounts + duration + env vars + (optionally) idle timeout:
+Shipped (commits 51a236c, 97a1bc5, 4f1eaf6, fd7014d):
 
+**Presets** — `whizzard/preset_config.py`. Schema-versioned JSON at `~/.whizzard/config/presets.json`. Omit-to-inherit semantics for profile-field overrides (duration_seconds, idle_timeout_seconds, allow_broad_mount). Bundled defaults: `hermes` (Bryan's daily driver) and `shell` (contained scratch). Strict load-time reference validation against profiles / harnesses / mounts / harness platform ceilings.
+
+**Preset CLI subapp** (`whiz preset list | show | init | launch`):
 ```zsh
-whizzard preset launch coding-session
+whiz preset launch hermes
+whiz preset list
+whiz preset show hermes
+whiz preset init [--force]
 ```
 
-Preset config format and example presets per [post_mvp_spec.md §7](post_mvp_spec.md). Promoted from post-MVP per D-103.
-
 **CLI brevity** (D-142 A):
-- Short binary alias: `whiz` alongside `whizzard`
-- Subcommand shortcuts: `whiz r` → `whiz run`, `whiz s` → `whiz sessions tail`, `whiz p` → `whiz preset launch`
-- Smart defaults: `whiz r` with no args = launch the most recently used preset
+- `whiz` binary alias alongside `whizzard` (pyproject.toml [project.scripts]).
+- Shortcuts: `whiz r`, `whiz s`, `whiz p`, `whiz m`, `whiz pr` — preset launch / status / preset list-or-show / mounts list / profiles list.
 
-Pure UX work; no architectural lift.
+**Smart defaults**:
+- Bare `whiz` → status (rather than help; `whiz --help` is the explicit help path).
+- Bare `whiz r` → launch most-recent preset (parsed from sessions.jsonl `preset` field; entry added to log_session_start for this purpose).
+- `whiz r <preset>` → preset launch (with `--image` and `--dry-run` honored).
+- `whiz r --profile X ...` → equivalent to `whiz run --profile X ...`.
+- Mixing positional preset + run-style flags errors with a clear message.
+- `whiz p <name>` → preset show; `whiz p` bare → preset list.
+
+**Status command** (`whiz status`): active sessions list with running indicator + active-session count. Recent history table (last 10 starts). Empty-log fallback.
+
+32 net new tests; 291 tests pass total.
+
+Bundled defaults reflect MVP user's setup (D-101 personal-use threshold). OSS-launch will revisit per the same pattern as D-157.
 
 ### Stage 11 — Host-side Claude Code Slash Commands
 

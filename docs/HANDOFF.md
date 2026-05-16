@@ -1,5 +1,62 @@
 # Session Handoff Log
 
+## 2026-05-16T14:03Z — Stage 10 shipped; D-157 default-profile change; outstanding items carried forward
+
+### Goal
+Same as prior: ship Stage 8–18 per `docs/mvp_build_plan.md`. Stage 10 (Presets + CLI Ergonomics) shipped today; the next stages whose autonomous execution is blocked by D-148 are 11 (Claude Code slash commands), 16, 17 (Discord). Stage 13/14/15/18 remain autonomous-able.
+
+### Done this session
+- **Stage 10 design conversation** (per D-148): four items resolved with Bryan — preset slate, CLI brevity shape, smart defaults, preset config schema.
+- **D-157 captured + applied** (commit 51a236c). Default profile's `allow_broad_mount` flipped from `false` to `true` (supersedes D-38 on that field). Bryan acknowledged the OSS-launch revisit implication.
+- **Stage 10 #2 shipped** (commit 97a1bc5). `whizzard/preset_config.py` with `Preset` dataclass + omit-to-inherit overrides + bundled `_DEFAULT_PRESETS` (`hermes`, `shell`) + strict `validate_references`. Bundled mount defaults (`claude-projects`, `ai-sandbox`) added to `mounts.py`. 27 new tests.
+- **Stage 10 #3 shipped** (commit 4f1eaf6). `whiz preset list | show | init | launch` subcommands. Bundled `hermes-cell` harness added to `_DEFAULT_HARNESSES` so the bundled `hermes` preset validates. `_perform_launch` extracted from `run_cmd` as shared launch core. 14 new tests.
+- **Stage 10 #4 + #5 shipped** (commit fd7014d). `whiz status` command (active sessions list + count + last-10 history). Bare `whiz` → status (rather than help). Brevity shortcuts `r`, `s`, `p`, `m`, `pr` with smart dispatch on `whiz r`. `log_session_start` gains `preset` field so bare `whiz r` can find the most recent preset. `pyproject.toml` adds `whiz` script alias. 18 new tests.
+- **Build plan + validation docs updated** to mark Stage 10 shipped and document the manual smoke steps (which are blocked on Stage 8 M6 until that lands).
+
+Tests: **291 passing** (was 259 pre-Stage-10 — +32 net new).
+
+### Active task
+**Tomorrow's decision:** pick the next stage. Options:
+
+1. **Stage 8 M6 (HERMES_HOME mount + env-var wiring).** Still the highest-priority unblock for end-to-end validation — blocks Stage 8 M7 manual smoke AND Stage 10's `whiz r hermes` end-to-end smoke AND Stage 9's MCP server actually being useful. Autonomous-able, well-defined (~150-300 lines + tests). See `STAGE_8_BUILD_PLAN.md` "Next 3 actions" for the three concrete sub-pieces.
+2. **Stage 13 (Stop+restart mechanism + local TTY approval).** Autonomous-doable for the mechanism; TTY approval flow has UX-shape that may benefit from a design pause (not in D-148's explicit list but borderline).
+3. **Stage 15 (Duration + idle timeout enforcement).** Cleanly autonomous-able with host-side detection.
+4. **Stage 18 (Image management).** Cleanly autonomous-able. Per D-143 it's deliberately last for "polish before audit" reasons; landing earlier is fine but doesn't advance OSS-launch closer.
+5. **Stage 11 (Claude Code slash commands)** or **Stage 16/17 (Discord)** — all require D-148 design pauses first.
+
+**My lean:** **Stage 8 M6** is the single highest-leverage next move. It unblocks three different downstream things (M7 smoke, Stage 9 validation, Stage 10 hermes preset end-to-end). Until it lands, the daily-driver `whiz r hermes` won't actually persist Hermes state across launches.
+
+### Tried & rejected this session
+- **Modifying default profile in place vs. capturing as new decision.** Captured as D-157 (supersedes D-38 on the `allow_broad_mount` field) per D-129's append-only convention. D-38's status changed to "partially superseded."
+- **Adding `whiz preset create` guided-create verb at MVP.** Deferred per the "easy to add/modify" goal being met by direct file edit + `whiz preset init` (D-40/D-41 pattern). Add post-MVP if friction surfaces.
+- **Tuple-shaped mount entries in presets `(name, mode)`.** Dropped in favor of flat list of names. Per-launch mode override goes through the existing `--mount name:mode` CLI flag (Stage 2 mechanism). Cleaner schema.
+- **Strict profile-name + run-flag mix in `whiz r`.** Rejected; explicit error message instead so users learn the two paths cleanly.
+
+### Outstanding items carried from prior handoffs
+
+From 2026-05-15T03:39Z (Stage 8 M6 gap):
+- **Stage 8 M6 — HERMES_HOME mount + env-var wiring.** Newly identified gap; the Hermes adapter has `hermes_home` in its config (used host-side for D-87 gateway.lock pre-check) but never mounts the path into the cell or sets `HERMES_HOME` in the cell's env. Three sub-pieces in `STAGE_8_BUILD_PLAN.md` "Next 3 actions" — Protocol extension with `container_mounts()`, `docker_cmd` consumption, D-56 scoped UID parity wiring.
+- **Stage 8 M7 — manual interactive smoke.** Blocked on M6.
+- **Stage 8 M8 — packaging closeout.** `pyproject.toml [project.optional-dependencies] hermes = [...]` needs Hermes distribution shape (Bryan's install is a directory tree, not pip-installable; open question what the right pin is).
+
+From 2026-05-15T03:05Z (Stage 9 autonomous build):
+- **Stage 9 manual smoke.** Requires `mcp` SDK in execution image + user-added Whiz MCP server entry in Hermes profile's `config.yaml`. Now also blocked on Stage 8 M6.
+- **Stage 9 auto-wiring** of the Hermes `config.yaml` MCP server entry (currently manual). Small follow-up.
+
+New from this session:
+- **D-157 user-config drift.** Bryan's personal `~/.whizzard/config/profiles.json` still has the old `default` shape with `allow_broad_mount: false`. He'll need to update (manual edit or `whiz profiles init --force`) to pick up the new bundled default for his actual daily use. Code is in shape; user state needs sync.
+
+### Resume protocol
+1. Skim today's commits (51a236c, 97a1bc5, 4f1eaf6, fd7014d) to confirm Stage 10 lands as expected.
+2. Decide next stage per the five options above (Stage 8 M6 is my lean).
+3. If Stage 8 M6: read `STAGE_8_BUILD_PLAN.md` for the three sub-pieces; autonomous-able.
+4. If Stage 13: brief design conversation on TTY approval flow shape before coding.
+5. `docs/HANDOFF.md` is append-only per D-150. Prior entries reference only.
+
+Prior entries below are reference only.
+
+---
+
 ## 2026-05-15T03:39Z — Stage 8 HERMES_HOME gap identified; M6 inserted; manual smoke blocked on it
 
 ### Goal
