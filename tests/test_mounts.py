@@ -9,6 +9,7 @@ from whizzard.mounts import (
     CONTAINER_MOUNT_ROOT,
     Mount,
     MountRegistryError,
+    default_mounts,
     load_mounts,
     resolve_mount_spec,
 )
@@ -40,8 +41,26 @@ def mounts_file(tmp_path: Path) -> Path:
     return file_path
 
 
-def test_load_returns_empty_when_file_absent(tmp_path: Path):
-    assert load_mounts(tmp_path / "missing.json") == {}
+def test_load_returns_bundled_defaults_when_file_absent(tmp_path: Path):
+    """Stage 10 / D-157-pattern: mounts.py now has bundled defaults for fresh
+    installs (claude-projects, ai-sandbox). load_mounts returns them when no
+    user file exists, matching the profiles.py pattern."""
+    registry = load_mounts(tmp_path / "missing.json")
+    assert set(registry.keys()) == {"claude-projects", "ai-sandbox"}
+    assert registry["claude-projects"].default_mode == "rw"
+    assert registry["ai-sandbox"].default_mode == "rw"
+
+
+def test_default_mounts_returns_bundled_set():
+    registry = default_mounts()
+    assert set(registry.keys()) == {"claude-projects", "ai-sandbox"}
+
+
+def test_default_mounts_returns_fresh_dict():
+    a = default_mounts()
+    b = default_mounts()
+    assert a == b
+    assert a is not b
 
 
 def test_load_parses_well_formed_registry(mounts_file: Path):
