@@ -48,6 +48,16 @@ from whizzard.mounts import (
     load_mounts,
     resolve_mount_spec,
 )
+from whizzard.preset_config import (
+    PRESETS_FILE,
+    Preset,
+    PresetConfigError,
+    default_presets,
+    get_preset,
+    list_presets,
+    load_presets,
+    validate_references,
+)
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
 from whizzard.session_log import SESSIONS_LOG, new_session_id
 from whizzard.snapshot import write_snapshot
@@ -64,6 +74,7 @@ image_app = typer.Typer(help="Manage the execution image.")
 mounts_app = typer.Typer(help="Inspect the mount registry.")
 sessions_app = typer.Typer(help="Inspect the session log.")
 harnesses_app = typer.Typer(help="Inspect the harness registry.")
+preset_app = typer.Typer(help="Manage and launch presets (Stage 10).")
 hermes_app = typer.Typer(help="Hermes harness operations (Stage 8).")
 hermes_profile_app = typer.Typer(help="Manage Hermes profiles for use in Whizzard cells.")
 hermes_app.add_typer(hermes_profile_app, name="profile")
@@ -72,6 +83,7 @@ app.add_typer(image_app, name="image")
 app.add_typer(mounts_app, name="mounts")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(harnesses_app, name="harnesses")
+app.add_typer(preset_app, name="preset")
 app.add_typer(hermes_app, name="hermes")
 
 console = Console()
@@ -83,50 +95,27 @@ def _bootstrap() -> None:
     ensure_whizzard_home()
 
 
-@app.command("run")
-def run_cmd(
-    profile: Annotated[
-        str,
-        typer.Option("--profile", "-p", help="Profile name (e.g. default, build)."),
-    ] = "default",
-    mount: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--mount", "-m",
-            help="Registered mount name, optionally with mode "
-                 "(e.g. project-alpha or project-alpha:ro). Repeatable.",
-        ),
-    ] = None,
-    image: Annotated[
-        str,
-        typer.Option("--image", help="Container image to use."),
-    ] = WHIZZARD_IMAGE,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Show what would happen without launching the container.",
-        ),
-    ] = False,
-    allow_broad_mount: Annotated[
-        bool,
-        typer.Option(
-            "--allow-broad-mount",
-            help="Opt in to mounting broad folders / cloud sync / parents of "
-                 "registered mounts. Requires a profile that permits this.",
-        ),
-    ] = False,
-    harness: Annotated[
-        str,
-        typer.Option(
-            "--harness",
-            help="Named harness from harnesses.json (default: generic shell).",
-        ),
-    ] = "generic",
+def _perform_launch(
+    *,
+    profile_name: str,
+    mount_specs: list[str],
+    image: str,
+    dry_run: bool,
+    allow_broad_mount: bool,
+    harness: str,
+    platform_restriction: list[str] | None = None,
 ) -> None:
-    """Launch a contained shell session under the given profile."""
+    """Shared launch core. Called by `run` (CLI flags) and `preset launch`
+    (preset-resolved args). Handles profile / harness / mount resolution,
+    pre-launch banner, dry-run, snapshot, and container start. Errors
+    raise typer.Exit with the appropriate code.
+
+    platform_restriction: optional subset of the harness's declared platforms
+    (per D-89 amended) — when provided, overlays on the harness config dict
+    so the adapter sees the restricted set.
+    """
     try:
-        prof = get_profile(profile)
+        prof = get_profile(profile_name)
     except KeyError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2)
@@ -136,10 +125,14 @@ def run_cmd(
 
     # Resolve the harness adapter from harnesses.json.
     try:
-        harness_cfg = get_harness_config(harness)
+        harness_cfg = dict(get_harness_config(harness))
     except HarnessConfigError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2)
+    if platform_restriction is not None:
+        # D-89 amended: presets restrict the harness's platform ceiling,
+        # never expand. Caller is responsible for validating subset relation.
+        harness_cfg["platforms"] = list(platform_restriction)
     try:
         adapter = build_adapter(harness, harness_cfg)
     except UnknownHarnessTypeError as e:
@@ -148,14 +141,14 @@ def run_cmd(
 
     resolved: list[tuple[Mount, MountMode]] = []
     overrides_used: list[OverrideRecord] = []
-    if mount:
+    if mount_specs:
         try:
             registry = load_mounts()
         except MountRegistryError as e:
             console.print(f"[red]error loading mounts.json: {e}[/red]")
             raise typer.Exit(code=2)
         try:
-            for spec in mount:
+            for spec in mount_specs:
                 m, mode = resolve_mount_spec(spec, registry)
                 # Other registered mounts (excluding the one being checked)
                 # supply the "parent of registered mount" rule context.
@@ -250,6 +243,258 @@ def run_cmd(
         adapter=adapter,
     )
     raise typer.Exit(code=result.exit_code)
+
+
+@app.command("run")
+def run_cmd(
+    profile: Annotated[
+        str,
+        typer.Option("--profile", "-p", help="Profile name (e.g. default, build)."),
+    ] = "default",
+    mount: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--mount", "-m",
+            help="Registered mount name, optionally with mode "
+                 "(e.g. project-alpha or project-alpha:ro). Repeatable.",
+        ),
+    ] = None,
+    image: Annotated[
+        str,
+        typer.Option("--image", help="Container image to use."),
+    ] = WHIZZARD_IMAGE,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show what would happen without launching the container.",
+        ),
+    ] = False,
+    allow_broad_mount: Annotated[
+        bool,
+        typer.Option(
+            "--allow-broad-mount",
+            help="Opt in to mounting broad folders / cloud sync / parents of "
+                 "registered mounts. Requires a profile that permits this.",
+        ),
+    ] = False,
+    harness: Annotated[
+        str,
+        typer.Option(
+            "--harness",
+            help="Named harness from harnesses.json (default: generic shell).",
+        ),
+    ] = "generic",
+) -> None:
+    """Launch a contained shell session under the given profile."""
+    _perform_launch(
+        profile_name=profile,
+        mount_specs=mount or [],
+        image=image,
+        dry_run=dry_run,
+        allow_broad_mount=allow_broad_mount,
+        harness=harness,
+    )
+
+
+# --- Preset CLI (Stage 10) --------------------------------------------------
+
+
+def _harness_platforms_map() -> dict[str, set[str]]:
+    """Build {harness_name: set(platforms)} from harnesses.json for preset
+    cross-reference validation per D-89 amended."""
+    try:
+        harnesses = load_harnesses()
+    except HarnessConfigError:
+        return {}
+    return {
+        name: set(spec.get("platforms") or [])
+        for name, spec in harnesses.items()
+    }
+
+
+def _validate_loaded_presets(presets: dict[str, Preset]) -> None:
+    """Run strict cross-reference validation. Surface PresetConfigError as
+    a clean CLI error and exit. Used by preset-related commands."""
+    try:
+        profile_names = {p.name for p in list_profiles()}
+    except ProfileConfigError as e:
+        console.print(f"[red]error loading profiles.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    try:
+        harness_names = set(load_harnesses())
+    except HarnessConfigError as e:
+        console.print(f"[red]error loading harnesses.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    try:
+        mount_names = set(load_mounts())
+    except MountRegistryError as e:
+        console.print(f"[red]error loading mounts.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    try:
+        validate_references(
+            presets,
+            profile_names=profile_names,
+            harness_names=harness_names,
+            mount_names=mount_names,
+            harness_platforms=_harness_platforms_map(),
+        )
+    except PresetConfigError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=2)
+
+
+@preset_app.command("list")
+def preset_list_cmd() -> None:
+    """List configured presets."""
+    try:
+        presets = load_presets()
+    except PresetConfigError as e:
+        console.print(f"[red]error loading presets.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    _validate_loaded_presets(presets)
+
+    source = "user config" if PRESETS_FILE.exists() else "bundled defaults"
+    title = f"Presets ({source})"
+    table = Table(title=title)
+    table.add_column("Name")
+    table.add_column("Profile")
+    table.add_column("Harness")
+    table.add_column("Mounts")
+    table.add_column("Platforms")
+    table.add_column("Description")
+
+    for name in sorted(presets):
+        p = presets[name]
+        table.add_row(
+            p.name,
+            p.profile,
+            p.harness,
+            ", ".join(p.mounts) or "(none)",
+            ", ".join(p.platforms) or "(none)",
+            p.description,
+        )
+    console.print(table)
+
+
+@preset_app.command("show")
+def preset_show_cmd(
+    name: Annotated[str, typer.Argument(help="Preset name to inspect.")],
+) -> None:
+    """Show the resolved configuration for one preset."""
+    try:
+        presets = load_presets()
+    except PresetConfigError as e:
+        console.print(f"[red]error loading presets.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    if name not in presets:
+        available = ", ".join(sorted(presets)) or "(none)"
+        console.print(f"[red]unknown preset {name!r}. Available: {available}[/red]")
+        raise typer.Exit(code=2)
+    _validate_loaded_presets(presets)
+    p = presets[name]
+    console.print(f"[bold]Preset:[/bold] {p.name}")
+    console.print(f"[bold]Description:[/bold] {p.description or '(none)'}")
+    console.print(f"[bold]Profile:[/bold] {p.profile}")
+    console.print(f"[bold]Harness:[/bold] {p.harness}")
+    console.print(f"[bold]Mounts:[/bold] {', '.join(p.mounts) or '(none)'}")
+    console.print(f"[bold]Platforms:[/bold] {', '.join(p.platforms) or '(none — inherit harness ceiling)'}")
+    if p.overrides("duration_seconds"):
+        d = "unlimited" if p.duration_seconds is None else f"{p.duration_seconds // 60} min"
+        console.print(f"[bold]Duration override:[/bold] {d}")
+    if p.overrides("idle_timeout_seconds"):
+        i = "unlimited" if p.idle_timeout_seconds is None else f"{p.idle_timeout_seconds // 60} min"
+        console.print(f"[bold]Idle-timeout override:[/bold] {i}")
+    if p.overrides("allow_broad_mount"):
+        console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if p.allow_broad_mount else 'blocked'}")
+
+
+@preset_app.command("init")
+def preset_init_cmd(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing presets.json."),
+    ] = False,
+) -> None:
+    """Write the bundled default presets to ~/.whizzard/config/presets.json."""
+    import json as _json
+
+    if PRESETS_FILE.exists() and not force:
+        console.print(
+            f"[yellow]{PRESETS_FILE} already exists.[/yellow] "
+            "use [bold]--force[/bold] to overwrite."
+        )
+        raise typer.Exit(code=1)
+
+    # Render bundled defaults as a JSON-serializable dict (Preset → dict).
+    presets_dict = {}
+    for name, preset in default_presets().items():
+        entry: dict = {
+            "profile": preset.profile,
+            "harness": preset.harness,
+            "mounts": list(preset.mounts),
+            "platforms": list(preset.platforms),
+            "description": preset.description,
+        }
+        # Only include override fields when explicitly set; preserves the
+        # omit-to-inherit semantic.
+        if preset.overrides("duration_seconds"):
+            entry["duration_seconds"] = preset.duration_seconds
+        if preset.overrides("idle_timeout_seconds"):
+            entry["idle_timeout_seconds"] = preset.idle_timeout_seconds
+        if preset.overrides("allow_broad_mount"):
+            entry["allow_broad_mount"] = preset.allow_broad_mount
+        presets_dict[name] = entry
+
+    payload = {"schema_version": 1, "presets": presets_dict}
+    PRESETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PRESETS_FILE.write_text(_json.dumps(payload, indent=2) + "\n")
+    console.print(f"[green]wrote[/green] {PRESETS_FILE}")
+    console.print(
+        "edit it to customize. launch any registered preset with "
+        "[bold]whizzard preset launch <name>[/bold]."
+    )
+
+
+@preset_app.command("launch")
+def preset_launch_cmd(
+    name: Annotated[str, typer.Argument(help="Preset name to launch.")],
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Preview without launching."),
+    ] = False,
+    image: Annotated[
+        str,
+        typer.Option("--image", help="Container image to use."),
+    ] = WHIZZARD_IMAGE,
+) -> None:
+    """Launch a session using the named preset."""
+    try:
+        presets = load_presets()
+    except PresetConfigError as e:
+        console.print(f"[red]error loading presets.json: {e}[/red]")
+        raise typer.Exit(code=2)
+    if name not in presets:
+        available = ", ".join(sorted(presets)) or "(none)"
+        console.print(f"[red]unknown preset {name!r}. Available: {available}[/red]")
+        raise typer.Exit(code=2)
+    _validate_loaded_presets(presets)
+    preset = presets[name]
+
+    # Preset launch always implicitly authorizes the second gate of D-46
+    # (the CLI --allow-broad-mount equivalent). The preset itself is the
+    # user's persistent declaration of intent — morally the same as typing
+    # the flag every launch. Profile gate (first gate) is whatever the
+    # referenced profile declares.
+    _perform_launch(
+        profile_name=preset.profile,
+        mount_specs=list(preset.mounts),
+        image=image,
+        dry_run=dry_run,
+        allow_broad_mount=True,
+        harness=preset.harness,
+        platform_restriction=list(preset.platforms) if preset.platforms else None,
+    )
 
 
 @profiles_app.command("list")

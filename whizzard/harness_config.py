@@ -40,6 +40,19 @@ _DEFAULT_HARNESSES: dict[str, dict] = {
         "start_command": "/bin/bash",
         "description": "plain interactive bash shell — the default harness",
     },
+    # Stage 10 / D-101 personal-MVP defaults. The hermes-cell harness ships
+    # so the bundled `hermes` preset validates out of the box. Reflects the
+    # MVP user's Migrate-from-host setup (D-86). OSS-launch will revisit
+    # per the same pattern as D-157.
+    "hermes-cell": {
+        "type": "agent",
+        "start_command": "hermes gateway run",
+        "wrap_up_command": "/quit",
+        "wrap_up_grace_seconds": 30,
+        "hermes_home": "~/.hermes-whizzard-cell",
+        "platforms": ["discord"],
+        "description": "Whizzard-wrapped Hermes (gateway mode, Discord active)",
+    },
 }
 
 
