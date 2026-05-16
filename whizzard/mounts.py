@@ -54,15 +54,52 @@ class Mount:
         return f"{self.host_path}:{self.container_path()}:{effective_mode}"
 
 
+# Bundled mount defaults. These reflect the MVP user's daily-driver setup
+# (D-101 personal-use threshold) — Claude desktop project workspace and the
+# AI-sandbox tree where Whizzard itself lives. OSS-launch will revisit per
+# the same pattern as D-157 (default profile change). Until then, fresh
+# installs without ~/.whizzard/config/mounts.json get these registered.
+_DEFAULT_MOUNTS: dict[str, dict[str, str]] = {
+    "claude-projects": {
+        "host_path": "~/Documents/Claude/projects",
+        "default_mode": "rw",
+        "description": "Claude desktop project workspace",
+    },
+    "ai-sandbox": {
+        "host_path": "~/ai-sandbox",
+        "default_mode": "rw",
+        "description": "AI-sandbox tree (Whizzard, other AI projects)",
+    },
+}
+
+
+def default_mounts() -> dict[str, Mount]:
+    """Return a fresh dict of bundled-default mounts."""
+    registry: dict[str, Mount] = {}
+    for name, spec in _DEFAULT_MOUNTS.items():
+        registry[name] = Mount(
+            name=name,
+            host_path=Path(spec["host_path"]).expanduser(),
+            default_mode=spec["default_mode"],  # type: ignore[arg-type]
+            description=spec["description"],
+        )
+    return registry
+
+
 class MountRegistryError(Exception):
     pass
 
 
 def load_mounts(path: Path | None = None) -> dict[str, Mount]:
-    """Load the mount registry. Returns empty dict if no file exists."""
+    """Load the mount registry. Returns bundled defaults if no file exists.
+
+    Bundled defaults reflect the MVP user's setup (D-101). Users with their
+    own ~/.whizzard/config/mounts.json get exactly what they declared — the
+    file does not extend the bundled defaults, it replaces them.
+    """
     target = path or MOUNTS_FILE
     if not target.exists():
-        return {}
+        return default_mounts()
     try:
         data = json.loads(target.read_text())
     except json.JSONDecodeError as e:
