@@ -56,26 +56,30 @@ def log_session_start(
     argv: list[str],
     start_time: float,
     overrides_used: list[dict[str, Any]] | None = None,
+    preset_name: str | None = None,
     path: Path | None = None,
 ) -> None:
-    append_event(
-        {
-            "ts": _iso(start_time),
-            "event": "session_start",
-            "session_id": session_id,
-            "profile": profile_name,
-            "network_enabled": network_enabled,
-            "duration_limit_seconds": duration_limit_seconds,
-            "allow_broad_mount": allow_broad_mount,
-            "image_tag": image_tag,
-            "image_id": image_id,
-            "mounts": mounts,
-            "argv": argv,
-            "overrides_used": overrides_used or [],
-            "start_time": _iso(start_time),
-        },
-        path=path,
-    )
+    event: dict[str, Any] = {
+        "ts": _iso(start_time),
+        "event": "session_start",
+        "session_id": session_id,
+        "profile": profile_name,
+        "network_enabled": network_enabled,
+        "duration_limit_seconds": duration_limit_seconds,
+        "allow_broad_mount": allow_broad_mount,
+        "image_tag": image_tag,
+        "image_id": image_id,
+        "mounts": mounts,
+        "argv": argv,
+        "overrides_used": overrides_used or [],
+        "start_time": _iso(start_time),
+    }
+    # Stage 10: preset name (when launched via `whiz preset launch` or
+    # `whiz r <preset>`). Absent for `whiz run` invocations. Used by
+    # `whiz r` (bare) to look up the most-recent preset.
+    if preset_name is not None:
+        event["preset"] = preset_name
+    append_event(event, path=path)
 
 
 def log_session_end(

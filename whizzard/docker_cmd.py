@@ -193,6 +193,7 @@ def run_shell(
     session_id: str | None = None,
     overrides_used: list[dict] | None = None,
     adapter: HarnessAdapter | None = None,
+    preset_name: str | None = None,
 ) -> RunResult:
     """Launch a contained interactive shell. Blocks until the shell exits.
 
@@ -247,6 +248,7 @@ def run_shell(
         argv=argv,
         start_time=start_time,
         overrides_used=overrides_used or [],
+        preset_name=preset_name,
     )
 
     completed = subprocess.run(argv, env=_docker_env())

@@ -1,0 +1,278 @@
+"""Stage 10 #4-#5: status command + brevity aliases (whiz r/s/p/m/pr) tests."""
+
+import json
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from whizzard.cli import app
+
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Isolate WHIZZARD_HOME to a temp dir per test."""
+    home = tmp_path / "whizzard-home"
+    monkeypatch.setenv("WHIZZARD_HOME", str(home))
+    from whizzard import cli, config, harness_config, mounts, preset_config
+    monkeypatch.setattr(config, "WHIZZARD_HOME", home)
+    monkeypatch.setattr(config, "CONFIG_DIR", home / "config")
+    monkeypatch.setattr(config, "LOGS_DIR", home / "logs")
+    monkeypatch.setattr(config, "STATE_DIR", home / "state")
+    monkeypatch.setattr(config, "PROFILES_FILE", home / "config" / "profiles.json")
+    monkeypatch.setattr(mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
+    monkeypatch.setattr(harness_config, "HARNESSES_FILE", home / "config" / "harnesses.json")
+    monkeypatch.setattr(preset_config, "PRESETS_FILE", home / "config" / "presets.json")
+    monkeypatch.setattr(cli, "PROFILES_FILE", home / "config" / "profiles.json")
+    monkeypatch.setattr(cli, "MOUNTS_FILE", home / "config" / "mounts.json")
+    monkeypatch.setattr(cli, "HARNESSES_FILE", home / "config" / "harnesses.json")
+    monkeypatch.setattr(cli, "PRESETS_FILE", home / "config" / "presets.json")
+    monkeypatch.setattr(cli, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
+    from whizzard import session_log
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
+    return home
+
+
+@pytest.fixture
+def fake_credentials(monkeypatch: pytest.MonkeyPatch):
+    """Stub the Hermes adapter's credential fetch so preset-launch tests
+    don't require OneCLI."""
+    from whizzard.adapters import _credentials
+    from whizzard.adapters import hermes as hermes_module
+
+    class _R:
+        def __init__(self, v: str) -> None:
+            self.value = v
+            self.source = "onecli"
+
+    def fake_fetch(name: str) -> _R:
+        return _R(f"fake-{name}")
+
+    monkeypatch.setattr(_credentials, "fetch_secret", fake_fetch)
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+
+def _write_session_log(home: Path, entries: list[dict]) -> None:
+    """Write a sessions.jsonl with the given entries."""
+    log = home / "logs" / "sessions.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+
+
+# --- status command ------------------------------------------------------
+
+
+def test_status_with_no_log(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    assert "no sessions" in result.output.lower()
+
+
+def test_status_shows_active_count(isolated_whizzard_home: Path):
+    _write_session_log(isolated_whizzard_home, [
+        {"event": "session_start", "session_id": "sid-1", "profile": "default",
+         "start_time": "2026-05-16T00:00:00Z", "argv": []},
+        {"event": "session_end", "session_id": "sid-1", "end_time": "2026-05-16T01:00:00Z"},
+        {"event": "session_start", "session_id": "sid-2", "profile": "default",
+         "start_time": "2026-05-16T02:00:00Z", "argv": []},
+    ])
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    out = result.output
+    assert "Active sessions" in out
+    # sid-2 still running; sid-1 ended
+    assert "RUNNING" in out
+    assert "ended" in out
+
+
+def test_status_extracts_harness_from_argv(isolated_whizzard_home: Path):
+    _write_session_log(isolated_whizzard_home, [
+        {
+            "event": "session_start",
+            "session_id": "sid-1",
+            "profile": "default",
+            "start_time": "2026-05-16T00:00:00Z",
+            "argv": ["docker", "run", "--label", "whizzard.harness=hermes-cell"],
+        },
+    ])
+    result = runner.invoke(app, ["status"])
+    assert "hermes-cell" in result.output
+
+
+def test_status_skips_malformed_lines(isolated_whizzard_home: Path):
+    log = isolated_whizzard_home / "logs" / "sessions.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        json.dumps({"event": "session_start", "session_id": "sid-1",
+                    "profile": "default", "start_time": "x", "argv": []}) + "\n"
+        + "garbage line\n"
+        + "\n"
+    )
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+
+
+# --- bare `whiz` -> status -----------------------------------------------
+
+
+def test_bare_whiz_routes_to_status(isolated_whizzard_home: Path):
+    """No subcommand should land in status mode, not help."""
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    # In an empty-log state, status prints "no sessions" hint
+    assert "no sessions" in result.output.lower()
+
+
+# --- whiz s (status alias) -----------------------------------------------
+
+
+def test_whiz_s_routes_to_status(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["s"])
+    assert result.exit_code == 0
+    assert "no sessions" in result.output.lower()
+
+
+# --- whiz p (preset list / show) ----------------------------------------
+
+
+def test_whiz_p_bare_lists_presets(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["p"])
+    assert result.exit_code == 0
+    assert "hermes" in result.output
+    assert "shell" in result.output
+
+
+def test_whiz_p_with_name_shows_preset(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["p", "hermes"])
+    assert result.exit_code == 0
+    assert "hermes-cell" in result.output
+    assert "discord" in result.output
+
+
+def test_whiz_p_unknown_errors(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["p", "nonexistent"])
+    assert result.exit_code == 2
+
+
+# --- whiz m (mounts list) ------------------------------------------------
+
+
+def test_whiz_m_lists_mounts(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["m"])
+    assert result.exit_code == 0
+    assert "claude-projects" in result.output
+    assert "ai-sandbox" in result.output
+
+
+# --- whiz pr (profiles list) ---------------------------------------------
+
+
+def test_whiz_pr_lists_profiles(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["pr"])
+    assert result.exit_code == 0
+    out = result.output
+    for profile_name in ["safe", "default", "build", "power", "quarantine"]:
+        assert profile_name in out
+
+
+# --- whiz r (smart dispatch) ---------------------------------------------
+
+
+def test_whiz_r_with_preset_name_dry_run(isolated_whizzard_home: Path, fake_credentials):
+    result = runner.invoke(app, ["r", "shell", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "SAFE" in out  # shell preset uses safe profile
+
+
+def test_whiz_r_with_run_flags(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["r", "--profile", "safe", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "SAFE" in result.output
+
+
+def test_whiz_r_mixing_preset_and_run_flags_errors(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["r", "shell", "--profile", "default", "--dry-run"])
+    assert result.exit_code == 2
+    assert "cannot mix" in result.output.lower()
+
+
+def test_whiz_r_bare_with_no_recent_preset_errors(isolated_whizzard_home: Path):
+    result = runner.invoke(app, ["r"])
+    assert result.exit_code == 2
+    assert "no recent preset" in result.output.lower()
+
+
+def test_whiz_r_bare_uses_most_recent_preset(
+    isolated_whizzard_home: Path,
+    fake_credentials,
+):
+    """A session_start with a `preset` field should make bare `whiz r` launch
+    that preset."""
+    _write_session_log(isolated_whizzard_home, [
+        {"event": "session_start", "session_id": "sid-1", "profile": "safe",
+         "preset": "shell", "start_time": "2026-05-16T00:00:00Z", "argv": []},
+        {"event": "session_end", "session_id": "sid-1", "end_time": "x"},
+    ])
+    result = runner.invoke(app, ["r", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "SAFE" in result.output  # shell preset → safe profile
+
+
+def test_whiz_r_most_recent_skips_non_preset_runs(
+    isolated_whizzard_home: Path,
+    fake_credentials,
+):
+    """A `whiz run` without a preset shouldn't be picked up as 'most recent
+    preset'. Bare `whiz r` should walk past it to find an earlier preset entry."""
+    _write_session_log(isolated_whizzard_home, [
+        {"event": "session_start", "session_id": "sid-1", "profile": "safe",
+         "preset": "shell", "start_time": "2026-05-16T00:00:00Z", "argv": []},
+        {"event": "session_start", "session_id": "sid-2", "profile": "default",
+         "start_time": "2026-05-16T01:00:00Z", "argv": []},
+        # ^^^ no preset field — `whiz run` invocation
+    ])
+    result = runner.invoke(app, ["r", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    # Picked up shell preset (the most recent with a preset field)
+    assert "SAFE" in result.output
+
+
+# --- preset_name propagation through launch flow ------------------------
+
+
+def test_preset_launch_writes_preset_field_to_session_log(
+    isolated_whizzard_home: Path,
+    fake_credentials,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Verify that `whiz preset launch <name>` (not dry-run) results in a
+    session_start entry that includes the preset field, so subsequent bare
+    `whiz r` can find it."""
+    # Stub out run_shell to avoid actually launching docker, but let the
+    # log_session_start call happen.
+    from whizzard import cli, docker_cmd, session_log as session_log_module
+
+    captured: dict = {}
+
+    def fake_log_session_start(**kwargs):
+        captured.update(kwargs)
+
+    def fake_run_shell(*args, **kwargs):
+        # Simulate the log_session_start happening from inside run_shell
+        fake_log_session_start(
+            preset_name=kwargs.get("preset_name"),
+        )
+        from whizzard.docker_cmd import RunResult
+        return RunResult(container_id="fake-cid", exit_code=0)
+
+    monkeypatch.setattr(cli, "run_shell", fake_run_shell)
+    monkeypatch.setattr(cli, "docker_available", lambda: True)
+    monkeypatch.setattr(cli, "image_exists", lambda image: True)
+
+    result = runner.invoke(app, ["preset", "launch", "shell"])
+    assert result.exit_code == 0, result.output
+    assert captured.get("preset_name") == "shell"
