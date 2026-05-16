@@ -62,6 +62,10 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         name="default",
         network_enabled=True,
         duration_seconds=None,  # unlimited — productive baseline
+        allow_broad_mount=True,  # D-157: enables broad-mount overrides when
+                                 # explicitly authorized at launch (CLI flag
+                                 # or preset). Two-gate model preserved per
+                                 # D-46. Supersedes D-38 on this field only.
         description="SAFE-NET baseline. Network on, mounts opt-in. Always-on.",
     ),
     "build": Profile(

@@ -116,13 +116,23 @@ def test_run_without_dry_run_calls_run_shell():
 
 
 def test_dry_run_shows_broad_mount_override_state():
-    """Stage 4 dry-run surfaces broad-mount override status from the profile."""
+    """Stage 4 dry-run surfaces broad-mount override status from the profile.
+
+    Per D-157, the bundled `default` profile now has `allow_broad_mount=True`
+    (was False). `safe` is used here for the "blocked" assertion since it
+    still has `allow_broad_mount=False` as a representative locked-down profile.
+    """
     result = runner.invoke(app, ["run", "--profile", "power", "--dry-run"])
     out = result.output
     assert "Broad-mount override" in out
     assert "allowed" in out
 
     result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    out = result.output
+    assert "Broad-mount override" in out
+    assert "allowed" in out  # D-157: default flipped to allow_broad_mount=True
+
+    result = runner.invoke(app, ["run", "--profile", "safe", "--dry-run"])
     out = result.output
     assert "Broad-mount override" in out
     assert "blocked" in out

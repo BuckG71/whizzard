@@ -553,7 +553,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/mvp_build_plan.md (Stage 3); whizzard/config.py
 
-**Status:** active
+**Status:** partially superseded by D-157 on the `allow_broad_mount` field (now `true`). Other fields (network_enabled, duration_seconds, no-mounts-pre-bound) remain as captured here.
 
 ### D-39: Profile schema is JSON with a versioned envelope
 
@@ -2264,6 +2264,27 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 - Per D-153, the MCP-server implementation lives in adapter-or-utility space, not Whizzard core. The Hermes adapter owns the wiring to point Hermes's MCP-client config at the in-cell server. Generic shell adapter doesn't use the MCP server (no agent).
 - The in-cell server is structurally separable. If future pressure (e.g., Stage 14 mutating tools requiring synchronous host responses that the event-file channel can't deliver cleanly) makes host-side MCP attractive, the agent's MCP-client config changes; the rest of the design holds.
 - Image bloat is marginal — Python is already in the execution image (Hermes is Python). MCP SDK is small.
+
+### D-157: Default profile gains `allow_broad_mount: true` (supersedes D-38 on this field)
+
+**Type:** safety
+
+**Tags:** profiles
+
+**Door Type:** two-way (default values are non-breaking to change; OSS-launch will likely require revisiting this to ship a more conservative public default — see Notes).
+
+**Decision:** The bundled `default` profile's `allow_broad_mount` flag changes from `false` to `true`. All other fields (network_enabled=true, duration_seconds=None, description as SAFE-NET-style productive baseline) are unchanged. The two-gate broad-mount override (D-46) is preserved at the same strength: `allow_broad_mount: true` on the profile is gate one; the `--allow-broad-mount` CLI flag (or a preset declaring it) is gate two. Both gates still required.
+
+**Rationale:** The user's daily-driver use case (D-101 personal-use threshold; Hermes Migrate plan per D-86) requires mounting `~/Documents/Claude/projects` and `~/ai-sandbox`. The first sits inside `~/Documents/`, which is a probable cloud-sync root (D-51 → override-required tier). Under the prior default-profile shape (`allow_broad_mount: false`), every launch using `default` would have the profile gate closed against broad-mount overrides, making the user's primary preset unusable without switching to `power` (which has a 1hr duration cap and is poorly framed for always-on use). Flipping the default's `allow_broad_mount` to `true` opens the profile gate so a preset (or per-launch CLI flag) can attach broad mounts when explicitly authorized. The two-gate model is preserved — opening profile gate alone does not auto-attach broad mounts; the second gate (CLI flag or preset declaration) is still required.
+
+**Source:** conversation 2026-05-15 (Stage 10 design conversation, design item #1 — preset bundle for daily-driver `hermes` preset).
+
+**Status:** active; supersedes D-38 on the `allow_broad_mount` field specifically.
+
+**Notes:**
+- D-38's broader framing of the default profile as "SAFE-NET baseline" still holds for the other fields (network on, no mounts pre-bound, unlimited duration). The change is scoped to one field.
+- For OSS-launch this almost certainly needs to be revisited. A reasonable shape: the bundled `default` profile reverts to `allow_broad_mount: false` for public users, and Bryan's personal-config layer keeps the `true` setting locally. Currently MVP is the personal-use threshold (D-101), so the simpler approach of one bundled default that matches Bryan's workflow is acceptable.
+- The slate gains a small gap with this change: there is no longer a profile that is "network on, unlimited duration, allow_broad_mount=false." Users wanting that posture today would either override per-launch (don't pass `--allow-broad-mount`) or use `build` (network on, 2hr cap). Filling the gap is a post-MVP concern.
 
 ---
 
