@@ -23,6 +23,20 @@ def test_default_profile_is_unlimited():
     assert p.network_enabled is True
 
 
+def test_default_profile_bundled_allows_broad_mount():
+    """Per D-157 (supersedes D-38 on this field): the bundled `default`
+    profile has allow_broad_mount=True so the user's daily-driver preset
+    can attach broad mounts when the CLI flag or preset authorizes.
+    Two-gate model per D-46 is preserved; this just opens the profile gate.
+
+    Tests against `default_profiles()` (bundled) rather than `get_profile()`
+    (which reads user-config overlay) — the assertion is about what ships,
+    not what Bryan's personal `~/.whizzard/config/profiles.json` says.
+    """
+    p = default_profiles()["default"]
+    assert p.allow_broad_mount is True
+
+
 def test_safe_profile_is_locked_down():
     p = get_profile("safe")
     assert p.network_enabled is False
