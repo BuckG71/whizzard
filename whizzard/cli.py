@@ -66,7 +66,7 @@ from whizzard.snapshot import write_snapshot
 app = typer.Typer(
     name="whizzard",
     help="Whizzard — local capability governance for AI agents.",
-    no_args_is_help=True,
+    no_args_is_help=False,
     add_completion=False,
 )
 profiles_app = typer.Typer(help="Inspect available profiles.")
@@ -89,10 +89,18 @@ app.add_typer(hermes_app, name="hermes")
 console = Console()
 
 
-@app.callback()
-def _bootstrap() -> None:
-    """Runs before every subcommand. Ensures ~/.whizzard/ scaffold exists."""
+@app.callback(invoke_without_command=True)
+def _bootstrap(ctx: typer.Context) -> None:
+    """Runs before every subcommand. Ensures ~/.whizzard/ scaffold exists.
+
+    Stage 10: bare `whiz` (no subcommand) defaults to `whiz status` rather
+    than showing help. New users land in status mode; `whiz --help` is the
+    explicit help path.
+    """
     ensure_whizzard_home()
+    if ctx.invoked_subcommand is None:
+        status_cmd()
+        raise typer.Exit(code=0)
 
 
 def _perform_launch(
@@ -104,6 +112,7 @@ def _perform_launch(
     allow_broad_mount: bool,
     harness: str,
     platform_restriction: list[str] | None = None,
+    preset_name: str | None = None,
 ) -> None:
     """Shared launch core. Called by `run` (CLI flags) and `preset launch`
     (preset-resolved args). Handles profile / harness / mount resolution,
@@ -241,6 +250,7 @@ def _perform_launch(
         session_id=session_id,
         overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
         adapter=adapter,
+        preset_name=preset_name,
     )
     raise typer.Exit(code=result.exit_code)
 
@@ -494,6 +504,7 @@ def preset_launch_cmd(
         allow_broad_mount=True,
         harness=preset.harness,
         platform_restriction=list(preset.platforms) if preset.platforms else None,
+        preset_name=preset.name,
     )
 
 
@@ -766,6 +777,230 @@ def hermes_profile_create_cmd(
         "Add a harness entry in ~/.whizzard/config/harnesses.json referencing "
         f"hermes_home: {result.path} to use it."
     )
+
+
+# --- Stage 10: status command + brevity aliases ---------------------------
+
+
+def _read_session_events() -> list[dict]:
+    """Read sessions.jsonl into a list of event dicts. Empty if no file."""
+    import json as _json
+    if not SESSIONS_LOG.exists():
+        return []
+    events: list[dict] = []
+    for line in SESSIONS_LOG.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(_json.loads(line))
+        except _json.JSONDecodeError:
+            continue
+    return events
+
+
+def _active_sessions(events: list[dict]) -> set[str]:
+    """Return session_ids that have a start without a matching end.
+
+    Note: a Whizzard crash can leave stale unended session_starts. Crash
+    recovery (correlating against `docker ps`) is post-MVP.
+    """
+    started: set[str] = set()
+    for ev in events:
+        if ev.get("event") == "session_start":
+            sid = ev.get("session_id")
+            if sid:
+                started.add(sid)
+        elif ev.get("event") == "session_end":
+            sid = ev.get("session_id")
+            if sid in started:
+                started.remove(sid)
+    return started
+
+
+def _most_recent_preset() -> str | None:
+    """Return the preset name from the most recent session_start with a
+    `preset` field, or None if no such entry exists. Used by bare `whiz r`."""
+    events = _read_session_events()
+    for ev in reversed(events):
+        if ev.get("event") == "session_start" and "preset" in ev:
+            return ev["preset"]
+    return None
+
+
+@app.command("status")
+def status_cmd() -> None:
+    """Show session status: active sessions and recent history."""
+    events = _read_session_events()
+    if not events:
+        console.print("[yellow]no sessions logged yet[/yellow]")
+        console.print("run [bold]whiz --help[/bold] to see available commands.")
+        return
+
+    active = _active_sessions(events)
+    active_count = len(active)
+
+    # Show counts header
+    if active_count == 0:
+        console.print("[bold]Active sessions:[/bold] none")
+    elif active_count == 1:
+        console.print(f"[bold green]Active sessions:[/bold green] 1")
+    else:
+        console.print(f"[bold green]Active sessions:[/bold green] {active_count}")
+
+    # Show recent session_start events (last 10), most recent first
+    starts = [e for e in events if e.get("event") == "session_start"]
+    recent = list(reversed(starts))[:10]
+
+    table = Table(title="Recent sessions")
+    table.add_column("Status")
+    table.add_column("Session ID")
+    table.add_column("Profile")
+    table.add_column("Preset")
+    table.add_column("Harness")
+    table.add_column("Started")
+
+    for ev in recent:
+        sid = ev.get("session_id", "")
+        sid_short = sid[:8] if len(sid) >= 8 else sid
+        is_active = sid in active
+        status = "[green]RUNNING[/green]" if is_active else "ended"
+        table.add_row(
+            status,
+            sid_short,
+            ev.get("profile", ""),
+            ev.get("preset", "—"),
+            # Derive harness from argv label if present, else show "?"
+            _harness_from_event(ev),
+            ev.get("start_time", ev.get("ts", "")),
+        )
+    console.print(table)
+
+
+def _harness_from_event(ev: dict) -> str:
+    """Best-effort harness name extraction from a session_start event.
+
+    Argv contains `--label whizzard.harness=<name>`; parse it out."""
+    argv = ev.get("argv") or []
+    for i, arg in enumerate(argv):
+        if arg.startswith("whizzard.harness=") and i > 0 and argv[i - 1] == "--label":
+            return arg.split("=", 1)[1]
+    return "?"
+
+
+# --- Brevity aliases: r, s, p, m, pr ---
+
+
+@app.command("r")
+def r_cmd(
+    preset_name: Annotated[
+        str | None,
+        typer.Argument(
+            help="Preset name to launch. Omit to launch most-recent preset. "
+                 "If you pass run-style flags (--profile, --mount, --harness, "
+                 "--allow-broad-mount), this becomes a `whiz run` invocation.",
+        ),
+    ] = None,
+    profile: Annotated[
+        str | None,
+        typer.Option("--profile", "-p", help="Profile name (run-flag path)."),
+    ] = None,
+    mount: Annotated[
+        list[str] | None,
+        typer.Option("--mount", "-m", help="Mount spec (run-flag path)."),
+    ] = None,
+    image: Annotated[
+        str,
+        typer.Option("--image", help="Container image to use."),
+    ] = WHIZZARD_IMAGE,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would happen without launching."),
+    ] = False,
+    allow_broad_mount: Annotated[
+        bool,
+        typer.Option(
+            "--allow-broad-mount",
+            help="Run-flag path: opt in to broad mounts.",
+        ),
+    ] = False,
+    harness: Annotated[
+        str | None,
+        typer.Option("--harness", help="Run-flag path: harness name."),
+    ] = None,
+) -> None:
+    """Shortcut: `whiz r` → preset launch (positional) or run (flags).
+
+    Dispatch:
+    - `whiz r` (bare) → launch most-recent preset
+    - `whiz r <name>` → launch named preset (--image and --dry-run honored)
+    - `whiz r --profile X ...` → equivalent to `whiz run --profile X ...`
+    - Mixing a positional preset with run-style flags is an error.
+    """
+    run_flag_present = bool(profile or mount or harness or allow_broad_mount)
+
+    if preset_name is not None and run_flag_present:
+        console.print(
+            "[red]cannot mix preset name with run-style flags. "
+            "Use either `whiz r <preset>` or `whiz r --profile ... --harness ...`.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    if run_flag_present:
+        # Run-with-flags path
+        _perform_launch(
+            profile_name=profile or "default",
+            mount_specs=mount or [],
+            image=image,
+            dry_run=dry_run,
+            allow_broad_mount=allow_broad_mount,
+            harness=harness or "generic",
+        )
+        return
+
+    # Preset path: bare → most-recent, named → that preset
+    if preset_name is None:
+        last = _most_recent_preset()
+        if last is None:
+            console.print(
+                "[red]no recent preset found; specify one: [bold]whiz r <name>[/bold][/red]"
+            )
+            raise typer.Exit(code=2)
+        preset_name = last
+
+    preset_launch_cmd(name=preset_name, dry_run=dry_run, image=image)
+
+
+@app.command("s")
+def s_cmd() -> None:
+    """Shortcut: `whiz s` → status."""
+    status_cmd()
+
+
+@app.command("p")
+def p_cmd(
+    name: Annotated[
+        str | None,
+        typer.Argument(help="Preset name to show. Omit to list all presets."),
+    ] = None,
+) -> None:
+    """Shortcut: `whiz p` → preset list; `whiz p <name>` → preset show."""
+    if name is None:
+        preset_list_cmd()
+    else:
+        preset_show_cmd(name)
+
+
+@app.command("m")
+def m_cmd() -> None:
+    """Shortcut: `whiz m` → mounts list."""
+    mounts_list_cmd()
+
+
+@app.command("pr")
+def pr_cmd() -> None:
+    """Shortcut: `whiz pr` → profiles list."""
+    profiles_list_cmd()
 
 
 if __name__ == "__main__":

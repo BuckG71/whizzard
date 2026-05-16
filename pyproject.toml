@@ -24,6 +24,7 @@ dev = [
 
 [project.scripts]
 whizzard = "whizzard.cli:app"
+whiz = "whizzard.cli:app"
 
 [tool.setuptools.packages.find]
 include = ["whizzard*"]
