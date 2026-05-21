@@ -41,7 +41,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/session_handoff.md; pyproject.toml
 
-**Status:** active
+**Status:** superseded by D-158
 
 ### D-03: Local working directory stays `airlock-warlock` mid-development
 
@@ -2417,6 +2417,233 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 **Status:** open
 
+### D-158: Product rename Whizzard → Osmotiq; sequenced after MVP, before Hermes migration
+
+**Type:** process
+
+**Tags:** naming, sequencing, post-mvp, hermes
+
+**Door Type:** two-way (the rename itself is mechanical and revertible via git; the sequencing trigger can be moved earlier or later as conditions warrant).
+
+**Decision:** Rename the product from "Whizzard" (placeholder per D-02) to **Osmotiq** (CLI binary: `oiq`; domain `osmotiq.ai` already owned). Execute as a single batch-script sweep covering package dir (`whizzard/` → `osmotiq/`), CLI binary (`whiz` → `oiq`), env vars (`WHIZZARD_HOME` → `OSMOTIQ_HOME`), config dir (`~/.whizzard/` → `~/.osmotiq/`), session-log paths, doc references, decisions.md cross-refs, README, pyproject.toml, and skill files. Trigger: after MVP is operational (D-101 threshold met) but BEFORE migrating the daily-driver Hermes instance onto Whizzard.
+
+**Rationale:** "Whizzard" was always a placeholder — D-02 itself renamed from "warlock" to dodge a ransomware-family collision, with the understanding that a real product name would come later. Osmotiq retains the osmosis metaphor (selective permeability across a membrane), which is conceptually apt for capability governance: capabilities flow one-way through a membrane (D-9), and the mount list IS the permission boundary (D-11). Three syllables, modern "-iq" suffix, `.ai` TLD signals product space. `oiq` is a 3-char CLI with no obvious collisions in common dev tooling. Domain already owned, so decision cost is zero. Sequencing window rationale: (1) MVP-focus principle — the rename doesn't unblock technical work, so doing it earlier diverts from critical path; (2) debug rename issues against a known-working Hermes setup *before* the production Hermes migration introduces additional unknowns; (3) avoids touching live config paths mid-MVP-build (`gateway.lock`, `HERMES_HOME`-adjacent dirs); (4) external-facing name not needed until OSS-launch prep, which is downstream of Hermes migration. Bundle with D-151 (uppercase → lowercase markdown filenames) into the same sweep to amortize disruption.
+
+**Source:** This conversation (2026-05-16); supersedes D-02 on the active package name.
+
+**Notes:** Whether to also acquire `osmotiq.com` later is separable from this decision and not blocking. During ongoing MVP work the CLI binary remains `whiz`; it renames to `oiq` as part of the same sweep.
+
+**Status:** active; supersedes D-02 on the active package name.
+
+### D-159: Programmatic launch API for orchestrator integration (post-MVP)
+
+**Type:** scope
+
+**Tags:** post-mvp, api, integration
+
+**Door Type:** two-way (the decision to add an API surface is reversible at the doc/spec stage; once a specific shape ships in v1.0 release notes the door becomes one-way for *that shape*, but this decision commits only to having an API, not to its exact contract).
+
+**Decision:** Post-MVP, OIQ exposes a programmatic launch surface (Python library first) so external orchestrators can spawn and supervise cells without shelling out to the CLI. Minimum v1.0 surface: `oiq.launch(harness=..., preset=..., session_id=..., on_exit=...)` returning a session handle, plus `oiq.status(session_id)` for health/lifecycle polling and `oiq.terminate(session_id, grace_seconds=...)` for explicit shutdown. Exact contract, error semantics, and sync/async split are left to a focused design pass before v1.0; this decision commits only to *having* a programmatic entry point at v1.0.
+
+**Rationale:** Symphony (OpenAI's task-board agent orchestrator, ship-as-SPEC.md, InfoQ 2026-05) demonstrates the orchestration layer that sits above harnesses: watch issue tracker → spawn agent → supervise → restart on crash. OIQ's CLI-only entry point forces orchestrators to shell out, parse stderr, and re-invent structured session handling — brittle, slow, and hostile to integration. A library surface lets supervisors integrate cleanly: each task gets a cell, the supervisor polls status, restarts are session-id-keyed. This positions OIQ as "the containment layer beneath your orchestrator" rather than a standalone CLI tool, which is the durable framing per D-10 (harness-neutral core) and the long-term thesis in vision_and_strategy.md. Scope-bound to post-MVP: no MVP user is running an orchestrator yet (D-101 personal-MVP threshold), and exposing an API prematurely risks freezing a shape we have not validated against real orchestrator integration pressure.
+
+**Source:** conversation 2026-05-18 (assessment of InfoQ "OpenAI Symphony Agents" article, 2026-05); see docs/post_mvp_spec.md §9.
+
+**Status:** active
+
+### D-160: ADAPTER_SPEC.md as contributor-facing adapter Protocol artifact at OSS-launch
+
+**Type:** process
+
+**Tags:** oss-launch, adapter
+
+**Door Type:** two-way (a spec document can be rewritten, deprecated, or replaced; carrying an explicit SPEC_VERSION keeps the door two-way even after publication by making every change visible and intentional).
+
+**Decision:** At OSS-launch, formalize the adapter Protocol (D-28) as a standalone `ADAPTER_SPEC.md` document at the repo root — separate from `whizzard.adapters.base` (which remains the canonical Python implementation). The spec describes contract semantics in language-neutral terms: lifecycle hooks, `container_mounts`, `container_env`, `mcp_env`, `wrap_up` timing, preflight expectations, error surfaces, and the `harnesses.json` schema. Carries a `SPEC_VERSION` independent of the package version. Treated as a release-gate artifact: any change requires an explicit version bump and changelog entry.
+
+**Rationale:** Symphony's SPEC.md-first model (ship the spec, let adopters implement) is a proven pattern for contributor-driven ecosystem growth — OpenAI shipped Symphony as a SPEC.md plus an Elixir reference impl, not a product, and explicitly positioned it as "a reference implementation that developers can adapt and tailor." OIQ's adapter Protocol already exists as code (D-28, `whizzard/adapters/base.py`), but a Python Protocol class is not a contributor-facing artifact: it's tied to one language binding, embedded in the source tree, and contributors have to read the code to understand the contract. A standalone spec lowers contribution friction (read one file, build an adapter in any language), and protects the contract from accidental breakage by making it a versioned artifact the maintainer team must consciously update. Aligns with the curated-slate principle (D-155): we don't want to ship every adapter, we want third parties to be able to ship them safely against a stable contract.
+
+**Source:** conversation 2026-05-18 (assessment of InfoQ "OpenAI Symphony Agents" article, 2026-05); see docs/post_mvp_spec.md §3 (Multi-Harness Rollout).
+
+**Status:** active
+
+### D-161: Stage 11 ships as `docs/examples/<harness>/` recipes, not as code in OIQ core
+
+**Type:** process
+
+**Tags:** oss-launch, integration, mvp
+
+**Door Type:** two-way for the docs deliverable (example recipes can be revised, restructured, or removed); approaching one-way for the *rejected alternatives* (re-introducing a host-side MCP server or a per-harness emitter framework would require fresh security review and architectural justification, not just a rewrite).
+
+**Decision:** Stage 11 — "zero-friction Whiz operation from inside any agent harness" — ships as copy-paste integration recipes in `docs/examples/<harness>/`, not as harness-specific code in OIQ core. Two production-grade examples land at this stage (`docs/examples/claude_code/` and `docs/examples/hermes/`) because Claude Code is the MVP user's daily-driver harness and Hermes is the MVP target adapter. A `docs/examples/README.md` index plus a root-README "Using OIQ inside your agent harness" section invites community-contributed recipes for Codex, Cline, OpenClaw, NanoClaw, and others. The CLI shipped in Stage 10 (`whiz r`, `whiz s`, smart defaults) is the harness-neutral surface; every recipe just shells out to it.
+
+**Rationale:** The original Stage 11 framing was "bundle of `.claude/skills/` recipes" — single-vendor lock-in that violated D-10 (harness-neutral core). Two intermediate alternatives were considered and rejected during the design conversation (2026-05-18):
+
+- **Rejected: host-side MCP server for harness UX.** Would have exposed `oiq.launch`, `oiq.status`, etc. as MCP tools any harness could call. Rejected on security grounds: a host-side MCP socket is a privilege-escalation surface — if a cell could ever reach it (e.g., a misconfigured bind-mount), the cell could spawn a maximally-permissive sibling cell and escape the in-cell read-only constraint of D-156. Also solves a problem only the *agent* has (structured tool surface), not the user — the user can already type `oiq r hermes` in any terminal. Zero net user benefit, real new attack surface.
+- **Rejected: canonical `commands.yaml` + per-harness emitter framework.** Would have defined commands once in OIQ and emitted harness-specific wrappers via per-harness emitters. Over-engineered for an MVP user-base of one: the CLI is already the harness-neutral interface, and per-harness wrappers can be authored directly in `docs/examples/` without a generation layer. Adds two layers of indirection (canonical schema + emitter) for negligible benefit at MVP scale; break-even would be at 3+ supported harnesses, which is post-OSS-launch territory.
+
+The chosen shape (docs/examples + CLI) preserves D-10 by NOT shipping harness-specific code in OIQ core — recipes are documentation, not product. The OSS-contribution path for new harnesses is "add a directory under `docs/examples/<harness>/`," which is the lowest-friction contribution shape available. Stage 11 becomes a documentation-and-examples stage, not a code-build stage; no new pip dependencies, no core code changes.
+
+**Source:** conversation 2026-05-18 (Stage 11 D-148 design pause); see docs/mvp_build_plan.md §Stage 11 (carries the pivot in prose with the same rejected-alternatives note).
+
+**Status:** active
+
+### D-162: LLM-provider credential injection via declarative `secrets:` harness-config block
+
+**Type:** safety
+
+**Tags:** integration, hermes
+
+**Door Type:** two-way for the field shape — the `secrets:` schema can be revised, OneCLI integration can be replaced, env-var names can be standardized. The prohibition on mounting `auth.json` (preserved from D-80) is closer to one-way; re-enabling it would require fresh security review of harness-managed credential schemas and an explicit per-harness opt-in override.
+
+**Decision:** Harness configs declare the LLM-provider and platform credentials needed inside the cell via a `secrets:` field — a flat list of env-var names. At launch, the adapter fetches each value (OneCLI per D-134 where supported; host env-var fallback) and injects into the cell's environment. Plaintext credential values MUST NEVER appear in harness config files — only env-var names. Mounting `auth.json` (or any other harness-managed credential blob) into the cell remains prohibited by default per D-80.
+
+**Rationale:** Stage 8's platform-token convention (D-89 amended, `<PLATFORM>_BOT_TOKEN`) covers platform credentials only. LLM-provider credentials (Anthropic, OpenAI, OpenRouter, GitHub Copilot, etc.) need an analogous injection path. Generalizing to a `secrets:` block with arbitrary env-var names is the smallest extension of the existing pattern that handles both cases uniformly. Validated empirically in the M7 smoke (2026-05-19): a Hermes inside an OIQ-wrapped cell with no `auth.json` present picked up `ANTHROPIC_API_KEY` from the cell's environment and made a successful Claude API call.
+
+Rejected: **Mounting auth.json into the cell.** Today's auth.json contents may be three benign API keys (user-verified by inspection), but the file's schema is Hermes-managed and could grow to include identity-layer state (OAuth refresh tokens, account credentials, future Hermes-defined fields) in any release. Mounting commits to exposing whatever Hermes chooses to store there, indefinitely. Declaring per-secret in `secrets:` makes the cell's credential surface an explicit, auditable, per-harness decision. Schema-isolation and audit are the load-bearing reasons, not present-day threat severity.
+
+Rejected: **Plaintext credential values in harness config.** A `harnesses.json` with literal API key values would be plaintext-credentials-on-disk in a file that's not a vault, not encrypted, and trivially readable by any process with file-read access on the user's account. The `secrets:` block declares names only; values come from runtime resolution.
+
+Rejected: **Per-provider special-casing (e.g., `anthropic_api_key:`, `openai_api_key:` as named fields).** Treating each LLM provider as a named field would duplicate per-provider logic in OIQ core. A generic `secrets:` list works for any named credential — bot tokens, API keys, future provider types — with no provider-specific OIQ code.
+
+**Source:** conversation 2026-05-19 (M7 smoke close-out + auth.json-mounting question); empirical validation in the Anthropic-provider variant smoke same date.
+
+**Notes:**
+
+- **OAuth tokens are not a suitable substrate for `secrets:` injection.** Hermes/Claude-Code-style OAuth access tokens (`sk-ant-oat*` prefix) are short-lived and client-scoped; refresh requires the refresh substrate, which lives in `auth.json` and cannot enter the cell per D-80. For cell-side use, users should issue **direct API keys** (Anthropic Console `sk-ant-api*`, OpenAI `sk-...`, etc.) — long-lived, individually rotatable, no refresh dependency. Treat dedicated-API-key-per-cell as the recommended deployment pattern; OAuth-mediated provider access stays on the host's daily-driver harness.
+- **OneCLI integration caveat (worth a follow-up).** OneCLI's design is gateway-proxy (intercepts API calls and adds credentials at the network layer), not value-retrieval. Its CLI has no `secrets get` subcommand. The Stage 12 `fetch_secret` implementation calls `onecli secrets get <name>`, which doesn't exist — every current invocation falls through to the env-var fallback path. Worth either aligning with OneCLI's actual surface or removing the OneCLI integration entirely (relying on env-var injection alone). Not blocking D-162, but tracked here so it doesn't get lost.
+- **Future enhancement (post-MVP):** an explicit per-harness `mount_auth_json: true` override could be exposed for users who have audited their auth.json contents and accept the forward-compat risk. Default remains opt-out.
+
+**Status:** active
+
+### D-163: Stage 13 design — `oiq adjust` CLI surface, TTY approval, container resolution
+
+**Type:** scope
+
+**Tags:** mvp, mounts, safety
+
+**Door Type:** two-way for the CLI surface and approval shape (subflags can be added/removed, prompt wording can evolve, brevity aliases can be added later). The `AGENT_DENIED_CHANGES` denied-list semantic becomes closer to one-way once Stage 14 builds on it — re-permitting an agent-callable mutation after it has been on the denied list would require fresh security review.
+
+**Decision:** Stage 13 ships `oiq adjust <session-id> [flags]` as a single CLI verb for mid-session capability mutation, with subflags `--add-mount <name>[:<mode>]`, `--remove-mount <name>`, `--extend <duration>`, `--allow-broad-mount`. The stop+restart mechanism (D-27) executes after a TTY `[y/N]` approval that displays a compact diff of the requested changes; the prompt is skipped only when every change is unambiguously narrowing (e.g., `--remove-mount` alone). Container resolution uses the Docker label `whizzard.session_id=<sid>` with exact-then-prefix matching; misses cross-check the session log to distinguish typos, ended sessions, and crashed sessions with appropriate user-facing messages. Mid-session `--allow-broad-mount` is permitted for human-initiated adjusts (same authorization shape as launch-time per D-46); the Stage 14 agent-initiated request path will enforce an `AGENT_DENIED_CHANGES` constant that excludes `--allow-broad-mount` (and similar high-risk mutations) from the agent-callable surface.
+
+**Rationale:** D-27 settled the stop+restart mechanism at the architecture layer; Stage 13 is about the UX and CLI surface around invoking it. The single `adjust` verb with composable subflags lets the user combine multiple changes into one approval prompt and keeps help-discoverability in one place. The Stage 14 forward-compat hooks (pluggable `Approver` interface, library-shaped `adjust_session()` core, `AGENT_DENIED_CHANGES` constant) are structural choices that cost nothing at Stage 13 implementation time and save real refactoring when the MCP request path lands.
+
+Rejected: **dedicated subverbs per operation** (`oiq extend`, `oiq add-mount`, etc.) — splits help across N entry points, prevents bundled multi-change commands with a single approval prompt, more code per verb. Single `adjust` verb wins on consistency and composability; brevity aliases can come later at the `r/s/p/m/pr` layer if a specific operation gets typed often enough.
+
+Rejected: **disallowing mid-session `--allow-broad-mount`** (initial proposal). The argument FOR disallow was "mid-session creates a third entry path that undermines D-46's two-gate model." On scrutiny: the profile gate (D-46 first gate) still applies, the user typing the flag at a real terminal is the same authorization signal as at launch, and forcing a session restart for a forgotten flag is hostile UX — sessions accumulate state (conversation, agent memories, MCP context) that shouldn't be thrown away over a flag-omission mistake. Allowing it preserves the two-gate model where it matters (profile layer) and adds none of the actually-risky cases.
+
+Rejected: **session-log-only container resolution**. Less robust against log corruption than Docker label lookup; requires cross-referencing cidfile state which can also drift. The Docker label is set on the container at launch, can't be forged from inside the cell (D-9: cell has no Docker socket access), and the container itself is the authoritative source of truth.
+
+Rejected: **auto-launch fresh session when target session has exited**. Surprising — the mental model of `adjust` is "mutate a *running* session." Clear error + suggestion of the right command (`oiq r [preset]`) is more honest than silently doing something the user didn't ask for.
+
+Rejected: **single-tier approval (everything prompts)**. Wasteful for `--remove-mount` which is always-safe (narrowing capability cannot grant access). Skipping the prompt only for narrowing-only operations keeps the prompt meaningful when it appears.
+
+Rejected: **typed-`yes` confirmation**. Theater for low-stakes changes. The user just typed an adjust command; `[y/N]` is sufficient confirmation.
+
+**Notes:**
+
+- **Stage 14 forward-compat hooks.** Three structural choices Stage 13 makes that Stage 14 plugs into without refactoring: (1) approval is a callable parameter `Approver(change_diff) -> bool` — Stage 13 implements `tty_approver`; Stage 14 adds `mcp_request_approver`; (2) the core adjust operation is a library-shaped `adjust_session(session_id, changes, approver) -> AdjustResult` function the CLI thinly wraps; (3) `AGENT_DENIED_CHANGES = frozenset({"allow_broad_mount", "change_profile", ...})` is a module constant Stage 14's MCP request handler references to filter agent-callable mutations.
+- **Session ID continuity.** Adjust uses the same session-id throughout where possible; the audit log gets a new event type linking the old and new container IDs so downstream tools can follow the chain. Implementation may simplify to "end old session, start new session with `superseded_session_id: <old>` metadata" if same-id continuity proves complex.
+- **Terminal disconnect for interactive sessions.** A known limitation for MVP: adjust stops and re-launches the container, so an interactive terminal connected to the old container loses its connection. Daemon/gateway-mode sessions (Hermes gateway) are unaffected — they auto-resume from HERMES_HOME state. For interactive sessions, users can re-attach to the new container manually (`docker attach <cid>`), or run interactive sessions via tmux. Document; don't try to handle terminal-reattachment automatically in MVP.
+
+**Source:** conversation 2026-05-19 (Stage 13 design pass per D-148 spirit); see docs/mvp_build_plan.md §Stage 13.
+
+**Status:** active
+
+### D-164: Image provenance is independent of containment; OIQ supports both OIQ-built and vendor-supplied images
+
+**Type:** architecture
+
+**Tags:** adapter, safety
+
+**Door Type:** two-way for per-adapter provenance choice (each adapter picks its pattern); closer to one-way for the principle itself (OIQ owns flags, not images) — rolling back would require fresh architectural review.
+
+**Decision:** OIQ owns the `docker run` invocation (security flags, mounts, env, lifecycle); the image is just the IMAGE argument. Adapters pick one of two patterns: (1) **OIQ-built image** — current Hermes, `docker/Dockerfile.hermes` layers the harness onto `whizzard-base`; used when the harness isn't natively containerized. (2) **Vendor-supplied image** — e.g., NanoClaw's published image; OIQ applies its containment flags at launch. Both run one container per session under identical OIQ posture; image provenance is the only difference.
+
+**Rationale:** An earlier framing treated "Docker-native harnesses" as fundamentally incompatible with OIQ. On closer analysis the conflict is narrower: only harnesses requiring `--privileged` or `/var/run/docker.sock` access genuinely break the model — both defeat OIQ's containment. Harnesses that simply ship as a container image are wrappable by using that image directly with OIQ's flags applied.
+
+Rejected: **Docker-in-Docker** — needs privileged mode; breaks `--cap-drop=ALL` and read-only rootfs. Rejected: **`docker.sock` mount** — root-equivalent host escape. Rejected: **blanket refusal to support container-native harnesses** — overcautious framing of a narrow problem.
+
+**Notes:**
+- Pin vendor images to specific digests (D-77 spirit), not tags.
+- Hard incompatibility: harnesses requiring `--privileged` or `/var/run/docker.sock` cannot be wrapped under OIQ — declined, not adapted.
+
+**Source:** conversation 2026-05-19 (NanoClaw "harness in container" question).
+
+**Status:** active
+
+---
+
+### D-165: Stage 14 agent-request processing — file-mailbox channel + operator-invoked `whiz requests`; host-side MCP deferred to v1.0
+
+**Type:** architecture
+
+**Tags:** mvp, integration, safety
+
+**Door Type:** two-way for the CLI surface (a real-time watcher can be layered on later without removing `whiz requests`); closer to one-way for the request-file schema once agents and adapters depend on it.
+
+**Decision:** A contained agent requests a capability change (`whiz_request_mount`, `whiz_request_extend`) by writing a JSON file into a per-session request directory inside the `/run/whiz` mount (D-156 event-file pattern). The host picks requests up on-demand via the operator-invoked `whiz requests` command (list / approve / deny), which routes approved requests through `adjust_session` with `agent_initiated=True` (D-163). No background process watches the channel. A host-side MCP server — where the request tools would become synchronous round-trip calls — is the planned v1.0 revisit.
+
+**Rationale:** `run_shell` blocks for the whole session, so picking up a request mid-session needs *some* concurrent mechanism. The operator-invoked command keeps Whizzard CLI-driven — the exact ground on which D-156 rejected a long-lived host daemon.
+
+Rejected: **background watcher thread** — reintroduces always-on host-side liveness D-156 ruled out, adds concurrency to the load-bearing `run_shell`/`_perform_launch` path, and a mid-session TTY prompt is poor UX for interactive sessions. Rejected: **host-side MCP server now** — gives genuine synchronous tool calls (D-156 itself flagged Stage 14 as the trigger to consider it), but opens a cell→host RPC channel (new D-9 surface), needs a per-session host process, and reopens shipped Stage 9 code; too large a lift for the MVP. Deferred, not dismissed.
+
+**Notes:**
+- The MVP design is forward-compatible: the request-file schema, `adjust_session`, and the `AGENT_DENIED_CHANGES` filter all carry over unchanged when host-side MCP later replaces just the transport.
+- Agent requests are pre-validated host-side before any stop+restart, so a request needing a broad-mount override is denied with the session still running rather than killing it on a failed relaunch.
+
+**Source:** conversation 2026-05-21 (Stage 14 design discussion with Bryan).
+
+**Status:** active
+
+---
+
+## Tag vocabulary
+
+Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
+
+The decision-capture skill enforces this: new entries must pick tags from the list below, or the maintainer must explicitly add a new tag to the vocabulary (and revisit existing entries to apply it where it fits).
+
+### Canonical tags
+
+**Adapter / harness layer:**
+- `adapter` — adapter Protocol, contracts, slate, ADAPTER_SPEC (any adapter-layer decision not tied to one specific adapter)
+- `hermes` — Hermes adapter / integration specifically
+- `nanoclaw` — NanoClaw research / adapter specifically
+
+**Surfaces:**
+- `api` — programmatic API surfaces (library API, MCP API, in-process entry points)
+- `integration` — integration with external systems (orchestrators, vault tools, CI, etc.)
+
+**Domain clusters:**
+- `naming` — product / component / file naming decisions
+- `profiles` — profile config and defaults
+- `mounts` — mount registry and mount behavior
+- `safety` — hardening / safety policy decisions (used as secondary when `Type:` is something else)
+
+**Scope / lifecycle:**
+- `mvp` — MVP-scope work
+- `post-mvp` — post-MVP-scope work
+- `oss-launch` — OSS-launch milestone scope (includes contributor-facing artifacts)
+- `sequencing` — timing / order-of-execution decisions
+
+### Adding a new tag
+
+Steps:
+
+1. Confirm the new tag is genuinely cross-cutting (multiple existing or anticipated entries would carry it). One-off topics belong in the entry body, not as a tag.
+2. Confirm no existing canonical tag covers the concept. Check the list above and grep for near-synonyms.
+3. Add the new tag to the relevant cluster above with a one-line definition.
+4. Apply the new tag to any prior entries it fits (so the index stays useful).
+5. Update the [decision-capture skill](../../../.claude/skills/decision-capture/SKILL.md) tag-vocabulary reference if the change is significant enough to warrant maintainer-side notice.
+
+### What NOT to tag
+
+- The product's own name as a tag (covered in title and Source).
+- One-off external references (the article URL belongs in `Source:`, not as a tag).
+- The `Type:` field's value (Type already classifies; redundant tagging adds noise).
+- Workflow ephemera ("urgent", "in-progress") — those belong in Status or in tasks, not in long-lived decision metadata.
+
 ---
 
 ## Cross-references
@@ -2427,7 +2654,7 @@ For narrative context behind clusters of decisions:
 - **docs/vision_and_strategy.md** — D-15..D-18 (positioning, audience, what-we-are-not), D-119..D-120 (Phase 3 Breaker, Phase 4 Shadow Home).
 - **docs/architecture.md** — D-09..D-14 (foundational principles), D-19..D-27 (architecture & layering), D-28..D-36 (adapter contract), D-47..D-54 (safety policy), D-32 (agent identity).
 - **docs/mvp_build_plan.md** — D-37..D-46 (profiles & mounts), D-64..D-71 (session lifecycle), D-72..D-77 (image management), D-99..D-108 (MVP scope).
-- **docs/post_mvp_spec.md** — D-91, D-98 (vault), D-109..D-118 (v1.0 goals & requirements), D-121..D-123 (deferred features).
+- **docs/post_mvp_spec.md** — D-91, D-98 (vault), D-109..D-118 (v1.0 goals & requirements), D-121..D-123 (deferred features), D-159 (orchestrator integration API), D-160 (ADAPTER_SPEC.md).
 - **docs/stage_validation.md** — operational confirmation of D-37..D-71; the validation checklists are the practical contract behind those design decisions.
 - **docs/archive/hermes_research.md** — D-78..D-90 (Hermes integration), D-25 (MCP-universal), D-24 (don't recreate behavioral controls).
 - **docs/archive/nanoclaw_research.md** + **docs/archive/nanoclaw_internals.md** — D-91..D-98 (NanoClaw lessons applied), D-14 (mount allowlist principle), D-92 (architectural elevation), D-77 (digest pinning rationale).

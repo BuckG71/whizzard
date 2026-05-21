@@ -1,4 +1,128 @@
+# Current State (overwriteable)
+
+> **This section is mutable** — updated when state meaningfully changes (a stage ships, a major decision lands, a constraint relaxes). Everything below the `# Session Handoff Log` heading is append-only per D-150 and must never be edited. Update this section by replacing it in place; prior versions live in git history.
+>
+> **Last updated:** 2026-05-21T00:00Z (UTC)
+
+## Where we are right now
+
+- **MVP user:** Bryan, single-user threshold per D-101. Build choices favor "Bryan's daily-driver setup" over generalized OSS-day-one defaults; OSS-launch will revisit these defaults explicitly (per D-157 pattern).
+- **Stage status:** Stages 1–13 SHIPPED. Stage 8 fully closed (M6–M8). Stage 9 (in-cell read-only MCP), Stage 10 (presets + CLI), Stage 11 (`docs/examples/` integration recipes), Stage 12 (credential utility), Stage 13 (`oiq adjust` stop+restart) all shipped. **352 unit tests + 3 integration tests passing; 84% coverage.**
+- **Next: Stage 14** — Whiz MCP request-side (mutating) tools. Hooks already built in `whizzard/adjust.py` during Stage 13.
+- **Pre-OSS readiness: done.** ruff + mypy + GitHub Actions CI + coverage gate + integration test tier + OSS metadata (LICENSE/CHANGELOG/CONTRIBUTING) + `cli.py`-split-into-package all landed. The senior-dev-flagged gap list from 2026-05-19 is closed.
+- **OneCLI integration caveat** (D-162 Notes): `fetch_secret` calls `onecli secrets get` which doesn't exist in OneCLI's CLI surface; all invocations fall through to env-var fallback. Follow-up item, not blocking.
+- **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`. `osmotiq.ai` owned. Bundled with D-151 (lowercase markdown sweep).
+
+## Active design constraints (don't relitigate without cause)
+
+- **D-9** one-way capability flow (host → cell, never cell → host).
+- **D-10** harness-neutral core; adapter pattern for harness-specific behavior.
+- **D-11** the mount list IS the permission model.
+- **D-27** mid-session capability change = stop+restart, never in-place mutation.
+- **D-101** personal-use MVP threshold.
+- **D-129** decisions.md is append-only. **D-150** HANDOFF.md is append-only (this header block excepted).
+- **D-153** harness-specific identifiers stay inside the adapter module.
+- **D-156** in-cell MCP server: launch-time snapshot + event-file write-back; no live host channel.
+- **D-164** OIQ owns docker-run flags, not images; vendor-supplied images OK; only `--privileged`/`docker.sock` harnesses are hard-incompatible.
+
+## Process discipline in force
+
+- Decisions: flat+tags schema, Rationale required for active entries, Tags from the canonical vocabulary, 250-word target per entry. `scripts/validate_decisions.py` runs pre-handoff + as a pre-commit hook.
+- `make check` (lint + typecheck + test) and `make coverage` are the gates; CI runs them on push/PR.
+- Brevity in collaboration (`feedback_brevity.md`); ask follow-ups as single clean questions (`feedback_question_shape.md`); don't push to close items (`feedback_dont_push_to_close.md`); verify load-bearing claims before asserting (`feedback_verify_claims.md`).
+- Design-paused stages (16, 17) require explicit conversation per D-148 before code.
+
+## What's next
+
+- **Stage 14** — Whiz MCP request-side tools (the active task; see latest log entry).
+- **Stage 15** — duration + idle-timeout enforcement (Stage 13's `--extend` records duration but enforcement doesn't exist yet).
+- **Stage 18** — image management. Autonomous-able.
+- **Stages 16, 17** — Discord control plane; require D-148 design pauses.
+- **Stage 9 manual smoke + auto-wiring** — exercise in-cell MCP end-to-end; auto-wire Hermes `config.yaml` MCP entry.
+- **OneCLI follow-up** — align with the actual OneCLI surface or drop the value-retrieval integration.
+- **D-157 user-config drift** — Bryan's `~/.whizzard/config/profiles.json` still needs sync for the `allow_broad_mount: true` default.
+- **Uncommitted work** — many local changes across this + prior sessions are uncommitted; Bryan decides when to commit.
+
+---
+
 # Session Handoff Log
+
+## 2026-05-21T00:00Z — Stage 13 shipped; pre-OSS gaps closed; Stage 14 is next
+
+### Goal
+Continue the MVP build per `docs/mvp_build_plan.md`. Stage 14 (Whiz MCP request-side tools) is the next implementation chunk. Handoff taken at ~832k tokens to start Stage 14 in a fresh context window rather than risk mid-implementation auto-compaction.
+
+### Active task
+**Stage 14 — Whiz MCP Server (Request-Side Tools).** Add mutating MCP tools (`whiz_request_mount`, `whiz_request_extend`, etc.) the in-cell agent calls to request adjustments. Plugs into Stage 13's hooks in `whizzard/adjust.py`: the `Approver` interface, library-shaped `adjust_session(...)`, and `AGENT_DENIED_CHANGES` + `check_agent_allowed()` (enforced when `agent_initiated=True`). Request path = agent writes request event → host reads it → routes through `adjust_session` with an MCP-mediated approver. No design pause needed; D-156 settled the event-file pattern, D-163 settled the adjust surface.
+
+### Done since last handoff (2026-05-19T22:30Z)
+- Stage 8 M8 closeout + D-162 (`secrets:` field) implemented.
+- Pre-OSS gaps batch: ruff/mypy, GitHub Actions CI, 80% coverage gate (at 84%), integration test tier, OSS metadata files, `cli.py` split into `whizzard/cli/` package, venv rebuilt.
+- Stage 11 shipped (`docs/examples/`). Stage 13 shipped (`whizzard/adjust.py`, `oiq adjust` verb, 352 tests).
+- Decisions: D-161, D-162, D-163, D-164. decision-capture skill gained a 250-word length target.
+
+### Tried & rejected
+- Docker-in-Docker / `docker.sock` mount for container-native harnesses — break containment (D-164).
+- `--continue` to clear context — reloads full transcript; only a fresh `claude` session empties the window.
+
+### Resume protocol
+1. `/session-continuation` reads this file.
+2. `make dx ARGS='D-156'` and `'D-163'` for the MCP event-file pattern + adjust surface.
+3. Read `whizzard/adjust.py` (Stage 13 library) and `whizzard/mcp_server.py` (Stage 9 read-only MCP) — Stage 14 extends both.
+4. Implement per `docs/mvp_build_plan.md` §Stage 14; `make check` + `make coverage` before marking shipped.
+5. Many uncommitted local changes — Bryan decides when to commit. `HANDOFF.md` is append-only (D-150); the `# Current State` header is the mutable exception.
+
+## 2026-05-19T22:30Z — Stage 8 M7 shipped; D-161, D-162 captured; nested-mount fix; Hermes-image derived
+
+### Goal
+Close out Stage 8 M7 (manual interactive smoke validation) — first end-to-end OIQ-wrapped Hermes launch with real state persistence — and capture the architectural pivots that surfaced in the run (Stage 11 reframing + LLM-credential injection design).
+
+### Done this session
+- **M7 SHIPPED.** Bryan ran `whiz run --harness hermes-cell-smoke` against `whizzard-hermes:latest`. Cloned `~/.hermes-whizzard-cell/` (1.6 GB → 19 MB, auth.json excluded per D-80). Interactive chat with mistral-nemo via Mac Studio Ollama at `host.docker.internal:11434`. Session JSON wrote through to host's HERMES_HOME bind mount, survived `/quit` shutdown. exit_status 0, 4m33s. Validates D-79 persistence, D-56 UID parity, `wrap_up()` SIGTERM, Stage 9 in-cell MCP mounts.
+- **`docker/Dockerfile.hermes`** added — derives from `whizzard-base:latest`, layers Python 3.11 + Hermes 0.12.0 from `github.com/NousResearch/hermes-agent` pinned to current host HEAD.
+- **Nested-bind-mount bug fixed in `docker_cmd.py`** — runc was rejecting `/run/whiz/audit.jsonl` mount because the file didn't exist in the freshly-created session dir. Pre-touch placeholder before docker run + regression test (303 tests pass).
+- **D-161 captured** — Stage 11 reframed to `docs/examples/<harness>/` recipes; rejected host-side MCP server + per-harness emitter framework.
+- **D-162 captured** — LLM-provider credentials inject via declarative `secrets:` harness-config block; values from OneCLI/env-fallback; never plaintext in harness config; auth.json prohibition (D-80) holds. Validated empirically via Anthropic-provider variant smoke (env-var injection picked up `ANTHROPIC_API_KEY`).
+- **OneCLI quirk surfaced** — its CLI has no `secrets get`; current Stage 12 `fetch_secret` falls through to env-var fallback in all invocations. Tracked in D-162 Notes; not blocking.
+- **User-config drift fixed** on `~/.whizzard/config/harnesses.json` (was missing `hermes-cell`; restored + added `hermes-cell-smoke`).
+- **Feedback memory** added: `feedback_question_shape.md` (single-proposal follow-up questions, no trailing alternatives).
+
+### Tried & rejected
+- **Mounting `auth.json` into the cell** — schema-isolation + audit reasons; D-80 holds. (D-162 Rationale.)
+- **Plaintext credentials in harness config files** — disk exposure. (D-162 Rationale.)
+- **Per-provider special-casing for LLM creds** (named `anthropic_api_key:` field per provider) — duplicative; generic `secrets:` covers all. (D-162 Rationale.)
+- **OAuth tokens as `secrets:` substrate** — short-lived, client-scoped, refresh requires auth.json substrate; recommend dedicated API keys instead. (D-162 Notes.)
+
+### Resume protocol
+1. Read top of `docs/HANDOFF.md` (Current State) — M7 done; M8 + Stage 11 implementation + D-162 implementation pending.
+2. Recommended next: **implement D-162** — `secrets:` field in harness config schema, adapter loop in `HermesAdapter.container_env()`, `harness_config._validate_spec` validation, test. Small focused chunk. Closes the credential-injection story so non-Ollama providers work without manual `-e` flags.
+3. Other near-term targets: M8 (`pyproject.toml` Hermes extras pin), Stage 11 examples (`docs/examples/claude_code/`, `docs/examples/hermes/`), Stage 9 manual smoke + auto-wiring.
+4. Uncommitted code changes are local: `docker_cmd.py` (nested-mount fix), `tests/test_docker_cmd.py` (regression), `docker/Dockerfile.hermes` (new), `STAGE_8_BUILD_PLAN.md` (M6/M7 marked SHIPPED). User decides when to commit.
+
+## 2026-05-19T01:15Z — Stage 11 architectural pivot to capture; docs-system upgrade shipped
+
+### Goal
+Capture the Stage 11 architectural pivot as numbered decision D-161, then proceed with the reframed Stage 11 deliverables: `docs/examples/<harness>/` recipes + root README integration section. The build plan already carries the pivot in prose; the decision formalizes it before any examples code lands.
+
+### Active task
+**Capture D-161** for the Stage 11 architectural pivot.
+- Type: `process`
+- Tags: `oss-launch, integration, mvp` (all canonical per the vocabulary added this session)
+- Body: Stage 11 ships as integration recipes in `docs/examples/<harness>/`, not as code in OIQ core; CLI is the harness-neutral surface
+- Rationale must name the rejected alternatives explicitly (see below)
+- Source: `docs/mvp_build_plan.md` §Stage 11 (already carries the pivot in prose)
+
+### Tried & rejected (this session — preserve in D-161 Rationale)
+- **Host-side MCP server for harness UX** — rejected on security: privilege-escalation surface if cell-side processes could reach the host socket; solves a problem only the agent has, not the user.
+- **Canonical `commands.yaml` + per-harness emitter framework** — over-engineered for an MVP user-base of one; the CLI is already the harness-neutral interface; D-10 preserved by NOT shipping harness-specific code in core.
+- **Claude-Code-locked slash-commands bundle** (original Stage 11 framing) — single-vendor lock-in; violated D-10.
+
+### Resume protocol
+1. Read top of `docs/HANDOFF.md` (Current State section) for orientation — M6 shipped, M7 pending, docs-system upgrades in place.
+2. Capture D-161 using the updated decision-capture skill — **actually follow the self-audit checklist** (Protocol step 8) this time. Prior captures missed Rationale field and slash-paired Type.
+3. Run `scripts/validate_decisions.py` to confirm clean.
+4. Move to Stage 11 implementation per build-plan §Stage 11 deliverable list (`docs/examples/claude_code/`, `docs/examples/hermes/`, examples README index, root README integration section).
+Don't push Bryan to engage heavy thinking on resume — this session ended with him explicitly low on bandwidth. Let him set the pace.
 
 ## 2026-05-16T14:03Z — Stage 10 shipped; D-157 default-profile change; outstanding items carried forward
 

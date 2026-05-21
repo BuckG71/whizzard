@@ -33,7 +33,6 @@ from typing import Literal
 
 from whizzard.config import CONFIG_DIR
 
-
 MountMode = Literal["ro", "rw"]
 MOUNTS_FILE = CONFIG_DIR / "mounts.json"
 CONTAINER_MOUNT_ROOT = "/mounts"

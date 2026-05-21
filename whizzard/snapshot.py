@@ -12,6 +12,9 @@ Snapshot layout:
         events.jsonl    ← written by the in-cell MCP server as the agent
                           emits events; merged into the host audit log at
                           session_end (see `session_log.py`)
+        requests/       ← one JSON file per agent capability-change request
+                          (Stage 14, D-165); the host reads these via
+                          `whiz requests` (see `whizzard/requests.py`)
 
 Snapshot content is read-only from the cell's perspective; the event file
 is the cell-writable channel back to host. Per D-12, the snapshot does
@@ -22,13 +25,12 @@ permission boundary — only descriptive fields (what is, not what could be).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from whizzard.config import WHIZZARD_HOME
 from whizzard.mounts import Mount, MountMode
-
 
 SESSIONS_DIR = WHIZZARD_HOME / "sessions"
 
@@ -47,6 +49,17 @@ def snapshot_path(session_id: str, whizzard_home: Path | None = None) -> Path:
 def event_log_path(session_id: str, whizzard_home: Path | None = None) -> Path:
     """Path to the per-session agent-event file the cell writes to."""
     return session_dir(session_id, whizzard_home) / "events.jsonl"
+
+
+def request_dir(session_id: str, whizzard_home: Path | None = None) -> Path:
+    """Per-session directory holding agent capability-change requests.
+
+    The in-cell MCP server writes one JSON file per request here (Stage 14,
+    D-165); the host reads them via `whiz requests`. It sits inside the
+    per-session directory so the existing `/run/whiz` bind mount exposes it
+    to the cell with no extra `-v` flag.
+    """
+    return session_dir(session_id, whizzard_home) / "requests"
 
 
 def write_snapshot(
@@ -86,7 +99,7 @@ def write_snapshot(
             for m, mode in resolved_mounts
         ],
         "harness": harness_name,
-        "snapshot_written_at": datetime.now(timezone.utc).isoformat(),
+        "snapshot_written_at": datetime.now(UTC).isoformat(),
     }
 
     target.write_text(json.dumps(payload, indent=2))

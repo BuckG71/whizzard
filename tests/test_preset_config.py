@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from whizzard.preset_config import (
-    Preset,
     PresetConfigError,
     default_presets,
     get_preset,

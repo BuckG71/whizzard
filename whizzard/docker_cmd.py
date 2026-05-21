@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from whizzard.adapters import GenericShellAdapter, HarnessAdapter
-from whizzard.config import Profile, STATE_DIR
+from whizzard.config import STATE_DIR, Profile
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
     SESSIONS_LOG,
@@ -24,8 +24,7 @@ from whizzard.session_log import (
     merge_agent_events,
     new_session_id,
 )
-from whizzard.snapshot import event_log_path, session_dir
-
+from whizzard.snapshot import event_log_path, request_dir, session_dir
 
 WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
 CONTAINER_USER = "whizzard"  # non-root, defined in docker/Dockerfile
@@ -106,17 +105,31 @@ def build_run_argv(
     if adapter is None:
         adapter = GenericShellAdapter()
 
+    # Stage 8 M6: harness-driven mounts (HERMES_HOME, etc). Resolved up
+    # front because a uid_parity=True entry rewrites the --user flag and
+    # the home-dir tmpfs ownership for the whole container (D-56).
+    harness_mounts = adapter.container_mounts()
+    needs_uid_parity = any(cm.uid_parity for cm in harness_mounts)
+    if needs_uid_parity:
+        user_uid = os.getuid()
+        user_gid = os.getgid()
+        user_arg = f"{user_uid}:{user_gid}"
+        home_tmpfs_owner = f"uid={user_uid},gid={user_gid}"
+    else:
+        user_arg = CONTAINER_USER
+        home_tmpfs_owner = "uid=1000,gid=1000"
+
     argv = [
         "docker", "run",
         "--rm",
         "--init",
         "-it",
-        "--user", CONTAINER_USER,
+        "--user", user_arg,
         "--cap-drop=ALL",
         "--security-opt", "no-new-privileges",
         "--read-only",
         "--tmpfs", "/tmp:rw,size=128m,mode=1777",
-        "--tmpfs", f"/home/{CONTAINER_USER}:rw,size=64m,mode=0755,uid=1000,gid=1000",
+        "--tmpfs", f"/home/{CONTAINER_USER}:rw,size=64m,mode=0755,{home_tmpfs_owner}",
     ]
 
     if not profile.network_enabled:
@@ -134,6 +147,12 @@ def build_run_argv(
     for mount, mode in resolved_mounts or []:
         argv += ["-v", mount.docker_volume_arg(mode)]
         argv += ["--label", f"whizzard.mount.{mount.name}={mode}"]
+
+    # Stage 8 M6: harness-driven mounts (resolved above for uid_parity).
+    # Emitted after user mounts so user paths can't shadow harness paths.
+    for cm in harness_mounts:
+        argv += ["-v", cm.docker_volume_arg()]
+        argv += ["--label", f"whizzard.harness_mount={cm.container_path}={cm.mode}"]
 
     # Adapter-driven env injection. Combines harness-config env (`container_env`)
     # with optional Whiz MCP server env (`mcp_env`) per Stage 9 / D-156. Sorted
@@ -155,6 +174,19 @@ def build_run_argv(
     if mcp_env and session_id:
         sess_dir = session_dir(session_id)
         sess_dir.mkdir(parents=True, exist_ok=True)
+        # Pre-create the audit.jsonl target inside sess_dir before the bind
+        # mount lands. Docker Desktop on macOS (virtiofs) requires the nested
+        # mountpoint to exist on the host before the second `-v` resolves;
+        # otherwise runc reports "mountpoint outside of rootfs" because the
+        # first bind mount (sess_dir → /run/whiz) provides the parent dir but
+        # the file at /run/whiz/audit.jsonl is created by the second mount.
+        # M7 smoke surfaced this 2026-05-19.
+        (sess_dir / "audit.jsonl").touch(exist_ok=True)
+        # Stage 14: pre-create the agent request channel. It lives inside
+        # sess_dir, so the /run/whiz mount below exposes it to the cell with
+        # no extra `-v`; pre-creating it means `whiz requests` finds an empty
+        # dir rather than a missing one before the agent writes anything.
+        request_dir(session_id).mkdir(parents=True, exist_ok=True)
         argv += ["-v", f"{sess_dir}:/run/whiz:rw"]
         # Touch the audit log so the bind mount has a target file even on
         # first-ever run. The host writes to it normally; the cell sees a

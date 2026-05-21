@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 
 from whizzard.cli import app
 
-
 runner = CliRunner()
 
 
@@ -17,7 +16,7 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Isolate WHIZZARD_HOME to a temp dir per test."""
     home = tmp_path / "whizzard-home"
     monkeypatch.setenv("WHIZZARD_HOME", str(home))
-    from whizzard import cli, config, harness_config, mounts, preset_config
+    from whizzard import config, harness_config, mounts, preset_config, session_log
     monkeypatch.setattr(config, "WHIZZARD_HOME", home)
     monkeypatch.setattr(config, "CONFIG_DIR", home / "config")
     monkeypatch.setattr(config, "LOGS_DIR", home / "logs")
@@ -26,13 +25,22 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
     monkeypatch.setattr(harness_config, "HARNESSES_FILE", home / "config" / "harnesses.json")
     monkeypatch.setattr(preset_config, "PRESETS_FILE", home / "config" / "presets.json")
-    monkeypatch.setattr(cli, "PROFILES_FILE", home / "config" / "profiles.json")
-    monkeypatch.setattr(cli, "MOUNTS_FILE", home / "config" / "mounts.json")
-    monkeypatch.setattr(cli, "HARNESSES_FILE", home / "config" / "harnesses.json")
-    monkeypatch.setattr(cli, "PRESETS_FILE", home / "config" / "presets.json")
-    monkeypatch.setattr(cli, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
-    from whizzard import session_log
     monkeypatch.setattr(session_log, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
+    # Also patch the references in each CLI subapp module — they import
+    # the file-path constants at module load, so source-module patches
+    # above don't reach already-bound names in subapps.
+    from whizzard.cli import _session as cli_session
+    from whizzard.cli import harnesses as cli_harnesses
+    from whizzard.cli import mounts as cli_mounts
+    from whizzard.cli import preset as cli_preset
+    from whizzard.cli import profiles as cli_profiles
+    from whizzard.cli import sessions as cli_sessions
+    monkeypatch.setattr(cli_profiles, "PROFILES_FILE", home / "config" / "profiles.json")
+    monkeypatch.setattr(cli_mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
+    monkeypatch.setattr(cli_harnesses, "HARNESSES_FILE", home / "config" / "harnesses.json")
+    monkeypatch.setattr(cli_preset, "PRESETS_FILE", home / "config" / "presets.json")
+    monkeypatch.setattr(cli_sessions, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
+    monkeypatch.setattr(cli_session, "SESSIONS_LOG", home / "logs" / "sessions.jsonl")
     return home
 
 
@@ -253,8 +261,9 @@ def test_preset_launch_writes_preset_field_to_session_log(
     session_start entry that includes the preset field, so subsequent bare
     `whiz r` can find it."""
     # Stub out run_shell to avoid actually launching docker, but let the
-    # log_session_start call happen.
-    from whizzard import cli, docker_cmd, session_log as session_log_module
+    # log_session_start call happen. Patches go on the _launch module
+    # (where the imports live after the cli/ package split).
+    from whizzard.cli import _launch as cli_launch
 
     captured: dict = {}
 
@@ -269,9 +278,9 @@ def test_preset_launch_writes_preset_field_to_session_log(
         from whizzard.docker_cmd import RunResult
         return RunResult(container_id="fake-cid", exit_code=0)
 
-    monkeypatch.setattr(cli, "run_shell", fake_run_shell)
-    monkeypatch.setattr(cli, "docker_available", lambda: True)
-    monkeypatch.setattr(cli, "image_exists", lambda image: True)
+    monkeypatch.setattr(cli_launch, "run_shell", fake_run_shell)
+    monkeypatch.setattr(cli_launch, "docker_available", lambda: True)
+    monkeypatch.setattr(cli_launch, "image_exists", lambda image: True)
 
     result = runner.invoke(app, ["preset", "launch", "shell"])
     assert result.exit_code == 0, result.output

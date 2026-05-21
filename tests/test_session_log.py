@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from whizzard.session_log import (
     append_event,
     log_session_end,

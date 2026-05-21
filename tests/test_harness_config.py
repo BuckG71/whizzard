@@ -170,3 +170,69 @@ def test_bundled_example_file_parses_cleanly():
     assert "generic" in harnesses
     assert "hermes" in harnesses
     assert harnesses["hermes"]["type"] == "agent"
+
+
+# --- D-162: secrets field validation ---
+
+
+def test_load_accepts_secrets_list(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "secrets": ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"],
+        },
+    })
+    harnesses = load_harnesses(f)
+    assert harnesses["h"]["secrets"] == ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"]
+
+
+def test_load_rejects_non_list_secrets(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "secrets": "ANTHROPIC_API_KEY",  # string, not list
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="secrets must be a list"):
+        load_harnesses(f)
+
+
+def test_load_rejects_secrets_with_non_string_entries(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "secrets": ["ANTHROPIC_API_KEY", 42],  # int mixed in
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="secrets must be a list"):
+        load_harnesses(f)
+
+
+def test_load_rejects_secrets_with_invalid_env_var_name(tmp_path: Path):
+    # D-162: each entry must be a valid env-var name shape (no spaces, no '=').
+    # An '=' in the entry would indicate someone is smuggling plaintext value
+    # into the harness config, which the schema is designed to prevent.
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "secrets": ["ANTHROPIC_API_KEY=sk-ant-..."],
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="not a valid env-var name"):
+        load_harnesses(f)
+
+
+def test_load_rejects_empty_secret_name(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "secrets": [""],
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="not a valid env-var name"):
+        load_harnesses(f)

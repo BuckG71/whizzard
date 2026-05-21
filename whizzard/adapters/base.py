@@ -13,7 +13,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol, runtime_checkable
+from pathlib import Path
+from typing import Literal, Protocol, runtime_checkable
+
+
+@dataclass(frozen=True)
+class ContainerMount:
+    """A host→container mount the adapter declares for its own state needs.
+
+    Distinct from the user-named mount registry (`whizzard.mounts.Mount`):
+    these are harness-driven mounts that the user doesn't reason about
+    individually (e.g., Hermes's profile directory needed at HERMES_HOME).
+    Wired by core's `docker_cmd` at launch.
+
+    `uid_parity=True` (D-56): the container UID is overridden to match the
+    host UID so writes through this mount land owned by the host user on
+    raw Linux. Docker's `--user` flag is container-wide, so any uid_parity
+    request applies to the whole container — but only the harness mount
+    needs it to function, hence the per-mount flag.
+    """
+    host_path: Path
+    container_path: str
+    mode: Literal["ro", "rw"] = "rw"
+    uid_parity: bool = False
+
+    def docker_volume_arg(self) -> str:
+        return f"{self.host_path}:{self.container_path}:{self.mode}"
 
 
 class WrapUpStatus(Enum):
@@ -136,5 +161,17 @@ class HarnessAdapter(Protocol):
         audit log, event file) plus the session id. Adapters that don't
         use MCP return an empty dict; core combines this with
         `container_env()` for the actual `-e` flags.
+        """
+        ...
+
+    def container_mounts(self) -> list[ContainerMount]:
+        """Harness-required host→container mounts (Stage 8 M6).
+
+        Distinct from the user-named mount registry: these are state dirs
+        the harness itself needs (e.g., Hermes profile → HERMES_HOME).
+        `GenericShellAdapter` returns `[]`; `HermesAdapter` returns one
+        entry mapping `hermes_home` from the harness config to the
+        in-cell HERMES_HOME path. Core wires the `-v` flags at launch
+        and applies UID parity for any entry with `uid_parity=True` (D-56).
         """
         ...

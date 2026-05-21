@@ -19,7 +19,6 @@ from whizzard.adapters import (
 )
 from whizzard.adapters import _credentials as creds_module
 
-
 # --- Internal OneCLI shell-out helper (`_fetch_via_onecli`) ---
 
 
@@ -129,6 +128,7 @@ def test_fetch_secret_raises_when_onecli_missing_secret_and_no_host_env(monkeypa
 
 
 def test_secret_fetch_result_is_frozen():
+    import dataclasses
     r = SecretFetchResult(value="x", source="onecli")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         r.value = "tampered"  # type: ignore[misc]

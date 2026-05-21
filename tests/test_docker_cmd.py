@@ -194,14 +194,15 @@ def test_argv_no_mcp_mounts_when_session_id_absent(tmp_path, monkeypatch):
 
 
 def test_argv_includes_mcp_mounts_for_hermes_with_session_id(tmp_path, monkeypatch):
-    from whizzard.adapters import HermesAdapter
     # Use a fresh WHIZZARD_HOME so the test doesn't write into the user's
     # real ~/.whizzard. Reload modules that captured the env at import time.
     import importlib
+
     import whizzard.config
-    import whizzard.snapshot
-    import whizzard.session_log
     import whizzard.docker_cmd
+    import whizzard.session_log
+    import whizzard.snapshot
+    from whizzard.adapters import HermesAdapter
     monkeypatch.setenv("WHIZZARD_HOME", str(tmp_path))
     importlib.reload(whizzard.config)
     importlib.reload(whizzard.snapshot)
@@ -224,3 +225,107 @@ def test_argv_includes_mcp_mounts_for_hermes_with_session_id(tmp_path, monkeypat
     # MCP env vars present
     assert "WHIZ_SNAPSHOT_PATH=/run/whiz/snapshot.json" in joined
     assert "WHIZ_SESSION_ID=sess-mcp-1" in joined
+
+    # M7 smoke regression (2026-05-19): the audit.jsonl placeholder must be
+    # pre-created inside the session dir BEFORE docker run, so the nested
+    # bind mount (SESSIONS_LOG → /run/whiz/audit.jsonl, inside sess_dir at
+    # /run/whiz) doesn't fail on Docker Desktop macOS with virtiofs.
+    from whizzard.snapshot import session_dir as session_dir_reloaded
+    audit_placeholder = session_dir_reloaded("sess-mcp-1") / "audit.jsonl"
+    assert audit_placeholder.exists(), (
+        "audit.jsonl placeholder must be pre-created in session dir to "
+        "prevent runc 'mountpoint outside of rootfs' on macOS Docker Desktop"
+    )
+
+    # Stage 14: the agent request channel dir must be pre-created inside the
+    # session dir so `whiz requests` finds an empty dir, not a missing one.
+    request_channel = session_dir_reloaded("sess-mcp-1") / "requests"
+    assert request_channel.is_dir()
+
+
+# --- Stage 8 M6: harness mounts + UID parity ---
+
+
+def test_argv_emits_hermes_home_mount_when_configured(tmp_path):
+    from whizzard.adapters import HermesAdapter
+    hermes_home = tmp_path / ".hermes-test"
+    hermes_home.mkdir()
+    argv = build_run_argv(
+        get_profile("default"),
+        adapter=HermesAdapter(config={"hermes_home": str(hermes_home)}),
+    )
+    joined = " ".join(argv)
+
+    assert f"{hermes_home}:/home/whizzard/.hermes:rw" in joined
+    assert "whizzard.harness_mount=/home/whizzard/.hermes=rw" in joined
+
+
+def test_argv_no_harness_mount_for_generic_shell():
+    argv = build_run_argv(get_profile("default"), adapter=GenericShellAdapter())
+    joined = " ".join(argv)
+    assert "whizzard.harness_mount" not in joined
+    assert "/home/whizzard/.hermes" not in joined
+
+
+def test_argv_uid_parity_overrides_user_and_tmpfs_when_hermes_mounted(tmp_path):
+    import os
+
+    from whizzard.adapters import HermesAdapter
+    hermes_home = tmp_path / ".hermes-uid"
+    hermes_home.mkdir()
+    argv = build_run_argv(
+        get_profile("default"),
+        adapter=HermesAdapter(config={"hermes_home": str(hermes_home)}),
+    )
+
+    # --user should be host UID:GID, not the named whizzard user.
+    user_idx = argv.index("--user")
+    expected = f"{os.getuid()}:{os.getgid()}"
+    assert argv[user_idx + 1] == expected
+
+    # Home-dir tmpfs uid/gid must follow the --user override so the
+    # container user can actually write to /home/whizzard.
+    home_tmpfs = next(
+        (a for a in argv if a.startswith("/home/whizzard:")), None
+    )
+    assert home_tmpfs is not None
+    assert f"uid={os.getuid()},gid={os.getgid()}" in home_tmpfs
+
+
+def test_argv_no_uid_parity_for_generic_shell_keeps_named_user():
+    argv = build_run_argv(get_profile("default"), adapter=GenericShellAdapter())
+    user_idx = argv.index("--user")
+    assert argv[user_idx + 1] == "whizzard"
+
+    home_tmpfs = next(
+        (a for a in argv if a.startswith("/home/whizzard:")), None
+    )
+    assert home_tmpfs is not None
+    assert "uid=1000,gid=1000" in home_tmpfs
+
+
+def test_argv_harness_mount_comes_after_user_mounts(tmp_path):
+    """User mounts appear first; harness mounts emitted after, so a hostile
+    or accidental user mount can't shadow a harness path."""
+    from whizzard.adapters import HermesAdapter
+    hermes_home = tmp_path / ".hermes-order"
+    hermes_home.mkdir()
+    user_mount = Mount(
+        name="alpha", host_path=Path("/host/alpha"), default_mode="rw"
+    )
+
+    argv = build_run_argv(
+        get_profile("default"),
+        resolved_mounts=[(user_mount, "rw")],
+        adapter=HermesAdapter(config={"hermes_home": str(hermes_home)}),
+    )
+
+    # Find positions of the two -v args; user mount must precede harness mount.
+    v_positions = [i for i, a in enumerate(argv) if a == "-v"]
+    user_pos = next(
+        i for i in v_positions if "/host/alpha:" in argv[i + 1]
+    )
+    harness_pos = next(
+        i for i in v_positions if str(hermes_home) in argv[i + 1]
+    )
+    assert user_pos < harness_pos

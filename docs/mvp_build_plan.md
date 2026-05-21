@@ -227,25 +227,33 @@ whiz preset init [--force]
 
 Bundled defaults reflect MVP user's setup (D-101 personal-use threshold). OSS-launch will revisit per the same pattern as D-157.
 
-### Stage 11 — Host-side Claude Code Slash Commands
+### Stage 11 — Harness Integration Examples (CLI is the primary surface) [SHIPPED 2026-05-19]
 
-Goal: zero-friction Whiz operation from inside Claude Code (D-142 C).
+Goal: zero-friction Whiz operation from inside any agent harness — by recognizing that the CLI shipped in Stage 10 is already the harness-neutral interface, and delivering copy-paste integration recipes rather than baking harness-specific surfaces into OIQ core.
 
-Deliverable: a bundle of `.claude/skills/` recipes that wrap the underlying `whizzard` CLI. Pattern follows NanoClaw's operator-side skill model documented in [archive/nanoclaw_internals.md §2](archive/nanoclaw_internals.md).
+**Design pivot (D-148 conversation, 2026-05-18).** The original framing was "bundle of `.claude/skills/` recipes" locked to one vendor's harness. An intermediate proposal added a canonical-commands + per-harness-emitter layer plus a host-side MCP server; both were rejected as solving problems the user doesn't have:
 
-Skills shipped at this stage:
+- The CLI ergonomics shipped in Stage 10 (`whiz r`, `whiz s`, smart defaults, bare-`whiz` status) already deliver zero-friction operation from any terminal. Any harness can shell out; the user can type directly. Total friction: ~7 keystrokes.
+- Per-harness skill/command files belong in user/community config, not OIQ core. Shipping `.claude/skills/` in the package would couple a harness-neutral product to one vendor's directory layout.
+- A host-side MCP server would have solved a problem only the *agent* (not the user) has, while introducing a new privilege-escalation surface (any host-side process can connect; cells with smuggled socket access could call `oiq.launch`). Not worth the security cost.
 
-- `/whiz launch <preset>` — start a preset session
-- `/whiz status` — list running sessions
-- `/whiz preset list` — list available presets
-- `/whiz sessions tail` — tail the audit log
-- `/whiz extend <session-id> <duration>` — read-only display at this stage; mutating behavior unlocked at Stage 13
-- `/whiz approve <token>` — read-only display at this stage; mutating behavior unlocked at Stage 14
-- `/whiz adjust <session-id> --add-mount <name>` — read-only display at this stage; mutating behavior unlocked at Stage 13
+Stage 11 is therefore reframed as a documentation-and-examples stage, not a code-build stage.
 
-The Stage 11 deliverable is the skill bundle plus the read-only operations. Mutating operations are unlocked progressively as their underlying stages land.
+**Deliverables:**
 
-No new pip dependencies; the skills shell out to `whizzard`.
+1. **`docs/examples/claude_code/`** — production-grade Claude Code integration. A set of `.claude/skills/` files (`oiq-launch`, `oiq-status`, `oiq-preset-list`, `oiq-sessions-tail`, and read-only displays for `oiq-extend`, `oiq-approve`, `oiq-adjust`). Each skill shells out to the OIQ CLI. "Production-grade" because Bryan uses these daily — the MVP user IS a Claude Code user, so the example IS the daily-driver setup.
+
+2. **`docs/examples/hermes/`** — production-grade Hermes integration. The Migrate recipe: a working `harnesses.json` snippet for `hermes-cell`, a working `presets.json` entry (the `hermes` preset already bundled in Stage 10), a profile-cloning walkthrough (host `~/.hermes` → `~/.hermes-whizzard-cell` via `oiq hermes profile create`), OneCLI credential setup (D-134), and the step-by-step "go-live" sequence (stop host Hermes → clone profile → first OIQ-wrapped launch). "Production-grade" because Hermes IS our MVP target adapter — the example IS the validation path.
+
+3. **`docs/examples/README.md`** — index of examples, with stubs and contribution invitations for `docs/examples/codex/`, `docs/examples/cline/`, `docs/examples/openclaw/`, etc. Lowers community-contribution friction.
+
+4. **Root README section "Using OIQ inside your agent harness"** — describes the integration pattern (CLI shell-out from harness commands/skills), points at `docs/examples/`, invites PRs for additional harnesses.
+
+**Mutating skill behavior** (extend, approve, adjust) ships when the underlying CLI verbs land (Stage 13 for extend/adjust; Stage 14 for approve). The Stage 11 closeout deliberately omitted "read-only display" placeholders for the not-yet-existent verbs — placeholders that error with "not yet implemented" aren't useful. They'll be added as new skill files when the verbs ship.
+
+**No new pip dependencies. No core code changes.** Stage 11 was documentation work plus example-file authoring. The CLI was the deliverable; Stage 11 is the showcase.
+
+**Shipped 2026-05-19.** Nine files in `docs/examples/`: top-level README, `claude_code/README.md`, four skill files (`oiq-launch`, `oiq-status`, `oiq-presets`, `oiq-sessions-tail`), `hermes/README.md` (full migration walkthrough), `hermes/harnesses.json.example` (`hermes-cell` + `hermes-cell-smoke` entries), `hermes/config.yaml.snippet` (Ollama provider via `host.docker.internal`). Root README gains a "Using OIQ inside your agent harness" section pointing at the examples directory.
 
 ### Stage 12 — OneCLI Credential Plumbing (Cross-Adapter Generalization + Fallback)
 
@@ -266,28 +274,52 @@ The original Stage 12 framing (proxy pattern via `HTTPS_PROXY`) was based on D-9
 
 Promoted to MVP per D-98 (vault is v1-must-have). Lands at this position because credential isolation hygiene — even bounded — is the strongest single argument for Whiz's security thesis (D-102 / B).
 
-### Stage 13 — Stop+Restart Mechanism + Local TTY Approval Flow
+### Stage 13 — Stop+Restart Mechanism + Local TTY Approval Flow [SHIPPED 2026-05-19]
 
 Goal: change a running session's capabilities without losing the session.
 
 Mechanism (D-27): adapter.wrap_up() → terminate → relaunch with new flags. The session is logically continuous from the user's perspective even though the container is replaced. Approval is a local TTY prompt for MVP; Discord approval comes at Stage 17.
 
-User-facing CLI:
+Design + UX details captured in D-163 (Stage 13 design conversation). Shipped surface:
 
-```zsh
-whizzard adjust <session-id> --add-mount foo
-whizzard adjust <session-id> --extend 30m
+```sh
+whiz adjust <session-id> --add-mount foo[:mode]
+whiz adjust <session-id> --remove-mount bar
+whiz adjust <session-id> --extend 30m
+whiz adjust <session-id> --allow-broad-mount --add-mount documents
+whiz adjust <session-id> --yes    # skip approval prompt (for scripting)
 ```
 
-This is the substrate Stage 14's request-side MCP tools call into.
+Implementation: `whizzard/adjust.py` (library: Changes/MountAddition/Approver/AdjustResult, parse_duration, resolve_session, detect_noops, render_diff, adjust_session orchestration, AGENT_DENIED_CHANGES + check_agent_allowed for Stage 14 forward-compat) + `whizzard/cli/adjust.py` (CLI command + tty_approver). 41 new tests; total 352 unit tests passing; integration tier still green.
 
-### Stage 14 — Whiz MCP Server (Request-Side Tools)
+Stage 14 hooks in place:
+- Pluggable `Approver` interface (Stage 14 adds an MCP-mediated approver)
+- Library-shaped `adjust_session(...)` callable from both CLI and MCP paths
+- `AGENT_DENIED_CHANGES = frozenset({"allow_broad_mount", "change_profile"})` filter applied when `agent_initiated=True`
+
+Forward-looking: `--extend` records the new duration in the adjustment log entry but isn't actively enforced until Stage 15 lands the duration-enforcement mechanism. Interactive sessions (vs. gateway-mode daemons) experience a terminal-disconnect during adjust — documented as a known limitation; users on interactive sessions can re-attach with `docker attach <cid>` or run interactive sessions via tmux.
+
+### Stage 14 — Whiz MCP Server (Request-Side Tools) [SHIPPED 2026-05-21]
 
 Goal: agent-initiated capability requests.
 
-Tools added at this stage:
-- `whiz_request_mount` — agent requests a named mount be added; Whiz host-side prompts user (or auto-approves per profile policy), applies via Stage 13 stop+restart
-- `whiz_request_extend` — agent requests duration extension
+Design captured in D-165. The contained agent calls MCP request tools that drop a JSON request file into a per-session channel inside the `/run/whiz` mount (D-156 event-file pattern); the host picks them up on-demand via the operator-invoked `whiz requests` command — no background watcher (keeps Whizzard CLI-driven, per D-156's daemon rejection). A host-side MCP server giving synchronous round-trip request calls is the planned v1.0 revisit.
+
+Shipped surface:
+
+```sh
+whiz requests                  # list pending agent requests (all sessions)
+whiz requests list --all       # include resolved (applied/denied) requests
+whiz requests approve <id>     # approve + apply via Stage 13 stop+restart
+whiz requests deny <id>        # decline without applying
+```
+
+In-cell MCP tools added (`whizzard/mcp_server.py`):
+- `whiz_request_mount` — agent requests a registered mount be added
+- `whiz_request_extend` — agent requests a duration extension
+- `whiz_check_request` — agent polls a prior request's outcome
+
+Implementation: `whizzard/mcp_server.py` (3 new tools + `WHIZ_REQUEST_DIR` env var), `whizzard/requests.py` (host-side reader / pre-flight validator / `process_request`), `whizzard/cli/requests.py` (`whiz requests` sub-app), Hermes adapter `mcp_env` wiring, `whiz status` pending-request count. Approved requests route through `adjust_session` with `agent_initiated=True`, so the `AGENT_DENIED_CHANGES` filter (D-163) blocks broad-mount / profile changes from the agent path. Requests are pre-validated host-side before any stop+restart — a request needing a broad-mount override is denied with the session still running. 55 new tests; 407 unit tests passing; 85% coverage; integration tier still green.
 
 Depends on Stage 13 substrate. Network-egress-allowlist requests (`whiz_request_network`) require sidecar proxy and remain post-MVP.
 

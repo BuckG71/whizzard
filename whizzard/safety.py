@@ -33,12 +33,11 @@ This module is macOS-focused for MVP. Linux paths (e.g., ~/.config/google-chrome
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-from whizzard.config import Profile, WHIZZARD_HOME
-
+from whizzard.config import WHIZZARD_HOME, Profile
 
 HOME = Path.home()
 

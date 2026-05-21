@@ -28,7 +28,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 WHIZZARD_HOME = Path(os.environ.get("WHIZZARD_HOME", Path.home() / ".whizzard"))
 CONFIG_DIR = WHIZZARD_HOME / "config"
 LOGS_DIR = WHIZZARD_HOME / "logs"

@@ -13,6 +13,7 @@ credential injection. The gateway.lock pre-check and wrap_up() via
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -22,13 +23,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from whizzard.adapters._credentials import (
-    CredentialUnavailableError,
-    OneCLINotInstalledError,
-    OneCLISecretMissingError,
-    SecretFetchResult,
     fetch_secret,
 )
 from whizzard.adapters.base import (
+    ContainerMount,
     HarnessAdapter,
     PreflightResult,
     WrapUpResult,
@@ -37,23 +35,31 @@ from whizzard.adapters.base import (
 from whizzard.mcp_server import (
     ENV_AUDIT_LOG_PATH,
     ENV_EVENT_LOG_PATH,
+    ENV_REQUEST_DIR,
     ENV_SESSION_ID,
     ENV_SNAPSHOT_PATH,
 )
 
-
 # In-cell paths where Whizzard mounts per-session state for the MCP server.
 # These are conventional and known by the adapter so it can wire the env
 # vars; the actual `-v` docker mounts that put files at these paths come
-# from core's `docker_cmd` (Stage 9 M5).
+# from core's `docker_cmd` (Stage 9 M5). The requests/ dir sits inside the
+# `/run/whiz` mount, so no extra `-v` flag is needed for it (Stage 14).
 _IN_CELL_WHIZ_DIR = "/run/whiz"
 _IN_CELL_SNAPSHOT_PATH = f"{_IN_CELL_WHIZ_DIR}/snapshot.json"
 _IN_CELL_AUDIT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/audit.jsonl"
 _IN_CELL_EVENT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/events.jsonl"
+_IN_CELL_REQUEST_DIR = f"{_IN_CELL_WHIZ_DIR}/requests"
 
 
 _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
 _GATEWAY_LOCK_FILENAME = "gateway.lock"
+
+# In-cell HERMES_HOME path. Matches Hermes's own convention ($HOME/.hermes)
+# where $HOME is the cell user's home dir from docker/Dockerfile. Mounting
+# the host hermes_home here lets in-cell Hermes find its profile under its
+# default lookup, no flag plumbing required.
+_IN_CELL_HERMES_HOME = "/home/whizzard/.hermes"
 
 
 # --- Profile creation (D-86) -----------------------------------------------
@@ -141,9 +147,7 @@ def _clone_ignore(src: str, names: list[str]) -> list[str]:
     """shutil.copytree `ignore=` callable — names in `src` to skip."""
     skipped: list[str] = []
     for n in names:
-        if n in _CLONE_EXCLUDE_NAMES or n in _CLONE_EXCLUDE_DIRS:
-            skipped.append(n)
-        elif n.endswith(_CLONE_EXCLUDE_SUFFIXES):
+        if n in _CLONE_EXCLUDE_NAMES or n in _CLONE_EXCLUDE_DIRS or n.endswith(_CLONE_EXCLUDE_SUFFIXES):
             skipped.append(n)
     return skipped
 
@@ -238,7 +242,8 @@ def _read_gateway_lock(hermes_home: Path) -> dict | None:
     if not lock_path.exists():
         return None
     try:
-        return json.loads(lock_path.read_text())
+        data: dict = json.loads(lock_path.read_text())
+        return data
     except (OSError, json.JSONDecodeError):
         return None
 
@@ -291,6 +296,22 @@ class HermesAdapter:
             result = fetch_secret(var)
             env[var] = result.value
             self._credential_sources[platform] = result.source
+        # secrets (D-162): generic env-var-name list for LLM-provider keys,
+        # additional bot tokens, and any other long-lived credentials the
+        # harness needs inside the cell. Same delivery as platforms (OneCLI
+        # first, env-var fallback). Plaintext values never live in the
+        # harness config; only names. Auth.json mounting remains prohibited
+        # by D-80.
+        for secret_name in self.config.get("secrets", []) or []:
+            result = fetch_secret(secret_name)
+            env[secret_name] = result.value
+            self._credential_sources[secret_name] = result.source
+        # HERMES_HOME points at the in-cell mount target where the host
+        # profile is mounted (Stage 8 M6, D-79). Only set when hermes_home
+        # is configured; otherwise leave Hermes to discover its default
+        # (ephemeral tmpfs home) — a misconfiguration the user should fix.
+        if _resolve_hermes_home(self.config) is not None:
+            env["HERMES_HOME"] = _IN_CELL_HERMES_HOME
         extra = self.config.get("env", {}) or {}
         for k, v in extra.items():
             env[str(k)] = str(v)
@@ -395,17 +416,19 @@ class HermesAdapter:
         if platforms:
             caps.append(f"platforms: {', '.join(platforms)}")
         caps.append(
-            "Whiz MCP server: read-only tools available "
-            "(whiz_status, whiz_audit_self, whiz_emit_event, whiz_list_presets)"
+            "Whiz MCP server: read tools (whiz_status, whiz_audit_self, "
+            "whiz_emit_event) + request tools (whiz_request_mount, "
+            "whiz_request_extend) — requests need host approval per D-165"
         )
         if self._credential_sources:
-            host_env_platforms = [
-                p for p, src in self._credential_sources.items() if src == "host-env"
+            # Covers both platforms (D-89) and secrets (D-162) — same dict.
+            host_env_creds = [
+                name for name, src in self._credential_sources.items() if src == "host-env"
             ]
-            if host_env_platforms:
+            if host_env_creds:
                 caps.append(
                     "WARNING: credentials for "
-                    f"{', '.join(host_env_platforms)} came from host env "
+                    f"{', '.join(host_env_creds)} came from host env "
                     "(OneCLI fallback per D-134)"
                 )
         return caps
@@ -421,8 +444,38 @@ class HermesAdapter:
             ENV_SNAPSHOT_PATH: _IN_CELL_SNAPSHOT_PATH,
             ENV_AUDIT_LOG_PATH: _IN_CELL_AUDIT_LOG_PATH,
             ENV_EVENT_LOG_PATH: _IN_CELL_EVENT_LOG_PATH,
+            ENV_REQUEST_DIR: _IN_CELL_REQUEST_DIR,
             ENV_SESSION_ID: session_id,
         }
+
+    def container_mounts(self) -> list[ContainerMount]:
+        # Stage 8 M6 / D-79: mount the host hermes_home into the cell at
+        # the conventional in-cell HERMES_HOME path. Without this mount the
+        # cell's Hermes process has no profile, so memories/skills/state
+        # would be ephemeral with the container.
+        #
+        # Auto-create the host dir if missing. The bundled `hermes-cell`
+        # harness declares `~/.hermes-whizzard-cell`; on the first launch
+        # that path won't exist. Requiring a separate `init` verb is
+        # friction the MVP doesn't need — the dir is empty until Hermes
+        # populates it.
+        #
+        # uid_parity=True per D-56: gateway.lock and state writes need to
+        # land with the host UID on raw Linux. On macOS Docker Desktop
+        # the translation is transparent, but the parity wiring is the
+        # same code path.
+        hermes_home = _resolve_hermes_home(self.config)
+        if hermes_home is None:
+            return []
+        hermes_home.mkdir(parents=True, exist_ok=True)
+        return [
+            ContainerMount(
+                host_path=hermes_home,
+                container_path=_IN_CELL_HERMES_HOME,
+                mode="rw",
+                uid_parity=True,
+            )
+        ]
 
     def preflight(self) -> PreflightResult:
         # D-87: refuse to launch when a live gateway already holds the lock
@@ -453,10 +506,8 @@ class HermesAdapter:
             )
 
         # Stale lock — best-effort cleanup so we don't re-announce next launch.
-        try:
+        with contextlib.suppress(OSError):
             (hermes_home / _GATEWAY_LOCK_FILENAME).unlink()
-        except OSError:
-            pass
         return PreflightResult(
             ok=True,
             cleanup_note=f"Cleared stale gateway.lock (pid {pid} no longer alive).",

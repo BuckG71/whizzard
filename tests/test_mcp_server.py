@@ -6,21 +6,21 @@ and not under test here.
 """
 
 import json
-from pathlib import Path
-
-import pytest
 
 from whizzard.mcp_server import (
     ENV_AUDIT_LOG_PATH,
     ENV_EVENT_LOG_PATH,
+    ENV_REQUEST_DIR,
     ENV_SESSION_ID,
     ENV_SNAPSHOT_PATH,
     tool_whiz_audit_self,
+    tool_whiz_check_request,
     tool_whiz_emit_event,
     tool_whiz_list_presets,
+    tool_whiz_request_extend,
+    tool_whiz_request_mount,
     tool_whiz_status,
 )
-
 
 # --- whiz_status ---------------------------------------------------------
 
@@ -169,3 +169,113 @@ def test_emit_event_creates_parent_dir_if_missing(tmp_path, monkeypatch):
 def test_list_presets_stub_returns_empty():
     # Stage 10 dependency — currently a stub.
     assert tool_whiz_list_presets() == []
+
+
+# --- Stage 14: whiz_request_mount ----------------------------------------
+
+
+def test_request_mount_returns_error_when_channel_unconfigured(monkeypatch):
+    monkeypatch.delenv(ENV_REQUEST_DIR, raising=False)
+    monkeypatch.delenv(ENV_SESSION_ID, raising=False)
+    result = tool_whiz_request_mount("documents")
+    assert result["ok"] is False
+    assert "not configured" in result["error"]
+
+
+def test_request_mount_requires_a_name(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-1")
+    result = tool_whiz_request_mount("")
+    assert result["ok"] is False
+    assert "name" in result["error"]
+
+
+def test_request_mount_rejects_bad_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-1")
+    result = tool_whiz_request_mount("documents", mode="exec")
+    assert result["ok"] is False
+    assert "mode" in result["error"]
+
+
+def test_request_mount_writes_pending_request_file(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-xyz")
+
+    result = tool_whiz_request_mount("documents", mode="ro", reason="need docs")
+    assert result["ok"] is True
+    assert result["status"] == "pending"
+    request_id = result["request_id"]
+
+    written = tmp_path / f"{request_id}.json"
+    assert written.exists()
+    record = json.loads(written.read_text())
+    assert record["kind"] == "mount"
+    assert record["params"] == {"name": "documents", "mode": "ro"}
+    assert record["reason"] == "need docs"
+    assert record["status"] == "pending"
+    assert record["session_id"] == "sess-xyz"
+
+
+def test_request_mount_omitted_mode_stored_as_none(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-xyz")
+    result = tool_whiz_request_mount("documents")
+    record = json.loads((tmp_path / f"{result['request_id']}.json").read_text())
+    assert record["params"]["mode"] is None
+
+
+# --- Stage 14: whiz_request_extend ---------------------------------------
+
+
+def test_request_extend_requires_a_duration(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-1")
+    result = tool_whiz_request_extend("")
+    assert result["ok"] is False
+    assert "duration" in result["error"]
+
+
+def test_request_extend_writes_pending_request_file(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-xyz")
+    result = tool_whiz_request_extend("30m", reason="long task")
+    assert result["ok"] is True
+    record = json.loads((tmp_path / f"{result['request_id']}.json").read_text())
+    assert record["kind"] == "extend"
+    assert record["params"] == {"duration": "30m"}
+
+
+# --- Stage 14: whiz_check_request ----------------------------------------
+
+
+def test_check_request_returns_error_when_channel_unconfigured(monkeypatch):
+    monkeypatch.delenv(ENV_REQUEST_DIR, raising=False)
+    result = tool_whiz_check_request("abc123")
+    assert result["ok"] is False
+
+
+def test_check_request_reports_missing_request(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    result = tool_whiz_check_request("does-not-exist")
+    assert result["ok"] is False
+    assert "no request" in result["error"]
+
+
+def test_check_request_round_trips_a_submitted_request(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    monkeypatch.setenv(ENV_SESSION_ID, "sess-xyz")
+    submitted = tool_whiz_request_mount("documents", reason="why")
+
+    checked = tool_whiz_check_request(submitted["request_id"])
+    assert checked["ok"] is True
+    assert checked["request"]["request_id"] == submitted["request_id"]
+    assert checked["request"]["status"] == "pending"
+
+
+def test_check_request_reports_unreadable_request(tmp_path, monkeypatch):
+    monkeypatch.setenv(ENV_REQUEST_DIR, str(tmp_path))
+    (tmp_path / "corrupt.json").write_text("not json {{{")
+    result = tool_whiz_check_request("corrupt")
+    assert result["ok"] is False
+    assert "unreadable" in result["error"]

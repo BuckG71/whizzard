@@ -19,7 +19,6 @@ from typing import Any
 
 from whizzard.config import LOGS_DIR
 
-
 SESSIONS_LOG = LOGS_DIR / "sessions.jsonl"
 
 

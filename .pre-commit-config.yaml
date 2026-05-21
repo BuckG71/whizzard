@@ -1,0 +1,44 @@
+# Pre-commit hooks for Whizzard / Osmotiq.
+#
+# Setup (once per clone):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually against all files:
+#   pre-commit run --all-files
+#
+# Skip ad-hoc (rarely needed):
+#   git commit --no-verify   # discouraged; investigate the failure first
+
+repos:
+  - repo: local
+    hooks:
+      - id: validate-decisions
+        name: Validate docs/decisions.md
+        description: >
+          Schema completeness, tag-vocabulary compliance, supersession
+          integrity, reference resolution, and ID uniqueness for the
+          project decisions log. Runs only when docs/decisions.md
+          changes. See scripts/validate_decisions.py for the full
+          check set.
+        entry: python3 scripts/validate_decisions.py
+        language: system
+        files: ^docs/decisions\.md$
+        pass_filenames: false
+
+      - id: ruff-check
+        name: Ruff lint
+        description: Lint + import-order + auto-modernization checks (config in pyproject.toml).
+        entry: ruff check
+        language: system
+        types_or: [python]
+        files: ^(whizzard|scripts|tests)/
+
+      - id: mypy
+        name: mypy type check
+        description: Static type-check on the whizzard package and scripts.
+        entry: mypy whizzard scripts
+        language: system
+        types_or: [python]
+        files: ^(whizzard|scripts)/
+        pass_filenames: false
