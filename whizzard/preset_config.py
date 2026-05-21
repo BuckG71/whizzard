@@ -47,7 +47,6 @@ from typing import Any
 
 from whizzard.config import CONFIG_DIR
 
-
 PRESETS_FILE = CONFIG_DIR / "presets.json"
 
 
@@ -141,7 +140,7 @@ def _parse_preset(name: str, spec: dict) -> Preset:
             f"preset {name!r}: idle_timeout_seconds must be an integer or null"
         )
 
-    allow_broad = spec.get("allow_broad_mount", None)
+    allow_broad = spec.get("allow_broad_mount")
     if "allow_broad_mount" in spec and not isinstance(allow_broad, bool):
         raise PresetConfigError(
             f"preset {name!r}: allow_broad_mount must be true/false"

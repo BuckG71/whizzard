@@ -16,6 +16,7 @@ import shlex
 from dataclasses import dataclass, field
 
 from whizzard.adapters.base import (
+    ContainerMount,
     HarnessAdapter,
     PreflightResult,
     WrapUpResult,
@@ -70,6 +71,10 @@ class GenericShellAdapter:
     def mcp_env(self, session_id: str) -> dict[str, str]:
         # Generic shell has no agent; no MCP server to configure.
         return {}
+
+    def container_mounts(self) -> list[ContainerMount]:
+        # Generic shell has no harness state to persist.
+        return []
 
 
 # Sanity check the Protocol contract at import time.

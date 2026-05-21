@@ -2,13 +2,6 @@
 
 from __future__ import annotations
 
-from whizzard.adapters.base import (
-    HarnessAdapter,
-    PreflightResult,
-    WrapUpResult,
-    WrapUpStatus,
-)
-from whizzard.adapters.generic import GenericShellAdapter
 from whizzard.adapters._credentials import (
     CredentialUnavailableError,
     OneCLINotInstalledError,
@@ -16,17 +9,27 @@ from whizzard.adapters._credentials import (
     SecretFetchResult,
     fetch_secret,
 )
+from whizzard.adapters.base import (
+    ContainerMount,
+    HarnessAdapter,
+    PreflightResult,
+    WrapUpResult,
+    WrapUpStatus,
+)
+from whizzard.adapters.generic import GenericShellAdapter
 from whizzard.adapters.hermes import (
     HermesAdapter,
     HermesProfileCreated,
     HermesProfileExistsError,
     HermesProfileNameError,
     HermesProfileSourceMissingError,
+)
+from whizzard.adapters.hermes import (
     create_profile as create_hermes_profile,
 )
 
-
 __all__ = [
+    "ContainerMount",
     "HarnessAdapter",
     "PreflightResult",
     "WrapUpResult",

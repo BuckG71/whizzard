@@ -9,6 +9,7 @@ from whizzard.config import Profile
 from whizzard.mounts import Mount, MountMode
 from whizzard.snapshot import (
     event_log_path,
+    request_dir,
     session_dir,
     snapshot_path,
     write_snapshot,
@@ -63,6 +64,11 @@ def test_snapshot_path_under_session_dir(tmp_path):
 def test_event_log_path_under_session_dir(tmp_path):
     p = event_log_path("abc-123", whizzard_home=tmp_path)
     assert p == tmp_path / "sessions" / "abc-123" / "events.jsonl"
+
+
+def test_request_dir_under_session_dir(tmp_path):
+    d = request_dir("abc-123", whizzard_home=tmp_path)
+    assert d == tmp_path / "sessions" / "abc-123" / "requests"
 
 
 def test_write_snapshot_creates_session_dir(tmp_path, profile, mounts):

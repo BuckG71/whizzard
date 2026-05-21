@@ -10,17 +10,71 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Bryan Garrett" }]
+keywords = [
+    "ai-agents",
+    "agent-harness",
+    "capability-governance",
+    "containerization",
+    "docker",
+    "hermes",
+    "llm",
+    "sandbox",
+    "security",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development",
+    "Topic :: System :: Software Distribution",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "typer>=0.12.0",
     "rich>=13.0.0",
     "mcp>=1.0",
 ]
 
+# URL fields will be populated at OSS-launch when the repo goes public.
+# Leaving stubs commented out rather than hardcoding placeholder URLs that
+# would render as broken links on PyPI.
+# [project.urls]
+# Homepage = "https://github.com/<owner>/whizzard"
+# Documentation = "https://github.com/<owner>/whizzard/tree/main/docs"
+# Repository = "https://github.com/<owner>/whizzard"
+# Issues = "https://github.com/<owner>/whizzard/issues"
+# Changelog = "https://github.com/<owner>/whizzard/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
+    "ruff>=0.15.0",
+    "mypy>=1.20.0",
 ]
+
+# NOTE on per-adapter extras (D-131 still open):
+#
+# The Hermes adapter ships in the Python package by default — no host-side
+# Python dependency declaration is needed because OIQ host-side imports no
+# Hermes-specific modules. The Hermes runtime is layered onto the execution
+# image via `docker/Dockerfile.hermes`, which pip-installs the upstream
+# `hermes-agent` package from GitHub at a pinned commit (no PyPI release).
+#
+# When future adapters (OpenClaw, NanoClaw, native) introduce host-side
+# Python deps, this section gains per-adapter extras (`whizzard[openclaw]`,
+# etc.) per D-131 Option 2 (monorepo + extras). Revisit if a third-party
+# adapter maintainer needs repo autonomy or release-cadence independence
+# (Option 3).
 
 [project.scripts]
 whizzard = "whizzard.cli:app"
@@ -38,3 +92,92 @@ testpaths = ["tests"]
 # pytest will not auto-discover test files inside skill / agent / IDE
 # state directories.
 norecursedirs = [".agents", ".claude", ".cursor"]
+# Default invocation excludes integration tests (which require real Docker
+# and are slow). Run them explicitly with `pytest -m integration` or
+# `make integration`. The marker definition below makes pytest aware of
+# the name so it doesn't warn on usage.
+addopts = "-m 'not integration'"
+markers = [
+    "integration: requires a reachable Docker daemon; not part of the default fast suite",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "venv",
+    ".venv",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".claude",
+    ".agents",
+    ".cursor",
+    "docs/archive",
+]
+
+[tool.ruff.lint]
+# Curated rule set. F (pyflakes) + E/W (pycodestyle) catches the most common
+# bugs and style issues without forcing aggressive opinions. B (flake8-bugbear)
+# catches likely-bugs the others miss. I (isort) for import order. UP
+# (pyupgrade) for modernization hints. SIM (flake8-simplify) for redundant
+# patterns. Add more rule families post-MVP if specific pain shows up.
+select = ["E", "W", "F", "B", "I", "UP", "SIM"]
+ignore = [
+    "E501",  # line too long — line-length=100 handles this; isolated long
+             # lines (long URLs, generated argv strings) are OK.
+    "B008",  # function-call-in-default-argument — typer.Option(...) idiom
+             # uses this intentionally and is the right shape there.
+    "SIM108",# ternary-instead-of-if — sometimes hurts readability over
+             # multi-line if/else; let the author choose.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "B011",  # assert False — fine in tests
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+# Phased adoption: start permissive (catches the obvious bugs, not style
+# noise); tighten over time. The `disallow_*` flags below enforce the most
+# value-per-effort checks without forcing exhaustive annotation upfront.
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_return_any = true
+no_implicit_optional = true
+check_untyped_defs = true
+exclude = [
+    "venv",
+    "build",
+    "dist",
+    "tests",  # tests use monkeypatch + dynamic fixtures; lenient for now
+]
+
+[[tool.mypy.overrides]]
+module = ["typer.*", "rich.*", "mcp.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["whizzard"]
+branch = false
+omit = [
+    "*/__pycache__/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+# Floor chosen as a few points below current measured coverage (87% at time
+# of capture) — provides headroom for new code without enforcing exhaustive
+# CLI-display test coverage. Tighten if/when reasonable.
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

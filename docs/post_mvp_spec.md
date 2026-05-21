@@ -209,6 +209,20 @@ Future:
 
 The adapter contract and canonical `harnesses.json` schema are defined once in [architecture.md](architecture.md) and apply to all adapters.
 
+### Adapter Spec — Contributor-Facing Artifact (D-160)
+
+The adapter Protocol (D-28) is exposed as a versioned `ADAPTER_SPEC.md` document at OSS-launch, separate from `whizzard.adapters.base` (which remains the canonical Python implementation). The spec describes contract semantics in language-neutral terms — lifecycle hooks, `container_mounts`, `container_env`, `mcp_env`, `wrap_up` timing, preflight expectations — so third-party adapter authors can build against a stable, readable contract without navigating the source tree.
+
+Requirements:
+- Single-file document at repo root: `ADAPTER_SPEC.md`
+- Carries a `SPEC_VERSION` independent of the package version
+- Lists every method on the adapter Protocol with: contract semantics, return shape, when called by core, failure modes
+- Documents `harnesses.json` and any other shared schemas adapters consume
+- Includes a minimal worked example (probably the generic shell adapter)
+- Treated as a release-gate artifact: any change requires an explicit `SPEC_VERSION` bump and changelog entry
+
+Rationale: see D-160. Symphony's SPEC.md-first model demonstrates that contributor-driven ecosystem growth works when the contract is a versioned, language-neutral artifact rather than an in-tree language binding.
+
 ---
 
 ## 4. MCP Gateway Direction
@@ -369,6 +383,58 @@ The repo must ship with:
 Users cloning this repo are placing meaningful trust in the system. Docs and setup scripts are not optional polish — they are part of the trust surface. A user who misconfigures the system because the setup process was unclear has weaker containment than intended, which reflects on the product regardless of whether the underlying design is sound.
 
 The setup path should be opinionated: one recommended way to get started, not a menu of options that requires the user to already understand the system.
+
+---
+
+## 9. Orchestrator Integration API
+
+### Objective
+
+Expose a programmatic launch surface (Python library first) so external orchestrators — task-board systems like Symphony, custom job runners, supervised agent swarms — can spawn and supervise OIQ cells without shelling out to the CLI.
+
+### Concept
+
+The CLI surface is designed for human-driven, one-cell-at-a-time use. The library surface is designed for automated, supervisor-driven, many-cells-at-a-time use. Both call into the same core; the library is the lower-friction binding for orchestration patterns.
+
+Minimum v1.0 surface:
+
+```python
+import oiq
+
+# Launch a cell. Returns a session handle.
+handle = oiq.launch(
+    harness="hermes-cell",
+    preset="default",
+    session_id=None,     # auto-generated if omitted; supplied for restart-on-crash
+    on_exit=callback,    # optional callback fired at session_end
+)
+
+# Poll lifecycle / health.
+status = oiq.status(handle.session_id)
+# → SessionStatus(state="running" | "exited" | "missing", exit_code=..., ...)
+
+# Explicit termination (otherwise SIGTERM via wrap_up at duration).
+oiq.terminate(handle.session_id, grace_seconds=30)
+```
+
+### Design Constraints
+
+- **Library API only at v1.0** — no daemon, no supervisor process. OIQ stays a containment layer; orchestration is the orchestrator's job (D-159 rationale).
+- **Reuses existing core** — same profiles, presets, mounts, harness adapters, session-log JSONL. The library is a new entry point, not a new code path.
+- **Session-id-keyed** — orchestrators rely on stable session IDs for restart-on-crash semantics; the API exposes IDs explicitly rather than hiding them in opaque handles.
+- **Errors are exceptions, not exit codes** — structured failure surface is the main value over shelling out to `whiz r`.
+- **Sync API first; async wrapper later** — most orchestrators already have their own concurrency model and prefer driving a sync API from inside their event loop.
+
+### Out of Scope for v1.0
+
+- Async / coroutine-native API (deferred until a real orchestrator demands it)
+- Remote launch (cells stay local-first per D-9; remote orchestration is a different product)
+- Cross-language bindings (Python is the reference; other languages can land later if needed)
+- A built-in supervisor / restart loop (that's the orchestrator's job, not OIQ's)
+
+### Rationale
+
+See D-159. Symphony (InfoQ 2026-05) demonstrates the orchestration layer above harnesses; OIQ wants to be the containment substrate those orchestrators plug into. A CLI-only entry forces brittle shell-out integration; a library API is the minimum viable interop surface.
 
 ---
 

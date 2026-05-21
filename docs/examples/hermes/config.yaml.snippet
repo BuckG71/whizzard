@@ -1,0 +1,32 @@
+# Ollama provider configuration for the OIQ-wrapped Hermes cell.
+#
+# Drop this into the cloned profile's config.yaml — ~/.hermes-whizzard-cell/config.yaml —
+# replacing the existing `model:` and `providers:` blocks.
+#
+# Why host.docker.internal: the cell's network namespace can't reach the host's
+# 127.0.0.1 directly, but Docker Desktop on macOS resolves `host.docker.internal`
+# to the host. On native Linux without Docker Desktop, replace with the actual
+# host IP (often 172.17.0.1 for the default bridge) or run Ollama in a sibling
+# container reachable by name.
+#
+# Why the `api_key: ollama` placeholder: the OpenAI SDK requires the field to
+# exist even though Ollama doesn't authenticate. Treat it as a structural
+# placeholder, not a real credential — never put a real key here in plaintext.
+
+model:
+  api_key: ollama
+  default: mistral-nemo:latest
+  provider: ollama-launch
+
+providers:
+  ollama-launch:
+    api: http://host.docker.internal:11434/v1
+    base_url: http://host.docker.internal:11434/v1
+    api_key: ollama
+    default_model: mistral-nemo:latest
+    models:
+      - mistral-nemo:latest
+      - llama3.1:8b
+      - gemma4:e4b
+      # Add whatever your Ollama instance has pulled.
+    name: Ollama

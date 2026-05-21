@@ -15,14 +15,14 @@ Whizzard launches Hermes inside a contained cell via `whiz hermes <profile>` end
 3. **[DONE — 439d062, c45ebfd, 979aaba]** OneCLI credential injection complete — `HermesAdapter.container_env()` reads `self.config["platforms"]` (declared in `harnesses.json` per D-89 amended), shells out to OneCLI (per D-134) for each platform's credential. OneCLI plumbing later generalized into `whizzard/adapters/_credentials.py` (Stage 12) with env-var fallback.
 4. **[DONE — 298ae06]** Concurrency guard wired in — `gateway.lock` + `gateway.pid` pre-check with pid liveness probe and stale-lock auto-recovery (D-87); error UX names profile + pid + remediation paths.
 5. **[DONE — 05779b6]** Profile-creation verb shipped — `whiz hermes profile create <name>` with `--clone-from <name>` / `--no-clone` flags and the bare-command graceful-degrade logic (D-86); `auth.json` exclusion enforced in code and verified by test.
-6. **[OUTSTANDING — newly identified]** **HERMES_HOME mount + env-var wiring (D-79).** The Hermes adapter declares the profile directory as a container mount and sets `HERMES_HOME` inside the cell. Without this, the cell's Hermes process has no profile to read or write to — state, memories, skills, kanban, and sessions would all be ephemeral with the container, defeating D-79's persistence intent. Concrete work:
+6. **[SHIPPED 2026-05-18]** **HERMES_HOME mount + env-var wiring (D-79).** The Hermes adapter declares the profile directory as a container mount and sets `HERMES_HOME` inside the cell. `HarnessAdapter` Protocol extended with `container_mounts() -> list[ContainerMount]`; `HermesAdapter` returns the HERMES_HOME mount with `uid_parity=True` per D-56; `docker_cmd.build_run_argv` emits the `-v` flags + overrides `--user` to host UID/GID when uid_parity is requested. 302 tests pass. Concrete work that landed:
     - Extend the `HarnessAdapter` Protocol with `container_mounts() -> list[ContainerMount]` (or similar) so adapters can declare harness-driven mounts independent of the user's named-mount registry. `GenericShellAdapter` returns `[]`; `HermesAdapter` returns one mount: host `hermes_home` path → in-cell `HERMES_HOME` path, mode `rw`.
     - Extend `HermesAdapter.container_env()` to include `HERMES_HOME=<in-cell-path>` so Hermes inside the cell finds its profile.
     - Update `docker_cmd.build_run_argv` to consume adapter-declared mounts and emit `-v` flags.
     - Wire D-56's scoped UID parity for write-through on this specific mount (currently a captured design decision without code).
     - Unit tests on both adapters' `container_mounts()` plus the new `docker_cmd` path. Integration with Stage 8 wrap_up smoke is M7's responsibility.
-7. **[BLOCKED on M6]** End-to-end interactive launch validated — `whiz run --harness <hermes-harness-name>` starts a real Hermes container with the profile mounted as HERMES_HOME, runs a brief chat session, and shuts down cleanly. Verifies state persistence: memories or session entries written during the chat survive container termination. Was originally M6; renumbered when the HERMES_HOME-wiring gap was identified.
-8. Packaging and validation closed out — `pyproject.toml` declares `[project.optional-dependencies] hermes = [...]` (per D-131 notes); test files follow the flat-tests convention with `pytest.importorskip` gating the integration tier; `docs/STAGE_VALIDATION.md` Stage 8 section already written; `HANDOFF.md` updated. (Was originally M7.)
+7. **[SHIPPED 2026-05-19]** End-to-end interactive launch validated. Bryan ran `whiz run --harness hermes-cell-smoke` against `whizzard-hermes:latest` (Hermes 0.12.0 pip-installed from `github.com/NousResearch/hermes-agent`, derived `FROM whizzard-base:latest` via `docker/Dockerfile.hermes`). Cloned profile at `~/.hermes-whizzard-cell/` (via `whiz hermes profile create whizzard-cell --clone-from default`, 1.6 GB → 19 MB, `auth.json` excluded per D-80). Interactive chat with mistral-nemo via Mac Studio Ollama (`host.docker.internal:11434`); session JSON (72 KB) wrote through to the host's bind-mounted HERMES_HOME and survived container termination. `/quit` exited cleanly (exit_status 0, 4m33s duration). Validated: D-79 persistence intent, D-56 UID parity (file owned by host UID, not container 1000), `wrap_up()` SIGTERM mechanism. Also surfaced + fixed: nested-bind-mount race for `/run/whiz/audit.jsonl` (pre-touch placeholder before docker run); user-config drift on `~/.whizzard/config/harnesses.json` (had only `generic`; restored `hermes-cell` + added `hermes-cell-smoke`). Anthropic-provider variant smoke also ran successfully, validating env-var credential injection (D-162).
+8. **[SHIPPED 2026-05-19]** Packaging and validation closed out. **Reframed during closeout:** the original spec called for a `[project.optional-dependencies] hermes = [...]` block in `pyproject.toml` per D-131's monorepo-plus-extras lean. On execution, this turned out to be a non-issue: OIQ host-side imports zero Hermes-specific Python modules, so there is nothing to declare as a host-side dep. The actual install path is the execution image via `docker/Dockerfile.hermes`, which pip-installs `hermes-agent` from GitHub at a pinned commit (no PyPI release available). Closeout deliverables that landed instead: (a) explanatory comment block in `pyproject.toml` under `[project.optional-dependencies]` documenting why the `hermes` extras block is absent and pointing at the Dockerfile-based install; (b) README "Optional: Hermes adapter" section walking users through the two-step `docker build` + `whiz hermes profile create` + harness-config flow, including the D-162 `secrets:` guidance for non-Ollama providers; (c) README status line refreshed to reflect Stages 1–10 + 12 shipped (was stale at "Stages 1–7"); (d) `docs/stage_validation.md` Stage 8 section retained as-is (still references old milestone numbering — small follow-up cleanup, not blocking). The `pytest.importorskip` integration-tier scaffolding deferred to the pre-OSS gaps workstream (integration tests don't exist yet; convention will land alongside actual integration tests).
 
 ## Next 3 actions
 1. **M6: extend Protocol with `container_mounts()`.** Add the method to `whizzard/adapters/base.py`; define a small `ContainerMount` shape (host_path, container_path, mode — could reuse `whizzard.mounts.Mount` or define a separate dataclass). `GenericShellAdapter.container_mounts()` returns `[]`. `HermesAdapter.container_mounts()` returns one mount: `Path(config["hermes_home"]).expanduser()` → `/home/whizzard/.hermes` (or another conventional in-cell path), mode `rw`. Update `HermesAdapter.container_env()` to set `HERMES_HOME` to the chosen in-cell path. Unit tests on both adapters.
@@ -42,6 +42,49 @@ After M6 ships, M7 (manual interactive smoke) becomes runnable for the first tim
 - **Adapter-vs-core boundary erosion under deadline pressure.** Tempting to "just read `config.yaml` from core, we only have Hermes anyway." Mitigation: D-153 is captured; treat any Hermes-specific identifier appearing outside `adapters/hermes.py` or the `whiz hermes` subcommand surface as a code-review finding.
 - **Gateway-mode end-to-end is hard to automate cleanly.** Real platform credentials in CI are a non-starter; mock platform servers are a real chunk of work. Mitigation: scope CI integration test to interactive mode (cheap, no creds); gateway-mode smoke is manual until a mock substrate justifies the build cost — explicitly out of Stage 8.
 - ~~**`wrap_up()` via `docker exec /quit` may not work uniformly across Hermes modes.**~~ **Resolved during M6 implementation:** `/quit` is a chat-mode slash command that consumes Hermes's own stdin, not a host-side command runnable via `docker exec`. The cleaner mechanism is Hermes's existing SIGTERM handler (per `hermes_research.md` L208–209: "SIGTERM/SIGHUP triggers graceful shutdown — drains active turns, writes final state, exits"), which `docker stop --time=<grace>` delivers natively. The implementation uses `docker stop` with the grace window, then inspects the container's exit code (137 = SIGKILL = TIMEOUT; otherwise = SUCCESS). Works uniformly across chat / gateway / one-shot modes.
+
+## M7 Runbook
+
+The Stage 8 end-to-end smoke. Validates that the full launch pipeline produces a working Hermes cell whose state survives container termination.
+
+### What M7 proves
+- `whiz r` (or `whiz run --harness hermes-cell`) actually launches a real containerized Hermes on real Docker — not just argv construction validated by unit tests.
+- M6's HERMES_HOME wiring writes through correctly: host-side state lands at `~/.hermes-whizzard-cell/` after the cell exits.
+- Pre-launch banner surfaces declared platforms, MCP availability, and credential-source warnings (D-89, D-90).
+- `wrap_up()` shuts the cell down cleanly via `docker stop --time=<grace>` and Hermes's SIGTERM handler.
+
+### Pre-conditions
+1. **Image with Hermes installed.** Base image `whizzard-base:latest` is debian-slim + shell tools — Hermes is not present. Two options:
+   - Build a derived image (`whizzard-hermes:latest`) that does `pip install hermes-agent` and set `WHIZZARD_IMAGE=whizzard-hermes:latest` for the smoke.
+   - Temporarily extend `docker/Dockerfile` to install Hermes inline; rebuild `whizzard-base:latest`.
+2. **OneCLI + seeded `DISCORD_BOT_TOKEN`** if you want the bundled `hermes-cell` harness's `platforms: ["discord"]` to succeed. To run credential-free, temporarily strip `"platforms"` from the harness entry or override via a one-off harness config.
+3. **Host-side `~/.hermes-whizzard-cell/`** — either pre-seed via `whiz hermes profile create <name> --clone-from default` and then point `hermes_home` at the result, OR let the adapter auto-create the empty dir and rely on Hermes to bootstrap a fresh profile inside the cell.
+
+### Test steps
+1. `whiz r` — bare command should route to the most-recent preset; default for fresh installs is `hermes`.
+2. Verify the pre-launch banner shows:
+   - profile, network, mounts (incl. broad-mount overrides if any),
+   - `platforms: discord` (or whatever you configured),
+   - `Whiz MCP server: read-only tools available (...)`,
+   - any `WARNING: credentials for ... came from host env` line if OneCLI fell back.
+3. Confirm cell starts — Hermes process visible inside (`docker exec <cid> ps -ef` in another shell if needed), no immediate crash.
+4. Issue at least one action that writes to disk: a chat message, memory write, `/save`, anything that touches `sessions/`, `memories/`, or `state.db`.
+5. Exit cleanly — Hermes-side `/quit` for chat mode, Ctrl-C for gateway, or whatever the running mode supports.
+6. **Persistence check:** `ls -la ~/.hermes-whizzard-cell/` on the host. The dir/file you wrote in step 4 must be there.
+7. **Re-launch check:** `whiz r` again. Previous-session state should be visible from inside the new cell.
+
+### Acceptance criteria
+- Cell starts.
+- Hermes runs to a usable interactive state.
+- At least one host-side write survives container termination.
+- Container exits with code 0 (clean shutdown). Exit 137 means SIGKILL after grace expired — investigate before claiming the smoke passed.
+
+### Failure modes to watch for
+- **`Permission denied` writing under `/home/whizzard/.hermes` inside the cell.** Suspect M6's `uid_parity` override not taking effect or interacting badly with macOS Docker Desktop's filesystem layer.
+- **`/home/whizzard/.hermes` appears empty inside the cell despite host dir being populated.** Suspect the bind mount didn't land — possibly tmpfs/bind ordering or a missing mount target.
+- **`I have no name!` shell prompt or similar.** UID override succeeded but `/etc/passwd` has no entry for that UID. Cosmetic but may confuse Hermes if it inspects the user record.
+- **`CredentialUnavailableError` at launch.** OneCLI not installed or seeded; either install OneCLI + add the token, or strip `platforms` from the harness for this smoke.
+- **Gateway mode hangs waiting for Discord traffic.** If you want a credential-free smoke, change the harness `start_command` to `hermes chat` (interactive mode) — gateway needs a real platform connection to be useful.
 
 ## Where to resume
 Milestones 1–5 are shipped. The wrap_up code (3ac596c) was implemented but the original M6 "End-to-end interactive launch validated" cannot actually be run yet because of the HERMES_HOME wiring gap surfaced 2026-05-15: the Hermes adapter has `hermes_home` in its config (used host-side for the gateway.lock pre-check, D-87) but never mounts the path into the cell or sets `HERMES_HOME` in the cell's env. Without that wiring, the cell's Hermes process has no profile to attach to.

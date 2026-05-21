@@ -13,7 +13,6 @@ from whizzard.config import (
     load_profiles,
 )
 
-
 # Stage 1 — bundled defaults
 
 def test_default_profile_is_unlimited():

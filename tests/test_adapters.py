@@ -89,6 +89,11 @@ def test_generic_mcp_env_is_empty():
     assert GenericShellAdapter().mcp_env("any-session-id") == {}
 
 
+def test_generic_container_mounts_is_empty():
+    # Stage 8 M6: generic shell has no harness state to persist.
+    assert GenericShellAdapter().container_mounts() == []
+
+
 def test_build_adapter_returns_generic_for_shell_type():
     adapter = build_adapter("test", {"type": "shell", "start_command": "/bin/bash"})
     assert isinstance(adapter, GenericShellAdapter)
@@ -114,6 +119,7 @@ def test_build_adapter_rejects_unknown_type():
 
 
 def test_wrap_up_result_is_frozen():
+    import dataclasses
     r = WrapUpResult(status=WrapUpStatus.SUCCESS, detail="done")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         r.detail = "tampered"  # type: ignore[misc]

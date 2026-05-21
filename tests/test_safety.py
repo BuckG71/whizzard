@@ -11,7 +11,6 @@ from whizzard.safety import (
     check_mount_path,
 )
 
-
 # Fixture profiles
 
 def _profile(allow_broad_mount: bool, name: str = "test") -> Profile:
@@ -221,6 +220,7 @@ def test_multiple_overrides_accumulated_when_relevant(tmp_path: Path, monkeypatc
 # OverrideRecord shape
 
 def test_override_record_is_frozen():
+    import dataclasses
     o = OverrideRecord(path="/a", reason="x")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         o.path = "/b"  # type: ignore[misc]

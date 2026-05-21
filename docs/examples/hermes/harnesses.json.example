@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "harnesses": {
+    "generic": {
+      "type": "shell",
+      "start_command": "/bin/bash",
+      "description": "plain interactive bash shell — the default harness"
+    },
+
+    "hermes-cell": {
+      "type": "agent",
+      "start_command": "hermes gateway run",
+      "wrap_up_command": "/quit",
+      "wrap_up_grace_seconds": 30,
+      "hermes_home": "~/.hermes-whizzard-cell",
+      "platforms": ["discord"],
+      "secrets": ["ANTHROPIC_API_KEY"],
+      "description": "Whizzard-wrapped Hermes (gateway mode, Discord active). Production-shape; needs DISCORD_BOT_TOKEN + ANTHROPIC_API_KEY available via OneCLI or host env."
+    },
+
+    "hermes-cell-smoke": {
+      "type": "agent",
+      "start_command": "hermes chat",
+      "wrap_up_command": "/quit",
+      "wrap_up_grace_seconds": 30,
+      "hermes_home": "~/.hermes-whizzard-cell",
+      "description": "Stage 8 M7 smoke variant: interactive chat mode, no platforms, no LLM-provider secrets injection. Use this for first-launch validation with a local Ollama provider configured in the cell's config.yaml. No external credentials required."
+    }
+  }
+}

@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 from whizzard.cli import app
 from whizzard.docker_cmd import RunResult
 
-
 runner = CliRunner()
 
 
@@ -34,7 +33,7 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def test_dry_run_does_not_call_run_shell():
     """Dry-run must not invoke run_shell — that's the whole point."""
-    with patch("whizzard.cli.run_shell") as mock_run:
+    with patch("whizzard.cli._launch.run_shell") as mock_run:
         result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert mock_run.call_count == 0
@@ -109,7 +108,7 @@ def test_dry_run_with_unknown_mount_errors():
 
 def test_run_without_dry_run_calls_run_shell():
     """Sanity check: omitting --dry-run still calls run_shell."""
-    with patch("whizzard.cli.run_shell", return_value=RunResult(None, 0)) as mock_run:
+    with patch("whizzard.cli._launch.run_shell", return_value=RunResult(None, 0)) as mock_run:
         result = runner.invoke(app, ["run", "--profile", "default"])
     assert mock_run.call_count == 1
     assert result.exit_code == 0
@@ -165,13 +164,13 @@ def test_dry_run_does_not_write_session_log(tmp_path: Path, monkeypatch):
 def test_missing_image_shows_red_error_via_cli(monkeypatch):
     """Image-not-found error must come from the CLI red-error path,
     not from a plain stderr print in docker_cmd."""
-    from whizzard import cli
-    monkeypatch.setattr(cli, "docker_available", lambda: True)
-    monkeypatch.setattr(cli, "image_exists", lambda img: False)
+    from whizzard.cli import _launch as cli_launch
+    monkeypatch.setattr(cli_launch, "docker_available", lambda: True)
+    monkeypatch.setattr(cli_launch, "image_exists", lambda img: False)
     # If run_shell got called, that's a regression — pre-flight should stop us.
     def _should_not_be_called(*a, **kw):
         raise AssertionError("run_shell should not be reached when image is missing")
-    monkeypatch.setattr(cli, "run_shell", _should_not_be_called)
+    monkeypatch.setattr(cli_launch, "run_shell", _should_not_be_called)
 
     result = runner.invoke(app, ["run", "--profile", "default", "--image", "bogus:nope"])
     assert result.exit_code == 125
@@ -180,11 +179,11 @@ def test_missing_image_shows_red_error_via_cli(monkeypatch):
 
 
 def test_missing_docker_shows_red_error_via_cli(monkeypatch):
-    from whizzard import cli
-    monkeypatch.setattr(cli, "docker_available", lambda: False)
+    from whizzard.cli import _launch as cli_launch
+    monkeypatch.setattr(cli_launch, "docker_available", lambda: False)
     def _should_not_be_called(*a, **kw):
         raise AssertionError("run_shell should not be reached when docker is missing")
-    monkeypatch.setattr(cli, "run_shell", _should_not_be_called)
+    monkeypatch.setattr(cli_launch, "run_shell", _should_not_be_called)
 
     result = runner.invoke(app, ["run", "--profile", "default"])
     assert result.exit_code == 127

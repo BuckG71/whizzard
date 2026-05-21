@@ -23,7 +23,6 @@ import os
 import subprocess
 from dataclasses import dataclass
 
-
 _ONECLI_TIMEOUT_SECONDS = 30
 
 
@@ -94,7 +93,7 @@ def fetch_secret(name: str) -> SecretFetchResult:
                 f"Secret {name!r} unavailable: OneCLI not installed and "
                 f"env var {name} not set on host. "
                 f"Install OneCLI (recommended) or export {name}."
-            )
+            ) from None
         return SecretFetchResult(value=host_value, source="host-env")
     except OneCLISecretMissingError:
         host_value = os.environ.get(name)
@@ -103,5 +102,5 @@ def fetch_secret(name: str) -> SecretFetchResult:
                 f"Secret {name!r} unavailable: not in OneCLI vault and "
                 f"env var {name} not set on host. "
                 f"Register via `onecli secrets create {name}` or export {name}."
-            )
+            ) from None
         return SecretFetchResult(value=host_value, source="host-env")

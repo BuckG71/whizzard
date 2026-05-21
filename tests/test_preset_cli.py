@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 
 from whizzard.cli import app
 
-
 runner = CliRunner()
 
 
@@ -27,12 +26,17 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
     monkeypatch.setattr(harness_config, "HARNESSES_FILE", home / "config" / "harnesses.json")
     monkeypatch.setattr(preset_config, "PRESETS_FILE", home / "config" / "presets.json")
-    # Also patch the references in cli.py (which imported at module load)
-    from whizzard import cli
-    monkeypatch.setattr(cli, "PROFILES_FILE", home / "config" / "profiles.json")
-    monkeypatch.setattr(cli, "MOUNTS_FILE", home / "config" / "mounts.json")
-    monkeypatch.setattr(cli, "HARNESSES_FILE", home / "config" / "harnesses.json")
-    monkeypatch.setattr(cli, "PRESETS_FILE", home / "config" / "presets.json")
+    # Also patch the references in each CLI subapp module — they import
+    # the file-path constants at module load, so the source-module
+    # patches above don't reach the already-bound names in subapps.
+    from whizzard.cli import harnesses as cli_harnesses
+    from whizzard.cli import mounts as cli_mounts
+    from whizzard.cli import preset as cli_preset
+    from whizzard.cli import profiles as cli_profiles
+    monkeypatch.setattr(cli_profiles, "PROFILES_FILE", home / "config" / "profiles.json")
+    monkeypatch.setattr(cli_mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
+    monkeypatch.setattr(cli_harnesses, "HARNESSES_FILE", home / "config" / "harnesses.json")
+    monkeypatch.setattr(cli_preset, "PRESETS_FILE", home / "config" / "presets.json")
     return home
 
 

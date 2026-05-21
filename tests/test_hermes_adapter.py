@@ -580,13 +580,20 @@ def test_hermes_active_capabilities_no_warning_when_all_onecli(monkeypatch):
 
 def test_hermes_active_capabilities_mentions_mcp_availability():
     caps = HermesAdapter().active_capabilities()
-    assert any("MCP" in c and "read-only" in c for c in caps)
+    assert any("MCP" in c for c in caps)
+
+
+def test_hermes_active_capabilities_mentions_request_tools():
+    # Stage 14: the request-side tools surface in the pre-launch banner.
+    caps = HermesAdapter().active_capabilities()
+    assert any("whiz_request_mount" in c for c in caps)
 
 
 def test_hermes_mcp_env_returns_in_cell_paths_and_session_id():
     from whizzard.mcp_server import (
         ENV_AUDIT_LOG_PATH,
         ENV_EVENT_LOG_PATH,
+        ENV_REQUEST_DIR,
         ENV_SESSION_ID,
         ENV_SNAPSHOT_PATH,
     )
@@ -599,8 +606,136 @@ def test_hermes_mcp_env_returns_in_cell_paths_and_session_id():
     assert env[ENV_SNAPSHOT_PATH] == "/run/whiz/snapshot.json"
     assert env[ENV_AUDIT_LOG_PATH] == "/run/whiz/audit.jsonl"
     assert env[ENV_EVENT_LOG_PATH] == "/run/whiz/events.jsonl"
-    # Exactly these four keys; no leakage.
+    # Stage 14: the request channel is a dir inside the /run/whiz mount.
+    assert env[ENV_REQUEST_DIR] == "/run/whiz/requests"
+    # Exactly these five keys; no leakage.
     assert set(env.keys()) == {
-        ENV_SNAPSHOT_PATH, ENV_AUDIT_LOG_PATH,
-        ENV_EVENT_LOG_PATH, ENV_SESSION_ID,
+        ENV_SNAPSHOT_PATH, ENV_AUDIT_LOG_PATH, ENV_EVENT_LOG_PATH,
+        ENV_REQUEST_DIR, ENV_SESSION_ID,
     }
+
+
+# --- Stage 8 M6: container_mounts() and HERMES_HOME env ---
+
+
+def test_hermes_container_mounts_empty_when_hermes_home_unset():
+    # No hermes_home → no harness mount; the cell would fall back to its
+    # ephemeral tmpfs home, which is a misconfiguration the user owns.
+    assert HermesAdapter().container_mounts() == []
+
+
+def test_hermes_container_mounts_includes_hermes_home(tmp_path):
+    host_hermes_home = tmp_path / "hermes-profile"
+    host_hermes_home.mkdir()
+    adapter = HermesAdapter(config={"hermes_home": str(host_hermes_home)})
+
+    mounts = adapter.container_mounts()
+
+    assert len(mounts) == 1
+    cm = mounts[0]
+    assert cm.host_path == host_hermes_home
+    assert cm.container_path == "/home/whizzard/.hermes"
+    assert cm.mode == "rw"
+    assert cm.uid_parity is True  # D-56
+
+
+def test_hermes_container_mounts_auto_creates_missing_host_dir(tmp_path):
+    # Bundled `hermes-cell` harness ships with `~/.hermes-whizzard-cell`;
+    # on first launch the dir won't exist. Adapter creates it rather than
+    # requiring a separate `init` step.
+    target = tmp_path / "fresh-hermes-cell"
+    assert not target.exists()
+
+    HermesAdapter(config={"hermes_home": str(target)}).container_mounts()
+
+    assert target.is_dir()
+
+
+def test_hermes_container_env_sets_hermes_home_when_configured(tmp_path):
+    host_hermes_home = tmp_path / ".hermes"
+    host_hermes_home.mkdir()
+    adapter = HermesAdapter(config={"hermes_home": str(host_hermes_home)})
+
+    env = adapter.container_env()
+
+    assert env["HERMES_HOME"] == "/home/whizzard/.hermes"
+
+
+def test_hermes_container_env_omits_hermes_home_when_unset():
+    # No hermes_home in config → HERMES_HOME is not injected. Hermes inside
+    # the cell would fall back to its own default; the missing env is the
+    # visible signal of misconfiguration.
+    env = HermesAdapter().container_env()
+    assert "HERMES_HOME" not in env
+
+
+# --- D-162: secrets-block credential injection ---
+
+
+def test_hermes_secrets_inject_via_fetch_secret(monkeypatch):
+    # D-162: each entry in `secrets:` is an env-var name; the adapter fetches
+    # its value via the shared utility (OneCLI per D-134; host-env fallback)
+    # and injects into the cell's environment.
+    captured: list[str] = []
+
+    def fake_fetch(name: str):
+        captured.append(name)
+        return SecretFetchResult(value=f"value-of-{name}", source="host-env")
+
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+    adapter = HermesAdapter(config={
+        "secrets": ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"],
+    })
+    env = adapter.container_env()
+
+    assert captured == ["ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"]
+    assert env["ANTHROPIC_API_KEY"] == "value-of-ANTHROPIC_API_KEY"
+    assert env["OPENROUTER_API_KEY"] == "value-of-OPENROUTER_API_KEY"
+
+
+def test_hermes_secrets_source_surfaces_in_active_capabilities(monkeypatch):
+    # When a secret comes from host-env fallback (OneCLI unavailable), the
+    # WARNING line in active_capabilities names it. Same surface as platforms.
+    def fake_fetch(name: str):
+        return SecretFetchResult(value="v", source="host-env")
+
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+    adapter = HermesAdapter(config={"secrets": ["ANTHROPIC_API_KEY"]})
+    adapter.container_env()  # populates _credential_sources
+    caps = adapter.active_capabilities()
+
+    warning = next((c for c in caps if c.startswith("WARNING:")), None)
+    assert warning is not None
+    assert "ANTHROPIC_API_KEY" in warning
+    assert "host env" in warning
+
+
+def test_hermes_secrets_and_platforms_coexist(monkeypatch):
+    # Both `platforms` (D-89) and `secrets` (D-162) inject in one call.
+    monkeypatch.setattr(
+        hermes_module, "fetch_secret",
+        lambda n: SecretFetchResult(value=f"v-{n}", source="onecli"),
+    )
+
+    adapter = HermesAdapter(config={
+        "platforms": ["discord"],
+        "secrets": ["ANTHROPIC_API_KEY"],
+    })
+    env = adapter.container_env()
+
+    assert env["DISCORD_BOT_TOKEN"] == "v-DISCORD_BOT_TOKEN"
+    assert env["ANTHROPIC_API_KEY"] == "v-ANTHROPIC_API_KEY"
+
+
+def test_hermes_no_secrets_when_field_omitted(monkeypatch):
+    # Absent `secrets` field → no extra fetch_secret calls beyond platforms.
+    calls: list[str] = []
+    monkeypatch.setattr(
+        hermes_module, "fetch_secret",
+        lambda n: (calls.append(n), SecretFetchResult(value="v", source="host-env"))[1],
+    )
+
+    HermesAdapter().container_env()
+    assert calls == []  # no platforms, no secrets → no fetches

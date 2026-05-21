@@ -295,3 +295,22 @@ Especially:
 - human-readable
 - temporary
 - behavior-aware
+
+---
+
+## Real-World Validation
+
+The threat model is not hypothetical. As the agent-harness landscape matures, the industry has begun surfacing incident patterns that map directly onto OIQ's value proposition. This section tracks public evidence that capability governance at the local-execution layer is becoming necessary infrastructure, not optional polish.
+
+### 2026-05 — Hidden capabilities in harness skill/plugin ecosystems
+
+The Register (2026-05-17, "How AI agent harnesses like OpenClaw are changing LLMs, inference, and CPUs") references a wave of incidents in which third-party "skills" published to harness plugin hubs shipped with hidden capabilities — including coordinated cryptocurrency-extraction behavior across the agents that installed them. The specific framing in the article: published skills *secretly turned AI agents into a crypto-swarm*.
+
+**Why this validates OIQ's thesis:**
+
+- **The vector is the skill/plugin layer, not the model layer.** No amount of alignment work on the underlying LLM stops a skill from doing exactly what the skill author wrote it to do. The harness loads the skill; the agent runs it; the agent's host-side capabilities are now the skill's capabilities. Containment has to live below the skill, at the execution-cell boundary — which is precisely where OIQ sits.
+- **The blast radius is the local capability surface.** A malicious skill is most dangerous when the agent runs with broad host access (full filesystem, network, credential stores). Cells with explicit mount lists, default-deny networking, and ephemeral state are the structural answer. The mount-list-IS-permission-model principle (D-11) is the right grain for this.
+- **The harness vendor cannot solve it alone.** A harness can vet its skill hub, but it cannot vet every locally-installed skill, every fork, every private extension. Cross-agent local capability governance is the architectural layer that survives a harness's individual vetting decisions.
+- **Confirms the harness-neutral bet.** The Register article lists Claude Code, OpenClaw, Codex, Pi Coding Agent, Cline as production harnesses. Each will face the same skill/plugin attack surface. A harness-neutral containment layer (D-10) is more durable than any single-harness security feature.
+
+**Positioning implication for OSS-launch:** The "crypto-swarm via published skills" incident class is a concrete anecdote that beats abstract "agents need guardrails" framing. When the README needs a *why this matters now* paragraph, point at the skill-hub attack surface, not at hypothetical AI risk.

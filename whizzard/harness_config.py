@@ -30,7 +30,6 @@ from pathlib import Path
 
 from whizzard.config import CONFIG_DIR
 
-
 HARNESSES_FILE = CONFIG_DIR / "harnesses.json"
 
 
@@ -90,6 +89,22 @@ def _validate_spec(name: str, spec: dict) -> None:
             raise HarnessConfigError(
                 f"harness {name!r}: platforms must be a list of strings"
             )
+
+    # secrets (D-162) must be a list of env-var-name strings if present;
+    # plaintext credential values are never permitted — values resolve at
+    # launch from OneCLI / host env, per D-134's delivery semantics.
+    if "secrets" in spec:
+        secrets = spec["secrets"]
+        if not isinstance(secrets, list) or not all(isinstance(s, str) for s in secrets):
+            raise HarnessConfigError(
+                f"harness {name!r}: secrets must be a list of env-var-name strings "
+                "(plaintext credential values are not permitted per D-162)"
+            )
+        for sec in secrets:
+            if not sec or any(c.isspace() or c == "=" for c in sec):
+                raise HarnessConfigError(
+                    f"harness {name!r}: secret {sec!r} is not a valid env-var name"
+                )
 
 
 def load_harnesses(path: Path | None = None) -> dict[str, dict]:
