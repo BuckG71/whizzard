@@ -29,3 +29,6 @@ htmlcov/
 ~/.whizzard/
 *.log
 .claude/worktrees/
+
+# Local-only docs — never pushed to remote (see docs/internal/README.md)
+docs/internal/
