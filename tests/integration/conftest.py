@@ -13,6 +13,7 @@ the default `pytest` run via the `-m 'not integration'` addopts in
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import subprocess
 from pathlib import Path
@@ -108,3 +109,60 @@ def run_in_cell(whizzard_base_image: str):
         return subprocess.run(launch, capture_output=True, text=True, timeout=timeout)
 
     return _run
+
+
+@pytest.fixture
+def launch_real_cell(whizzard_base_image: str, tmp_path: Path):
+    """Launch a real contained cell as a *non-blocking* process — for tests
+    that drive the enforcement monitor against a live container.
+
+    Yields a callable `launch(cmd, *, profile=...)` returning
+    `(proc, container_id_reader)`: `proc` is the live `docker run` client
+    (what `monitor_and_enforce` expects), `container_id_reader` reads the
+    cidfile. Every launched container is force-removed on teardown — even if
+    the test fails or the monitor-under-test never stopped it.
+    """
+    import uuid
+
+    from whizzard.config import get_profile
+    from whizzard.docker_cmd import build_run_argv
+
+    launched: list[tuple[subprocess.Popen, str]] = []
+
+    def _launch(cmd: list[str], *, profile: str = "safe"):
+        name = f"whizzard-smoke-{uuid.uuid4().hex[:12]}"
+        cidfile = tmp_path / f"{name}.cid"
+        argv = build_run_argv(
+            get_profile(profile), image=whizzard_base_image,
+            session_id=name, cidfile=cidfile,
+        )
+        image_idx = next(
+            i for i, a in enumerate(argv) if a == whizzard_base_image
+        )
+        launch = [a for a in argv[:image_idx] if a != "-it"]
+        launch[2:2] = ["--name", name]  # right after `docker run`
+        launch.append(whizzard_base_image)
+        launch.extend(cmd)
+        proc = subprocess.Popen(
+            launch, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+        def _container_id() -> str | None:
+            if cidfile.exists():
+                return cidfile.read_text().strip() or None
+            return None
+
+        launched.append((proc, name))
+        return proc, _container_id
+
+    yield _launch
+
+    for proc, name in launched:
+        subprocess.run(
+            ["docker", "rm", "-f", name],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if proc.poll() is None:
+            proc.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=10)
