@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whizzard — Similar Tools: Lay of the Land</title>
+<style>
+  body { font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif;
+         max-width: 820px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; margin-bottom: .2rem; }
+  .sub { color: #666; font-size: .85rem; margin-bottom: 1.4rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #ddd; padding: .5rem .6rem; text-align: left;
+           vertical-align: top; font-size: .88rem; }
+  th { background: #f4f4f4; }
+  .close { background: #fff7e6; }
+  code { background: #f0f0f0; padding: .1rem .3rem; border-radius: 3px; font-size: .85em; }
+  .verdict { background: #eef6ff; border-left: 4px solid #3b82f6;
+             padding: .7rem 1rem; margin: 1.2rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Similar Tools — Lay of the Land</h1>
+<div class="sub">Whizzard landscape scan · 2026-05-22</div>
+
+<p>The space is crowded but splits into four clusters. Only the highlighted row
+is a real competitor; the rest are adjacent.</p>
+
+<table>
+  <tr><th>Cluster</th><th>Examples</th><th>How it differs from Whizzard</th></tr>
+  <tr class="close">
+    <td><strong>Local harness-neutral sandbox wrappers</strong></td>
+    <td><code>scode</code>, <code>dagger/container-use</code>, Anthropic <code>sandbox-runtime</code></td>
+    <td>Closest neighbors. They <em>isolate</em> but don't <em>govern</em>: no profiles,
+        no human-readable mount list as the permission surface, no time-bounding,
+        no behavioral layer. <code>scode</code> is the one to watch.</td>
+  </tr>
+  <tr>
+    <td>Harness-native sandboxing</td>
+    <td>Claude Code sandboxed Bash / network</td>
+    <td>Single-harness, and the layer Whizzard deliberately does <em>not</em> recreate.
+        (A Claude Code sandbox bypass was disclosed May 2026 — good launch evidence.)</td>
+  </tr>
+  <tr>
+    <td>Cloud code-execution sandboxes</td>
+    <td>E2B, Daytona, Modal, Northflank, Vercel Sandbox</td>
+    <td>Cloud-first infra for AI <em>products</em> — not local governance for a
+        developer's own agents. Possible future backend, not a competitor.</td>
+  </tr>
+  <tr>
+    <td>Enterprise governance / MCP gateways</td>
+    <td>Permit.io, Kong, Cerbos, Permiso, MS Agent Governance Toolkit</td>
+    <td>Uses Whizzard's vocabulary but targets org IAM / service-account fleets —
+        explicitly not the v1 solo-dev audience.</td>
+  </tr>
+</table>
+
+<div class="verdict">
+  <strong>Verdict:</strong> nothing occupies Whizzard's exact spot. The unoccupied
+  ground is the <em>combination</em>: local-first + harness-neutral +
+  mount-list-as-permission + named profiles + enforced time-bounding +
+  the in-cell MCP cooperation layer + the planned Breaker. <code>scode</code> is the
+  one tool close enough to encroach if it adds governance features.
+</div>
+
+</body>
+</html>
