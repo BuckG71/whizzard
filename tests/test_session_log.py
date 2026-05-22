@@ -5,6 +5,7 @@ from pathlib import Path
 
 from whizzard.session_log import (
     append_event,
+    log_expiry_warning,
     log_session_end,
     log_session_start,
     merge_agent_events,
@@ -286,3 +287,12 @@ def test_session_end_records_expiry_reason(tmp_path: Path):
                     expiry_reason="idle")
     entry = json.loads(target.read_text().splitlines()[0])
     assert entry["expiry_reason"] == "idle"
+
+
+def test_log_expiry_warning_writes_event(tmp_path: Path):
+    target = tmp_path / "s.jsonl"
+    log_expiry_warning("sess-1", 300, path=target)
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["event"] == "session_expiry_warning"
+    assert entry["session_id"] == "sess-1"
+    assert entry["seconds_remaining"] == 300

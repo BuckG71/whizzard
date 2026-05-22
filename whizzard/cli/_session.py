@@ -6,7 +6,9 @@ read-only and side-effect-free.
 
 from __future__ import annotations
 
+import calendar
 import json
+import time
 
 from whizzard.session_log import SESSIONS_LOG
 
@@ -66,3 +68,24 @@ def _harness_from_event(ev: dict) -> str:
         if arg.startswith("whizzard.harness=") and i > 0 and argv[i - 1] == "--label":
             return str(arg.split("=", 1)[1])
     return "?"
+
+
+def _remaining_seconds(start_event: dict, now: float | None = None) -> float | None:
+    """Seconds until a session hits its duration cap (Stage 15).
+
+    Returns None if the session has no cap (`duration_limit_seconds` null)
+    or its start timestamp can't be parsed. May be negative if the logged
+    session has already run past its cap.
+    """
+    limit = start_event.get("duration_limit_seconds")
+    if not isinstance(limit, int):
+        return None
+    raw = start_event.get("start_time") or start_event.get("ts")
+    if not isinstance(raw, str):
+        return None
+    try:
+        struct = time.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+    started = calendar.timegm(struct)
+    return limit - ((now if now is not None else time.time()) - started)

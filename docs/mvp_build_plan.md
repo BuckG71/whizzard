@@ -346,16 +346,17 @@ Shipped:
 - `oiq adjust --extend` now wires through — the relaunch carries a
   `duration_override_seconds` = remaining time + extension (the D-163
   forward-compat hook, realized).
+- **Pre-expiry warning** — a `session_expiry_warning` audit-log event fires
+  once at a lead time before the duration cap; the in-cell agent sees it via
+  `whiz_audit_self`, and `whiz status` shows live time-remaining next to
+  RUNNING. (D-166 captured this as deferred pending a delivery-mechanism
+  decision; resolved same day — the audit-log-event approach, consistent
+  with the D-156 cooperation channel.)
 
 Implementation: `whizzard/enforcement.py` (new), `run_shell` rewritten to
 Popen + monitor, `config.py` profile schema, `adjust.py` extend wiring,
-`expiry_reason` on `log_session_end`. 41 new tests; 448 unit tests passing;
-87% coverage.
-
-Deferred: **pre-expiry warning at a configurable lead time** — needs a
-delivery-mechanism decision (host TTY vs. an audit-log event the agent polls
-vs. an agent event); the shared interactive TTY makes the obvious approach
-awkward. Tracked as a follow-on, not MVP-blocking.
+`expiry_reason` + `log_expiry_warning` in `session_log.py`, `whiz status`
+time-remaining. 49 new tests; 456 unit tests passing; 87% coverage.
 
 Builds on the duration tracking present from Stage 5.
 

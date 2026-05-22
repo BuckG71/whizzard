@@ -272,3 +272,43 @@ def test_monitor_idle_not_triggered_by_active_session():
         sampler=lambda cid, sid: busy,
     )
     assert reason == "clean"
+
+
+# --- pre-expiry warning -----------------------------------------------------
+
+
+def test_warning_lead_scales_down_for_short_caps():
+    assert enf._warning_lead(100_000) == 300   # default lead
+    assert enf._warning_lead(1000) == 200      # a fifth of a short cap
+    assert enf._warning_lead(2) == 1           # floored at 1s
+
+
+def test_monitor_emits_pre_expiry_warning_once():
+    proc = FakeProc()  # never self-exits → runs to the duration cap
+    warnings: list[tuple[str, int]] = []
+    reason = monitor_and_enforce(
+        proc, container_id_reader=lambda: "cid", adapter=_OkAdapter(),
+        session_id="s", start_time=1000.0,
+        duration_limit=1000, idle_limit=None,
+        poll_interval=0.01, now=FakeClock(1000.0, 100.0),
+        warner=lambda sid, rem: warnings.append((sid, rem)),
+    )
+    assert reason == "duration"
+    # Warning fires once (lead = 1000//5 = 200, threshold at elapsed 800),
+    # not on every poll between the threshold and the cap.
+    assert len(warnings) == 1
+    assert warnings[0][0] == "s"
+    assert 0 < warnings[0][1] <= 200
+
+
+def test_monitor_no_warning_when_session_ends_before_window():
+    proc = FakeProc(exit_on_call=2)
+    warnings: list[int] = []
+    monitor_and_enforce(
+        proc, container_id_reader=lambda: "cid", adapter=_OkAdapter(),
+        session_id="s", start_time=1000.0,
+        duration_limit=10_000, idle_limit=None,
+        poll_interval=0.01, now=FakeClock(1000.0, 5.0),
+        warner=lambda sid, rem: warnings.append(rem),
+    )
+    assert warnings == []
