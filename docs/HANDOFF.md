@@ -47,6 +47,32 @@
 
 # Session Handoff Log
 
+## 2026-05-22T14:13Z — Similar-tools research + MVP+ Stages 19–20 added; launch-cut design open
+
+### Goal
+Research existing tools similar to Whizzard for OSS-launch positioning. Mid-session the scope extended: add a packaging/install stage and a security-review stage to the build plan, then discuss whether the launch scope could be simpler.
+
+### Shipped this session
+On branch `claude/similar-tools-research-JOLae` (NOT main — two commits, pushed):
+- `docs/similar_tools_research.html` — brief competitive landscape. Four clusters; only local harness-neutral sandbox wrappers (`scode`, `dagger/container-use`, Anthropic `sandbox-runtime`) compete on Whizzard's axis. `scode` is the closest neighbour: a filesystem-access filter over OS-native sandboxing (bubblewrap/Seatbelt), no container, no governance. Verdict: nothing occupies Whizzard's exact spot (local + harness-neutral + mount-list-as-permission + profiles + time-bounding + cooperation layer + Breaker).
+- `docs/mvp_build_plan.md` — new `## MVP+ — Pre-OSS-Launch Stages` section with Stage 19 (Packaging & Install) and Stage 20 (Security Review & Hardening Audit). Both framed as not-MVP, first work under the open D-131.
+
+### Open design questions (deferred by Bryan — "discuss more tomorrow")
+1. **The launch cut.** Whether to launch on a reduced subset rather than the full Stages 1–18 surface. Stages 1–7 = scode-class containment of *generic* agents (real, useful, competitor-grade). Stage 8 is NOT deferrable for a Hermes-facing launch: the Hermes adapter carries the load-bearing `auth.json`-exclusion (D-80) — Stage 6 safety validation is generic and cannot catch `~/.hermes/<profile>/auth.json` (D-10/D-153 keep harness knowledge out of core), so the generic path has an unguarded credential footgun. Working subset for the actual (Hermes) audience: **Stages 1–8 + 15**. Discord (16–17) is the cleanest deferral. Caveat: Stages 1–14 are already shipped code — "cutting" them from the launch story does not save build work, and shipped code still needs security-review coverage.
+2. **Stage 20 scope.** As written it has 7 deliverables. A lean 3-deliverable alternative was proposed: adversarial regression test suite (one test per architecture.md invariant — the irreducible core) + automated CI scanners (`pip-audit`, bandit/semgrep — replaces the hand-audit pillars) + the external reviewers (already planned). Lean version argued more durable: continuous CI beats a point-in-time audit. Not decided.
+3. **D-131** (OSS-launch milestone scope) and **D-133** (framework failure-mode policy; Stage 20 recommends closing it fail-closed) are both still open and now load-bearing for the launch plan.
+
+### Launch estimate (given to Bryan, for reference)
+Reviewer-ready ~2 weeks of working time; public launch realistically mid-June to mid-July. Bottleneck after reviewer-ready is non-coding — reviewer turnaround + security audit + the D-131/rename decisions — not feature velocity.
+
+### Resume protocol
+1. Decide the launch cut (Q1). That decision drives the rest.
+2. Given the cut: revisit whether Stage 20 should be slimmed to the 3-deliverable form, and whether Stage 8's build-plan framing needs a note that it is security-load-bearing (auth.json exclusion), not just target-market reach.
+3. Branch `claude/similar-tools-research-JOLae` holds both commits. Decide whether to merge to `main` (doc-only; the docs convention normally fast-forwards doc commits to main).
+4. The `# Current State` header block above is stale — it reads "Stages 1–13 SHIPPED / Next: Stage 14", but Stage 14 shipped 2026-05-21 (commit `36dd5f4`, "land Stages 11–14"). Refresh it when the launch-cut decision lands.
+
+---
+
 ## 2026-05-21T00:00Z — Stage 13 shipped; pre-OSS gaps closed; Stage 14 is next
 
 ### Goal
