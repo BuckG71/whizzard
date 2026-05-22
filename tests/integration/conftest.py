@@ -117,10 +117,11 @@ def launch_real_cell(whizzard_base_image: str, tmp_path: Path):
     that drive the enforcement monitor against a live container.
 
     Yields a callable `launch(cmd, *, profile=...)` returning
-    `(proc, container_id_reader)`: `proc` is the live `docker run` client
-    (what `monitor_and_enforce` expects), `container_id_reader` reads the
-    cidfile. Every launched container is force-removed on teardown — even if
-    the test fails or the monitor-under-test never stopped it.
+    `(proc, container_id_reader, session_id)`: `proc` is the live `docker run`
+    client (what `monitor_and_enforce` expects), `container_id_reader` reads
+    the cidfile, `session_id` is the value used as both the `--name` and the
+    `whizzard.session_id` label. Every launched container is force-removed on
+    teardown — even if the test fails or the monitor never stopped it.
     """
     import uuid
 
@@ -153,7 +154,7 @@ def launch_real_cell(whizzard_base_image: str, tmp_path: Path):
             return None
 
         launched.append((proc, name))
-        return proc, _container_id
+        return proc, _container_id, name
 
     yield _launch
 
