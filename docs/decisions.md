@@ -2598,6 +2598,31 @@ Rejected: **background watcher thread** — reintroduces always-on host-side liv
 
 ---
 
+### D-166: Stage 15 design — duration + idle enforcement via a Popen poll loop, hybrid idle detection, extend = remaining + N
+
+**Type:** architecture
+
+**Tags:** mvp, safety, profiles
+
+**Door Type:** two-way for the tunables (poll interval, CPU threshold, the idle-signal set — signals can be added) and the `idle_timeout_seconds` schema; closer to one-way for the Popen-poll-in-`run_shell` mechanism once downstream code depends on `expiry_reason`.
+
+**Decision:** `run_shell` launches the cell with `subprocess.Popen` and hands it to `monitor_and_enforce` (`whizzard/enforcement.py`) — a single-threaded poll loop, not a background thread. Each tick checks the wall-clock duration cap and samples idle activity; on a limit hit it runs the adapter's graceful wrap-up (or `docker stop`) and records `expiry_reason` (clean / duration / idle) on session_end. Idle detection is **hybrid**: the primary signal is container resource activity from `docker stats` (CPU + network + block I/O), and a write to the agent event file or request channel also resets the idle clock. `oiq adjust --extend` is wired through as `duration_override_seconds` = (original cap − elapsed) + extension. `idle_timeout_seconds` becomes a new optional profile field.
+
+**Rationale:** `run_shell` already blocks for the whole session; a poll loop in that same call needs no concurrency machinery and keeps the TTY passthrough intact.
+
+Rejected: **background watcher thread** — adds concurrency to the load-bearing launch path for no gain over an in-process loop (same rejection spirit as D-165). Rejected: **`subprocess.run(timeout=)`** — kills the docker client ungracefully and can't run the adapter wrap-up or check idle. Rejected: **CPU-only idle** — an agent blocked on a slow model call shows ~0% CPU and would be false-killed. Rejected: **event-log-only idle** — a working-but-quiet agent emits no events and would also be false-killed. The hybrid covers both: resource activity catches a dead session, network traffic covers the model-call case, event writes confirm a live agent. Rejected: **extend = fresh full window** — a non-extend adjust would silently reset the cap; remaining-time math keeps the cap meaningful and makes `--extend N` mean exactly "N more".
+
+**Notes:**
+- The `default` profile keeps `idle_timeout_seconds = None` — it is the always-on baseline. Other bundled profiles carry 15–30 min.
+- Pre-expiry warning (a build-plan Stage 15 bullet) is deferred — it needs a delivery-mechanism decision (host TTY vs. an audit-log event the agent polls vs. an agent event).
+- Hot-restart of idle-ended sessions is the planned Stage 15.5 follow-on; `expiry_reason: idle` is its enabler.
+
+**Source:** conversation 2026-05-22 (Stage 15 design discussion with Bryan).
+
+**Status:** active
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

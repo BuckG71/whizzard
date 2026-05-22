@@ -196,3 +196,55 @@ def test_bundled_example_file_parses_cleanly(tmp_path: Path):
     # Same semantics as bundled defaults
     assert profiles["default"].duration_seconds is None
     assert profiles["power"].allow_broad_mount is True
+
+
+# --- Stage 15: idle_timeout_seconds ---------------------------------------
+
+
+def test_bundled_default_profiles_carry_idle_timeout():
+    profiles = default_profiles()
+    assert profiles["build"].idle_timeout_seconds == 30 * 60
+    assert profiles["safe"].idle_timeout_seconds == 15 * 60
+    # the always-on `default` profile deliberately has no idle timeout
+    assert profiles["default"].idle_timeout_seconds is None
+
+
+def test_load_parses_idle_timeout_seconds(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "p.json", {
+        "x": {"network_enabled": True, "duration_seconds": 3600,
+              "idle_timeout_seconds": 600},
+    })
+    assert load_profiles(f)["x"].idle_timeout_seconds == 600
+
+
+def test_idle_timeout_absent_defaults_to_none(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "p.json", {
+        "x": {"network_enabled": True, "duration_seconds": 3600},
+    })
+    assert load_profiles(f)["x"].idle_timeout_seconds is None
+
+
+def test_idle_timeout_null_is_accepted(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "p.json", {
+        "x": {"network_enabled": True, "duration_seconds": 3600,
+              "idle_timeout_seconds": None},
+    })
+    assert load_profiles(f)["x"].idle_timeout_seconds is None
+
+
+def test_idle_timeout_rejects_non_integer(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "p.json", {
+        "x": {"network_enabled": True, "duration_seconds": 3600,
+              "idle_timeout_seconds": "soon"},
+    })
+    with pytest.raises(ProfileConfigError, match="idle_timeout_seconds"):
+        load_profiles(f)
+
+
+def test_idle_timeout_rejects_non_positive(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "p.json", {
+        "x": {"network_enabled": True, "duration_seconds": 3600,
+              "idle_timeout_seconds": 0},
+    })
+    with pytest.raises(ProfileConfigError, match="positive"):
+        load_profiles(f)

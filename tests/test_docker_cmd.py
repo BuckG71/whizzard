@@ -329,3 +329,77 @@ def test_argv_harness_mount_comes_after_user_mounts(tmp_path):
         i for i in v_positions if str(hermes_home) in argv[i + 1]
     )
     assert user_pos < harness_pos
+
+
+# --- Stage 15: run_shell duration / idle enforcement wiring ---
+
+
+def _isolated_run_shell_env(tmp_path, monkeypatch):
+    """Stub out Docker + the monitor so run_shell can be exercised without a
+    real container. Returns the temp session log path."""
+    import json  # noqa: F401 -- used by callers via the returned log
+
+    import whizzard.docker_cmd as dc
+    from whizzard import session_log
+
+    log = tmp_path / "sessions.jsonl"
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", log)
+    monkeypatch.setattr(dc, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc, "image_exists", lambda *a, **k: True)
+    monkeypatch.setattr(dc, "get_image_id", lambda *a, **k: "sha256:abc")
+
+    class _FakeProc:
+        def __init__(self, *a, **k):
+            self.returncode = None
+
+    monkeypatch.setattr(dc.subprocess, "Popen", _FakeProc)
+    return dc, log
+
+
+def test_run_shell_records_expiry_reason(tmp_path, monkeypatch):
+    import json
+
+    from whizzard.config import Profile
+    dc, log = _isolated_run_shell_env(tmp_path, monkeypatch)
+
+    def _stub_monitor(proc, **kwargs):
+        proc.returncode = 137
+        return "idle"
+
+    monkeypatch.setattr(dc, "monitor_and_enforce", _stub_monitor)
+
+    prof = Profile("safe", network_enabled=False, duration_seconds=1800,
+                   idle_timeout_seconds=600)
+    result = dc.run_shell(prof, adapter=GenericShellAdapter(), session_id="sess-15")
+
+    assert result.exit_code == 137
+    end = json.loads(log.read_text().splitlines()[-1])
+    assert end["event"] == "session_end"
+    assert end["expiry_reason"] == "idle"
+
+
+def test_run_shell_logs_effective_duration_override(tmp_path, monkeypatch):
+    import json
+
+    from whizzard.config import Profile
+    dc, log = _isolated_run_shell_env(tmp_path, monkeypatch)
+
+    captured = {}
+
+    def _stub_monitor(proc, **kwargs):
+        captured.update(kwargs)
+        proc.returncode = 0
+        return "clean"
+
+    monkeypatch.setattr(dc, "monitor_and_enforce", _stub_monitor)
+
+    prof = Profile("build", network_enabled=True, duration_seconds=7200)
+    dc.run_shell(prof, adapter=GenericShellAdapter(), session_id="sess-x",
+                 duration_override_seconds=9000)
+
+    # The --extend override wins over the profile's duration in both the
+    # session_start log and the limit handed to the monitor.
+    start = json.loads(log.read_text().splitlines()[0])
+    assert start["duration_limit_seconds"] == 9000
+    assert captured["duration_limit"] == 9000

@@ -12,9 +12,10 @@ Schema for profiles.json:
       "profiles": {
         "<name>": {
           "network_enabled": true | false,
-          "duration_seconds": <int> | null,   # null = unlimited
-          "allow_broad_mount": true | false,  # default false
-          "description": "..."                 # default ""
+          "duration_seconds": <int> | null,        # null = unlimited
+          "idle_timeout_seconds": <int> | null,    # optional; null = no idle timeout
+          "allow_broad_mount": true | false,       # default false
+          "description": "..."                      # default ""
         },
         ...
       }
@@ -42,6 +43,7 @@ class Profile:
     duration_seconds: int | None  # None = unlimited
     allow_broad_mount: bool = False
     description: str = ""
+    idle_timeout_seconds: int | None = None  # None = no idle timeout (Stage 15)
 
 
 class ProfileConfigError(Exception):
@@ -55,6 +57,7 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         name="safe",
         network_enabled=False,
         duration_seconds=30 * 60,
+        idle_timeout_seconds=15 * 60,
         description="Most restrictive. Network off, no mounts by default.",
     ),
     "default": Profile(
@@ -65,12 +68,14 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
                                  # explicitly authorized at launch (CLI flag
                                  # or preset). Two-gate model preserved per
                                  # D-46. Supersedes D-38 on this field only.
+        idle_timeout_seconds=None,  # always-on baseline — no idle kill
         description="SAFE-NET baseline. Network on, mounts opt-in. Always-on.",
     ),
     "build": Profile(
         name="build",
         network_enabled=True,
         duration_seconds=2 * 60 * 60,
+        idle_timeout_seconds=30 * 60,
         description="Development work. Network on, rw mounts allowed.",
     ),
     "power": Profile(
@@ -78,12 +83,14 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         network_enabled=True,
         duration_seconds=60 * 60,
         allow_broad_mount=True,
+        idle_timeout_seconds=15 * 60,
         description="Capability-heavy. Shorter duration intentional.",
     ),
     "quarantine": Profile(
         name="quarantine",
         network_enabled=False,
         duration_seconds=30 * 60,
+        idle_timeout_seconds=15 * 60,
         description="Untrusted execution. Network off, ro mounts only.",
     ),
 }
@@ -127,12 +134,28 @@ def _parse_profile(name: str, spec: dict) -> Profile:
     if not isinstance(description, str):
         raise ProfileConfigError(f"profile {name!r}: description must be a string")
 
+    # idle_timeout_seconds (Stage 15): optional. Absent or null → no idle
+    # timeout. Positive integer → kill the session after that many seconds
+    # with no agent activity.
+    idle_timeout_seconds = spec.get("idle_timeout_seconds")
+    if idle_timeout_seconds is not None:
+        if not isinstance(idle_timeout_seconds, int) or isinstance(idle_timeout_seconds, bool):
+            raise ProfileConfigError(
+                f"profile {name!r}: idle_timeout_seconds must be an integer or null"
+            )
+        if idle_timeout_seconds <= 0:
+            raise ProfileConfigError(
+                f"profile {name!r}: idle_timeout_seconds must be positive "
+                f"(got {idle_timeout_seconds})"
+            )
+
     return Profile(
         name=name,
         network_enabled=network_enabled,
         duration_seconds=duration_seconds,
         allow_broad_mount=allow_broad_mount,
         description=description,
+        idle_timeout_seconds=idle_timeout_seconds,
     )
 
 

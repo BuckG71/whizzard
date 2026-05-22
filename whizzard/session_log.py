@@ -88,7 +88,16 @@ def log_session_end(
     end_time: float,
     duration_seconds: float,
     path: Path | None = None,
+    expiry_reason: str = "clean",
 ) -> None:
+    """Write the session_end event.
+
+    Stage 15: `expiry_reason` records *why* the session ended —
+    ``clean`` (container exited on its own), ``duration`` (hard duration
+    cap), or ``idle`` (idle timeout). Hot-restart eligibility keys off this
+    field (only ``idle`` sessions are hot-restartable; see build plan
+    Stage 15.5).
+    """
     append_event(
         {
             "ts": _iso(end_time),
@@ -98,6 +107,7 @@ def log_session_end(
             "exit_status": exit_status,
             "duration_seconds": round(duration_seconds, 3),
             "end_time": _iso(end_time),
+            "expiry_reason": expiry_reason,
         },
         path=path,
     )
