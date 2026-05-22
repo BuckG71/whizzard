@@ -2,7 +2,7 @@
 
 This document defines the system architecture, security invariants, and adapter contract for Whizzard. It applies across all phases of the project — MVP, v1, and beyond.
 
-> Naming note: earlier drafts used a two-component framing ("Airlock = governance, Whizzard = orchestrator"). The project consolidated to a single name "Whizzard" on 2026-05-09 (D-144). Older docs and historical decisions may still reference Airlock; the substance is unchanged.
+> Naming note: earlier drafts used a two-component framing ("Airlock = governance, Whizzard = orchestrator"). The project consolidated to a single name "Whizzard" on 2026-05-09 (D-144). Older docs and historical decisions may still reference Airlock; the substance is unchanged. A further rename Whizzard → Osmotiq is planned post-MVP (D-158); until it lands, "Whizzard" and the `whiz` CLI remain current.
 
 ---
 
@@ -69,14 +69,13 @@ The wrap-up step is required from MVP, not deferred to v1. When a session is abo
 
 The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
-Initial adapters:
-- generic shell adapter (MVP)
-- Hermes adapter (post-MVP)
-- OpenClaw adapter (post-MVP)
-- NanoClaw adapter (post-MVP)
+Core-maintained adapters (D-155 — the slate is intentionally capped):
+- generic shell adapter — MVP, shipped
+- Hermes adapter — MVP, shipped (Stage 8)
+- NanoClaw adapter — v1.0
+- native Whizzard harness — v2.0
 
-Future:
-- MCP gateway adapter
+Other harnesses (OpenClaw, Claude Code, Codex, Cursor, etc.) are community-maintained via the adapter Protocol; they are not part of the core slate.
 
 ### 3. Execution Backend Layer
 
@@ -101,7 +100,7 @@ Container    = execution plane
 ```
 
 Runs on host:
-- Whizzard daemon
+- Whizzard CLI
 - Whizzard policy engine
 - config registry
 - logs
@@ -169,7 +168,7 @@ Each layer does what the others cannot. The enforcement layer determines what th
 
 ## Config Write-Protection Invariant
 
-The Whizzard config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `agents.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.
+The Whizzard config directory (`profiles.json`, `mounts.json`, `harnesses.json`, `presets.json`) must never be reachable from any agent-writable mount path, regardless of what policy files specify.
 
 This is enforced at the safety validation layer, not the policy layer. An agent that can write files Whizzard reads can influence its own policies — violating the foundational trust model. This rule cannot be overridden by profiles or presets.
 
@@ -251,6 +250,8 @@ Optional fields: `stop_command`, `wrap_up_command`, `wrap_up_grace_seconds`, `wo
 The `wrap_up_command` is the string the adapter sends to the harness's interactive interface to trigger graceful wind-down (e.g., a slash command). `wrap_up_grace_seconds` bounds how long Whizzard waits for the harness to finish before proceeding to SIGTERM. Adapters whose harnesses do not have a native wrap-up mechanism omit these fields; their `wrap_up()` is a no-op.
 
 The schema is versioned (`schema_version`) so it can be extended without breaking existing configs. The MVP can ship with only `type` and `start_command` populated, but the parser must accept and ignore the optional fields from day one to avoid a breaking config change later.
+
+> **As-built note.** The JSON above is illustrative. The live config schema is validated in `whizzard/harness_config.py`; agent harnesses also use `platforms` (D-89) and `secrets` (D-162), and the Hermes adapter additionally reads `hermes_home`. The code-level adapter contract — the methods Whizzard core actually calls — is the `HarnessAdapter` Protocol in `whizzard/adapters/base.py`, not this JSON. `wrap_up_command` is retained in the schema but vestigial: the Hermes adapter performs graceful shutdown via `docker stop` (SIGTERM), not by sending a `/quit` command (D-88).
 
 ---
 

@@ -32,7 +32,7 @@ The MVP is operational when the system can:
 **Personal-use capabilities (Stages 10–18, added 2026-05-09 per D-137 / D-140 / D-142 / D-143):**
 
 10. Switch between named, scoped agent contexts via presets, with terse CLI shortcuts (`whiz r`, `whiz p`, `whiz s`).
-11. Operate Whiz from inside Claude Code via slash commands (`/whiz launch`, `/whiz status`, `/whiz adjust`, etc.).
+11. Operate Whiz from inside an agent harness via documented integration recipes (`docs/examples/`), with the Stage 10 CLI as the harness-neutral surface (D-161).
 12. Inject API credentials via OneCLI vault (with env-var fallback when OneCLI is absent).
 13. Adjust an active session's capabilities mid-session via stop+restart, with local TTY approval.
 14. Expose request-side MCP tools so the agent can ask for capability changes (`whiz_request_mount`, `whiz_request_extend`).
@@ -46,6 +46,8 @@ Beyond Stage 18, two **MVP+ stages** (19–20) prepare the system for external r
 ---
 
 ## Build Order
+
+Stages 1–9 (the foundational MVP capabilities) shipped during the initial build; per-stage `[SHIPPED]` markers below are used from Stage 10 onward.
 
 ### Stage 1 — Generic Docker Shell Launch
 
@@ -157,13 +159,9 @@ First adapter: generic shell adapter.
 
 This proves the harness abstraction architecture before any harness-specific integration. The adapter contract and `harnesses.json` schema are defined in [architecture.md](architecture.md).
 
-The MVP adapter interface includes:
-- `launch(workspace, config)` — start the harness inside the container
-- `stop()` — clean shutdown
-- `wrap_up(grace_seconds)` — invoke the harness's native graceful-shutdown mechanism (no-op for generic shell)
-- `health_check()` — confirm harness is ready
+The adapter contract is the `HarnessAdapter` Protocol in `whizzard/adapters/base.py`. As built it is `start_command()`, `container_env()`, `working_dir()`, `wrap_up()`, and `health_check_command()`, plus `active_capabilities()`, `preflight()`, `mcp_env()`, and `container_mounts()` added by Stages 8–9. (The pre-build sketch named these `launch()`/`stop()`; the shipped Protocol is the authority.)
 
-The wrap_up method must exist from MVP so the Hermes adapter (Stage 8) can implement it without an interface change.
+`wrap_up()` exists from MVP so the Hermes adapter (Stage 8) can implement it without an interface change; the generic shell adapter's `wrap_up()` is a no-op.
 
 ### Stage 8 — Hermes Integration
 
@@ -257,7 +255,7 @@ Stage 11 is therefore reframed as a documentation-and-examples stage, not a code
 
 **Shipped 2026-05-19.** Nine files in `docs/examples/`: top-level README, `claude_code/README.md`, four skill files (`oiq-launch`, `oiq-status`, `oiq-presets`, `oiq-sessions-tail`), `hermes/README.md` (full migration walkthrough), `hermes/harnesses.json.example` (`hermes-cell` + `hermes-cell-smoke` entries), `hermes/config.yaml.snippet` (Ollama provider via `host.docker.internal`). Root README gains a "Using OIQ inside your agent harness" section pointing at the examples directory.
 
-### Stage 12 — OneCLI Credential Plumbing (Cross-Adapter Generalization + Fallback)
+### Stage 12 — OneCLI Credential Plumbing (Cross-Adapter Generalization + Fallback) [SHIPPED 2026-05-15]
 
 Goal: make OneCLI credential injection a reusable adapter utility, with a clean fallback when OneCLI isn't available.
 
