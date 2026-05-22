@@ -22,6 +22,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WHIZZARD_BASE_IMAGE = "whizzard-base:latest"
+WHIZZARD_HERMES_IMAGE = "whizzard-hermes:latest"
 
 
 def _docker_available() -> bool:
@@ -80,6 +81,37 @@ def whizzard_base_image() -> str:
             f"stderr: {result.stderr[-2000:]}"
         )
     return WHIZZARD_BASE_IMAGE
+
+
+@pytest.fixture(scope="session")
+def whizzard_hermes_image() -> str:
+    """Ensure `whizzard-hermes:latest` exists; build it from
+    `docker/Dockerfile.hermes` with the project root as context if not.
+    Used by Tranche B smokes that need the in-cell MCP deployment per D-167.
+    """
+    if _image_present(WHIZZARD_HERMES_IMAGE):
+        return WHIZZARD_HERMES_IMAGE
+
+    dockerfile = REPO_ROOT / "docker" / "Dockerfile.hermes"
+    if not dockerfile.exists():
+        pytest.skip(
+            f"Dockerfile.hermes not found at {dockerfile}",
+            allow_module_level=True,
+        )
+
+    # Context is the project root so `COPY whizzard/mcp_server.py` resolves.
+    result = subprocess.run(
+        ["docker", "build", "-t", WHIZZARD_HERMES_IMAGE,
+         "-f", str(dockerfile), str(REPO_ROOT)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"failed to build {WHIZZARD_HERMES_IMAGE}:\n"
+            f"stdout: {result.stdout[-2000:]}\n"
+            f"stderr: {result.stderr[-2000:]}"
+        )
+    return WHIZZARD_HERMES_IMAGE
 
 
 @pytest.fixture
