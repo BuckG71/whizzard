@@ -42,7 +42,7 @@ def _await_container_id(reader, deadline_seconds: float = 15.0) -> str:
 
 def test_duration_cap_stops_real_container(launch_real_cell) -> None:
     """A duration cap actually terminates a live container."""
-    proc, cid_reader = launch_real_cell(["sleep", "3600"])
+    proc, cid_reader, _ = launch_real_cell(["sleep", "3600"])
     cid = _await_container_id(cid_reader)
     assert _container_running(cid), "container should be up before enforcement"
 
@@ -66,7 +66,7 @@ def test_idle_timeout_stops_real_container(launch_real_cell) -> None:
     """An idle timeout terminates a container with no activity. Uses the
     `safe` profile (`--network none`) so there is no network jitter — the
     `sleep` container is genuinely quiet across `docker stats` samples."""
-    proc, cid_reader = launch_real_cell(["sleep", "3600"], profile="safe")
+    proc, cid_reader, _ = launch_real_cell(["sleep", "3600"], profile="safe")
     cid = _await_container_id(cid_reader)
     assert _container_running(cid)
 
