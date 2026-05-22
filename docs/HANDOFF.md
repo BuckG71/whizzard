@@ -2,7 +2,7 @@
 
 > **This section is mutable** — updated when state meaningfully changes (a stage ships, a major decision lands, a constraint relaxes). Everything below the `# Session Handoff Log` heading is append-only per D-150 and must never be edited. Update this section by replacing it in place; prior versions live in git history.
 >
-> **Last updated:** 2026-05-22T23:00Z (UTC)
+> **Last updated:** 2026-05-22T23:45Z (UTC)
 
 ## Where we are right now
 
@@ -11,6 +11,7 @@
 - **Build-plan additions:** Stage 15.5 (hot-restart of idle-ended sessions) added as a planned follow-on. MVP+ Stages 19–20 (Packaging & Install; Security Review & Hardening Audit) added via the merged `similar-tools-research` branch — first concrete OSS-launch-milestone work.
 - **OneCLI caveat** (D-162): `fetch_secret` calls a non-existent `onecli secrets get`; all invocations fall through to the env-var fallback. Follow-up, not blocking.
 - **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`.
+- **Key docs reconciled** (2026-05-22, commit `17fba77`): `architecture.md` and `mvp_build_plan.md` cross-checked against the codebase and `decisions.md` and brought into alignment — the three key docs now agree; `decisions.md` is the live source of truth. `docs/internal/` added as a gitignored local-only docs area.
 
 ## Active design constraints (don't relitigate without cause)
 
@@ -32,6 +33,7 @@
 - `make check` (lint + typecheck + test) and `make coverage` are the gates; CI runs them.
 - **Commit + push when a stage ships or a major session lands** — standard procedure, no longer waits to be asked (`feedback_commit_per_stage`).
 - **Surface the full build-plan stage scope up front** when scoping a stage — present every requirement before the design conversation (`feedback_full_stage_scope`).
+- Handoff / decision review drafts render as **inline HTML surfaced in chat**, never `.draft.md` files in the repo (`feedback_review_drafts_html`; the `session-handoff` and `decision-capture` skills were updated to match).
 - Brevity in collaboration; single clean follow-up questions; don't push to close items; verify load-bearing claims before asserting.
 - Design-paused stages (16, 17) require an explicit conversation per D-148 before code.
 
@@ -49,6 +51,24 @@
 ---
 
 # Session Handoff Log
+
+## 2026-05-22T23:45Z — Post-handoff doc reconciliation + housekeeping
+
+### Goal
+Continue the MVP build per `docs/mvp_build_plan.md`. This entry covers housekeeping done after the 23:00Z handoff, in the same session — a clean stopping point.
+
+### Active task
+Unchanged from the 23:00Z entry below — pick the next build target (Stage 15.5 or 18, or the launch-cut questions). No code work in flight.
+
+### Done since the 23:00Z handoff
+- **Doc cross-check + reconciliation** (commit `17fba77`): `architecture.md` and `mvp_build_plan.md` brought into alignment with the codebase and `decisions.md` — 8 fixes, all docs-lagging-code (a phantom host "daemon", a stale adapter slate, a nonexistent `agents.json`, the stale Stage 7 interface sketch, etc.). No code issues surfaced; `decisions.md` was already current.
+- **`docs/internal/`** (commit `f7815a4`): a gitignored local-only docs area for working notes / drafts not pushed to remote.
+- **Review-draft workflow**: the `session-handoff` and `decision-capture` skills were updated — review drafts now render as inline HTML surfaced in chat, never `.draft.md` files in the repo (`feedback_review_drafts_html` memory).
+
+### Resume protocol
+Same as the 23:00Z entry below. Read the `# Current State` block, then decide the launch-cut questions or take an autonomous stage (15.5 / 18). Stages 16/17 need a D-148 design pause before code.
+
+---
 
 ## 2026-05-22T23:00Z — Stages 14 + 15 shipped; similar-tools branch merged; launch-cut questions open
 
