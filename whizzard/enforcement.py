@@ -248,7 +248,7 @@ def monitor_and_enforce(
     duration_limit: int | None,
     idle_limit: int | None,
     grace_seconds: int = _STOP_GRACE_SECONDS,
-    poll_interval: float = POLL_INTERVAL_SECONDS,
+    poll_interval: float | None = None,
     now: Callable[[], float] = time.time,
     sampler: Callable[[str, str], ActivitySample | None] = sample_activity,
     warner: Callable[[str, int], None] = log_expiry_warning,
@@ -262,10 +262,17 @@ def monitor_and_enforce(
     `container_id_reader` is called lazily — the container id isn't known
     until docker writes the cidfile, a moment after launch.
 
+    `poll_interval` defaults to the module's `POLL_INTERVAL_SECONDS`,
+    resolved at call time so it stays monkeypatchable (the integration smoke
+    harness drops it to a few seconds).
+
     `warner` is called once, at a lead time before a duration cap, with
     `(session_id, seconds_remaining)` — the pre-expiry warning. It is not
     called for idle limits (an idle session has nobody watching).
     """
+    if poll_interval is None:
+        poll_interval = POLL_INTERVAL_SECONDS
+
     if duration_limit is None and idle_limit is None:
         # Nothing to enforce — just wait for the container, as pre-Stage-15.
         proc.wait()

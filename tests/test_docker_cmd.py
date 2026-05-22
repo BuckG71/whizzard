@@ -403,3 +403,20 @@ def test_run_shell_logs_effective_duration_override(tmp_path, monkeypatch):
     start = json.loads(log.read_text().splitlines()[0])
     assert start["duration_limit_seconds"] == 9000
     assert captured["duration_limit"] == 9000
+
+
+# --- non-interactive launch flag ---
+
+
+def test_argv_includes_it_by_default():
+    argv = build_run_argv(get_profile("default"))
+    assert "-it" in argv
+
+
+def test_argv_omits_it_when_not_interactive():
+    argv = build_run_argv(get_profile("default"), interactive=False)
+    assert "-it" not in argv
+    # the TTY toggle must not disturb the containment flags
+    assert "--cap-drop=ALL" in argv
+    assert "--read-only" in argv
+    assert "--security-opt" in argv

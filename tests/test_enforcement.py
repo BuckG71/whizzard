@@ -312,3 +312,18 @@ def test_monitor_no_warning_when_session_ends_before_window():
         warner=lambda sid, rem: warnings.append(rem),
     )
     assert warnings == []
+
+
+def test_monitor_resolves_poll_interval_when_unset(monkeypatch):
+    """poll_interval defaults to None and resolves POLL_INTERVAL_SECONDS at
+    call time — kept monkeypatchable for the integration smoke harness. If it
+    stayed None, FakeProc.wait(None) would return immediately → "clean"."""
+    monkeypatch.setattr(enf, "POLL_INTERVAL_SECONDS", 0.01)
+    proc = FakeProc()  # never self-exits → the poll loop must reach expiry
+    reason = monitor_and_enforce(
+        proc, container_id_reader=lambda: "cid", adapter=_OkAdapter(),
+        session_id="s", start_time=1000.0,
+        duration_limit=100, idle_limit=None,
+        now=FakeClock(1000.0, 60.0),
+    )
+    assert reason == "duration"

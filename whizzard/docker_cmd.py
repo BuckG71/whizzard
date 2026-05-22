@@ -88,6 +88,7 @@ def build_run_argv(
     session_id: str | None = None,
     cidfile: Path | None = None,
     adapter: HarnessAdapter | None = None,
+    interactive: bool = True,
 ) -> list[str]:
     """Build the `docker run` argv applying baseline + profile + mounts + adapter.
 
@@ -102,6 +103,12 @@ def build_run_argv(
       - adapter.container_env() vars passed via -e
       - adapter.working_dir() passed via -w
       - whizzard.harness=<name> label for traceability
+
+    `interactive` (default True) controls the `-it` flag. True is the normal
+    launch — a user at a terminal. False omits `-it` for a non-TTY launch
+    (the integration smoke harness; also a future non-interactive/daemon
+    launch mode). It changes only the TTY allocation, never the containment
+    flags.
     """
     if adapter is None:
         adapter = GenericShellAdapter()
@@ -120,11 +127,10 @@ def build_run_argv(
         user_arg = CONTAINER_USER
         home_tmpfs_owner = "uid=1000,gid=1000"
 
-    argv = [
-        "docker", "run",
-        "--rm",
-        "--init",
-        "-it",
+    argv = ["docker", "run", "--rm", "--init"]
+    if interactive:
+        argv.append("-it")
+    argv += [
         "--user", user_arg,
         "--cap-drop=ALL",
         "--security-opt", "no-new-privileges",
@@ -228,8 +234,12 @@ def run_shell(
     adapter: HarnessAdapter | None = None,
     preset_name: str | None = None,
     duration_override_seconds: int | None = None,
+    interactive: bool = True,
 ) -> RunResult:
-    """Launch a contained interactive shell. Blocks until the shell exits.
+    """Launch a contained shell. Blocks until the session exits.
+
+    `interactive` (default True) passes through to `build_run_argv`'s `-it`
+    flag. False is the non-TTY launch the integration smoke harness uses.
 
     Stage 5: writes session_start and session_end events to the JSONL log
     around the subprocess call. Container ID is captured via --cidfile;
@@ -273,6 +283,7 @@ def run_shell(
         session_id=session_id,
         cidfile=cidfile,
         adapter=adapter,
+        interactive=interactive,
     )
 
     image_id = get_image_id(image)
