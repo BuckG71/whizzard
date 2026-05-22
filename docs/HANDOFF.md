@@ -2,16 +2,15 @@
 
 > **This section is mutable** — updated when state meaningfully changes (a stage ships, a major decision lands, a constraint relaxes). Everything below the `# Session Handoff Log` heading is append-only per D-150 and must never be edited. Update this section by replacing it in place; prior versions live in git history.
 >
-> **Last updated:** 2026-05-21T00:00Z (UTC)
+> **Last updated:** 2026-05-22T23:00Z (UTC)
 
 ## Where we are right now
 
-- **MVP user:** Bryan, single-user threshold per D-101. Build choices favor "Bryan's daily-driver setup" over generalized OSS-day-one defaults; OSS-launch will revisit these defaults explicitly (per D-157 pattern).
-- **Stage status:** Stages 1–13 SHIPPED. Stage 8 fully closed (M6–M8). Stage 9 (in-cell read-only MCP), Stage 10 (presets + CLI), Stage 11 (`docs/examples/` integration recipes), Stage 12 (credential utility), Stage 13 (`oiq adjust` stop+restart) all shipped. **352 unit tests + 3 integration tests passing; 84% coverage.**
-- **Next: Stage 14** — Whiz MCP request-side (mutating) tools. Hooks already built in `whizzard/adjust.py` during Stage 13.
-- **Pre-OSS readiness: done.** ruff + mypy + GitHub Actions CI + coverage gate + integration test tier + OSS metadata (LICENSE/CHANGELOG/CONTRIBUTING) + `cli.py`-split-into-package all landed. The senior-dev-flagged gap list from 2026-05-19 is closed.
-- **OneCLI integration caveat** (D-162 Notes): `fetch_secret` calls `onecli secrets get` which doesn't exist in OneCLI's CLI surface; all invocations fall through to env-var fallback. Follow-up item, not blocking.
-- **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`. `osmotiq.ai` owned. Bundled with D-151 (lowercase markdown sweep).
+- **MVP user:** Bryan, single-user threshold per D-101. Build choices favor "Bryan's daily-driver setup" over generalized OSS-day-one defaults; OSS-launch revisits these explicitly.
+- **Stage status:** **Stages 1–15 SHIPPED.** Stage 14 (agent-initiated capability requests — `whiz_request_*` MCP tools + the `whiz requests` review command, D-165) and Stage 15 (duration + idle-timeout enforcement, D-166) shipped 2026-05-22. **456 unit tests + 3 integration tests passing; 87% coverage.** All work committed and pushed to `origin/main`.
+- **Build-plan additions:** Stage 15.5 (hot-restart of idle-ended sessions) added as a planned follow-on. MVP+ Stages 19–20 (Packaging & Install; Security Review & Hardening Audit) added via the merged `similar-tools-research` branch — first concrete OSS-launch-milestone work.
+- **OneCLI caveat** (D-162): `fetch_secret` calls a non-existent `onecli secrets get`; all invocations fall through to the env-var fallback. Follow-up, not blocking.
+- **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`.
 
 ## Active design constraints (don't relitigate without cause)
 
@@ -20,32 +19,58 @@
 - **D-11** the mount list IS the permission model.
 - **D-27** mid-session capability change = stop+restart, never in-place mutation.
 - **D-101** personal-use MVP threshold.
-- **D-129** decisions.md is append-only. **D-150** HANDOFF.md is append-only (this header block excepted).
+- **D-129** decisions.md append-only. **D-150** HANDOFF.md append-only (this header excepted).
 - **D-153** harness-specific identifiers stay inside the adapter module.
-- **D-156** in-cell MCP server: launch-time snapshot + event-file write-back; no live host channel.
-- **D-164** OIQ owns docker-run flags, not images; vendor-supplied images OK; only `--privileged`/`docker.sock` harnesses are hard-incompatible.
+- **D-156** in-cell MCP server: launch-time snapshot + event-file write-back.
+- **D-164** OIQ owns docker-run flags, not images.
+- **D-165** Stage 14 agent requests: file-mailbox channel + operator-invoked `whiz requests`; host-side MCP server is the v1.0 revisit.
+- **D-166** Stage 15 enforcement: Popen poll loop, hybrid idle detection, extend = remaining + N.
 
 ## Process discipline in force
 
-- Decisions: flat+tags schema, Rationale required for active entries, Tags from the canonical vocabulary, 250-word target per entry. `scripts/validate_decisions.py` runs pre-handoff + as a pre-commit hook.
-- `make check` (lint + typecheck + test) and `make coverage` are the gates; CI runs them on push/PR.
-- Brevity in collaboration (`feedback_brevity.md`); ask follow-ups as single clean questions (`feedback_question_shape.md`); don't push to close items (`feedback_dont_push_to_close.md`); verify load-bearing claims before asserting (`feedback_verify_claims.md`).
-- Design-paused stages (16, 17) require explicit conversation per D-148 before code.
+- Decisions: flat+tags schema, Rationale required, canonical tags. `scripts/validate_decisions.py` runs pre-handoff + as a pre-commit hook.
+- `make check` (lint + typecheck + test) and `make coverage` are the gates; CI runs them.
+- **Commit + push when a stage ships or a major session lands** — standard procedure, no longer waits to be asked (`feedback_commit_per_stage`).
+- **Surface the full build-plan stage scope up front** when scoping a stage — present every requirement before the design conversation (`feedback_full_stage_scope`).
+- Brevity in collaboration; single clean follow-up questions; don't push to close items; verify load-bearing claims before asserting.
+- Design-paused stages (16, 17) require an explicit conversation per D-148 before code.
 
 ## What's next
 
-- **Stage 14** — Whiz MCP request-side tools (the active task; see latest log entry).
-- **Stage 15** — duration + idle-timeout enforcement (Stage 13's `--extend` records duration but enforcement doesn't exist yet).
+- **Launch-cut design questions** (deferred by Bryan; carried in by the merged `similar-tools-research` log entry) — whether to launch on a reduced stage subset, Stage 20 lean-vs-full scope, the still-open D-131/D-133. The strategic fork.
+- **Stage 15.5** — hot-restart of idle-ended sessions. Autonomous-able; spec in the build plan.
 - **Stage 18** — image management. Autonomous-able.
 - **Stages 16, 17** — Discord control plane; require D-148 design pauses.
-- **Stage 9 manual smoke + auto-wiring** — exercise in-cell MCP end-to-end; auto-wire Hermes `config.yaml` MCP entry.
+- **MVP+ Stages 19–20** — packaging/install + security review; pre-OSS-launch.
+- **Stage 9 manual smoke + auto-wiring** — exercise in-cell MCP end-to-end (blocked on the Stage 8-M6 / image infra).
 - **OneCLI follow-up** — align with the actual OneCLI surface or drop the value-retrieval integration.
-- **D-157 user-config drift** — Bryan's `~/.whizzard/config/profiles.json` still needs sync for the `allow_broad_mount: true` default.
-- **Uncommitted work** — many local changes across this + prior sessions are uncommitted; Bryan decides when to commit.
+- **D-157 user-config drift** — Bryan's `~/.whizzard/config/profiles.json` predates several schema additions (`allow_broad_mount` default, now `idle_timeout_seconds`); sync when convenient.
 
 ---
 
 # Session Handoff Log
+
+## 2026-05-22T23:00Z — Stages 14 + 15 shipped; similar-tools branch merged; launch-cut questions open
+
+### Goal
+Continue the MVP build per `docs/mvp_build_plan.md` — an operational personal daily-driver, then OSS-launch.
+
+### Active task
+Pick the next build target — Stage 15 closed cleanly, no code mid-flight. Options: Stage 15.5 (hot-restart of idle-ended sessions, autonomous-able), Stage 18 (image management, autonomous-able), or Stages 16–17 (Discord — a D-148 design pause is required first). Competing for priority: the deferred **launch-cut** questions from the merged `similar-tools-research` entry below (launch on a reduced stage subset? Stage 20 lean-vs-full scope? the open D-131/D-133) — Bryan parked these for discussion.
+
+### Tried & rejected
+- Stage 14 and Stage 15 design rejections are recorded in D-165 and D-166 — read those, don't re-derive.
+- Pre-expiry warning via host TTY — the shared interactive TTY interleaves output; shipped instead as a `session_expiry_warning` audit-log event the agent reads via `whiz_audit_self`.
+- Merging the `use-html-effectively` branch as-is — its architecture HTML was ~2 weeks stale; `CLAUDE.md` was taken from it, the architecture HTML regenerated against current `main`.
+
+### Resume protocol
+1. Read the refreshed `# Current State` block above.
+2. Decide: engage the launch-cut questions (the strategic fork), or take the next autonomous stage (15.5 or 18).
+3. Stages 16/17 need a D-148 design conversation before any code — don't start Discord code cold.
+4. Process now in force: commit + push when a stage lands; surface the full build-plan stage scope up front when scoping.
+5. `HANDOFF.md` log is append-only (D-150); the `# Current State` header is the mutable exception.
+
+---
 
 ## 2026-05-22T14:13Z — Similar-tools research + MVP+ Stages 19–20 added; launch-cut design open
 
