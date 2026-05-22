@@ -12,6 +12,12 @@
 #
 # This image is the MVP-shape derived target; Stage 8 M8 (packaging closeout)
 # will formalize the Hermes distribution pin via pyproject.toml extras.
+#
+# Also carries the Whiz in-cell MCP cooperation layer per D-167: `mcp_server.py`
+# is COPY'd in as a standalone script and the `mcp` SDK is installed, so a
+# contained Hermes can run the in-cell Whiz MCP server. The full `whizzard`
+# package is deliberately NOT installed — it would expose the policy-layer
+# implementation (safety / enforcement / adjust) to a compromised agent.
 
 FROM whizzard-base:latest
 
@@ -39,6 +45,15 @@ RUN apt-get update && \
 ARG HERMES_REF=54e78cadb
 RUN pip install --no-cache-dir --break-system-packages \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
+
+# Whiz in-cell MCP cooperation layer (D-167).
+# - `mcp` SDK so mcp_server.py's `FastMCP` import works inside the cell.
+# - `mcp_server.py` as a standalone script. Self-contained (stdlib + lazy
+#   mcp); does not require the whizzard package. The harness's MCP-client
+#   config invokes `python /opt/whiz/mcp_server.py` with the WHIZ_* env vars
+#   the adapter's `mcp_env` sets.
+RUN pip install --no-cache-dir --break-system-packages mcp
+COPY whizzard/mcp_server.py /opt/whiz/mcp_server.py
 
 USER whizzard
 WORKDIR /home/whizzard

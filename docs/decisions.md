@@ -2623,6 +2623,26 @@ Rejected: **background watcher thread** — adds concurrency to the load-bearing
 
 ---
 
+### D-167: In-cell MCP deployment — `COPY mcp_server.py` into the execution image; don't install the `whizzard` package
+
+**Type:** architecture
+
+**Tags:** mvp, safety, integration
+
+**Door Type:** two-way for the in-cell path and script name; closer to one-way for the deployment mechanism once images and harness MCP-client configs depend on it.
+
+**Decision:** `Dockerfile.hermes` `pip install`s `mcp` and `COPY`s `whizzard/mcp_server.py` in as a standalone script. The harness's MCP-client config invokes `python <path>/mcp_server.py` with the WHIZ_* env vars the adapter's `mcp_env` sets.
+
+**Rationale:** `mcp_server.py` is self-contained (stdlib + lazy `mcp`); reading it teaches the agent only what the cooperation layer reveals by design. Installing the whole package would put `safety.py`, `enforcement.py`, and `adjust.py` in the cell — a full policy-layer implementation map. Most acute case: a compromised agent that reads `enforcement.py` defeats idle detection trivially by writing the event file every ~30s. The kernel-enforced layer (cap drops, read-only rootfs, mounts, network) is unaffected either way.
+
+Rejected: **install the `whizzard` package** — leaks the policy-layer mechanism (idle especially); also ships ~20 host-side modules the cell never executes. Rejected: **bind-mount `mcp_server.py` at launch** — same exposure as the chosen approach but mounts host code into the cell and adds per-launch wiring the image doesn't need.
+
+**Source:** conversation 2026-05-22 (source-code-exposure framing).
+
+**Status:** active
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
