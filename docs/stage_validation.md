@@ -1278,6 +1278,48 @@ whiz requests deny <request-id>          # decline without applying
 
 ---
 
+## Stage 15 — Duration + Idle Timeout Enforcement
+
+Design: D-166. Hard duration cap + hybrid idle detection, enforced by
+`monitor_and_enforce` (`whizzard/enforcement.py`).
+
+### Automated coverage
+
+`tests/test_enforcement.py` (size parsing, `docker stats`, `ActivityTracker`,
+`monitor_and_enforce` clean/duration/idle paths), `tests/test_config.py`
+(`idle_timeout_seconds` schema), `tests/test_docker_cmd.py` (`run_shell`
+expiry-reason + duration-override wiring), `tests/test_adjust.py` (`--extend`
+→ `duration_override_seconds`), `tests/test_session_log.py` (`expiry_reason`).
+448 unit tests pass; 87% coverage. Run: `make check && make coverage`.
+
+### Manual smoke (blocked on the same infra as Stage 9)
+
+```sh
+# Duration cap — launch a profile with a short duration; confirm the
+# container is stopped at the cap and the session log records the reason.
+whiz run --profile power            # power: 1h cap, 15m idle
+#   ...let it run to the cap, or set a short test duration in profiles.json
+whiz sessions tail                  # session_end shows "expiry_reason": "duration"
+
+# Idle timeout — launch, then leave the agent idle past idle_timeout_seconds.
+#   session_end shows "expiry_reason": "idle"
+
+# Extend — extend a running session and confirm the cap moves:
+whiz adjust <session-id> --extend 30m
+whiz sessions tail                  # relaunch's session_start duration_limit_seconds
+                                    #   = remaining + 1800
+```
+
+### Outstanding for full closeout
+
+- [ ] Manual smoke above — blocked on the Stage 9 / Stage 8-M6 end-to-end
+  infra (real container launch).
+- [ ] Pre-expiry warning at a configurable lead time (deferred — needs a
+  delivery-mechanism decision; see build plan §Stage 15).
+- [ ] Stage 15.5 hot-restart of idle-ended sessions (planned follow-on).
+
+---
+
 ## Stage 18 — Image Management
 
 *(To be added once Stage 18 lands. This section previously sat at "Stage 9 — Image Management" before the renumbering per D-76 → D-143, which moved image management from Stage 9 to Stage 11 to Stage 18.)*

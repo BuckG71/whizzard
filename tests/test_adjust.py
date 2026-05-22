@@ -22,6 +22,7 @@ from whizzard.adjust import (
     _apply_changes,
     _harness_from_argv,
     _resolution_error_message,
+    _session_elapsed_seconds,
     adjust_session,
     check_agent_allowed,
     detect_noops,
@@ -511,3 +512,47 @@ def test_adjust_session_early_exits_when_all_changes_are_noops(monkeypatch, tmp_
     assert result.exit_code == 0
     assert "already attached" in result.detail or "no duration" in result.detail
     assert relauncher_called is False
+
+
+# --- Stage 15: duration override on relaunch -------------------------------
+
+
+def test_session_elapsed_seconds_parses_iso_timestamp():
+    # An old timestamp → a large positive elapsed.
+    assert _session_elapsed_seconds({"start_time": "2020-01-01T00:00:00Z"}) > 0
+
+
+def test_session_elapsed_seconds_unparseable_returns_zero():
+    assert _session_elapsed_seconds({"start_time": "not-a-date"}) == 0.0
+    assert _session_elapsed_seconds({}) == 0.0
+
+
+def test_apply_changes_carries_duration_limit_across_relaunch(monkeypatch):
+    # A non-extend adjust on a limited session preserves the cap.
+    monkeypatch.setattr("whizzard.adjust._session_elapsed_seconds", lambda ev: 0.0)
+    start = {"duration_limit_seconds": 3600, "mounts": [], "argv": []}
+    params = _apply_changes(start, Changes(add_mounts=(MountAddition("docs"),)))
+    assert params["duration_override_seconds"] == 3600
+
+
+def test_apply_changes_extend_adds_to_remaining(monkeypatch):
+    monkeypatch.setattr("whizzard.adjust._session_elapsed_seconds", lambda ev: 600.0)
+    start = {"duration_limit_seconds": 3600, "mounts": [], "argv": []}
+    params = _apply_changes(start, Changes(extend_seconds=1800))
+    # remaining (3600 - 600) + extend 1800 = 4800
+    assert params["duration_override_seconds"] == 4800
+
+
+def test_apply_changes_unlimited_session_has_no_override():
+    start = {"duration_limit_seconds": None, "mounts": [], "argv": []}
+    params = _apply_changes(start, Changes(extend_seconds=1800))
+    assert params["duration_override_seconds"] is None
+
+
+def test_apply_changes_floors_override_near_expiry(monkeypatch):
+    # Adjusting a session past its limit floors the relaunch window at 60s
+    # rather than relaunching into an instant kill.
+    monkeypatch.setattr("whizzard.adjust._session_elapsed_seconds", lambda ev: 99_999.0)
+    start = {"duration_limit_seconds": 3600, "mounts": [], "argv": []}
+    params = _apply_changes(start, Changes(add_mounts=(MountAddition("docs"),)))
+    assert params["duration_override_seconds"] == 60

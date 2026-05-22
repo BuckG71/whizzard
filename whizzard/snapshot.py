@@ -86,6 +86,7 @@ def write_snapshot(
             "name": profile.name,
             "network_enabled": profile.network_enabled,
             "duration_seconds": profile.duration_seconds,
+            "idle_timeout_seconds": profile.idle_timeout_seconds,
             "allow_broad_mount": profile.allow_broad_mount,
             "description": profile.description,
         },

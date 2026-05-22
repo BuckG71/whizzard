@@ -17,9 +17,11 @@ The CLI command + TTY approver live in `whizzard/cli/adjust.py`. Tests in
 
 from __future__ import annotations
 
+import calendar
 import json
 import re
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -407,6 +409,19 @@ def _stop_container(container_id: str, grace_seconds: int = 30) -> tuple[int, st
     return 0, ""
 
 
+def _session_elapsed_seconds(start_event: dict) -> float:
+    """Seconds elapsed since the session originally started, derived from
+    the session_start event's timestamp. Returns 0.0 if unparseable."""
+    raw = start_event.get("start_time") or start_event.get("ts")
+    if not isinstance(raw, str):
+        return 0.0
+    try:
+        struct = time.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return 0.0
+    return max(0.0, time.time() - calendar.timegm(struct))
+
+
 def _apply_changes(start_event: dict, changes: Changes) -> dict:
     """Compute the launch-parameter dict for the relaunch by applying
     `changes` to the original session's launch params. Returns a dict
@@ -424,6 +439,19 @@ def _apply_changes(start_event: dict, changes: Changes) -> dict:
     for add in changes.add_mounts:
         mount_specs.append(f"{add.name}:{add.mode}" if add.mode else add.name)
 
+    # Stage 15: carry the duration cap across the relaunch. The relaunched
+    # container's clock starts fresh, so the override is the *remaining*
+    # time (original limit minus elapsed) plus any `--extend`. This both
+    # preserves the cap on a non-extend adjust and makes `--extend` mean
+    # "remaining + N", not "a fresh full window". An unlimited session
+    # (original limit None) stays unlimited. Floored so an adjust near
+    # expiry doesn't relaunch into an instant kill.
+    original_limit = start_event.get("duration_limit_seconds")
+    duration_override: int | None = None
+    if isinstance(original_limit, int):
+        remaining = original_limit - _session_elapsed_seconds(start_event)
+        duration_override = max(int(remaining) + (changes.extend_seconds or 0), 60)
+
     return {
         "profile_name": start_event.get("profile", "default"),
         "mount_specs": mount_specs,
@@ -434,12 +462,7 @@ def _apply_changes(start_event: dict, changes: Changes) -> dict:
         ),
         "harness": _harness_from_argv(start_event.get("argv", []) or []) or "generic",
         "preset_name": start_event.get("preset"),
-        # `extend_seconds` is recorded in the adjustment log entry but not
-        # passed through to _perform_launch — duration enforcement is
-        # Stage 15 (currently the profile's duration_seconds is declared
-        # but not actively enforced). When Stage 15 lands, _perform_launch
-        # gains a `duration_override_seconds` parameter the relaunch can
-        # pass; until then `--extend` is a forward-looking declaration.
+        "duration_override_seconds": duration_override,
     }
 
 
@@ -606,6 +629,7 @@ def _default_relauncher(new_params: dict) -> int:
             allow_broad_mount=new_params["allow_broad_mount"],
             harness=new_params["harness"],
             preset_name=new_params.get("preset_name"),
+            duration_override_seconds=new_params.get("duration_override_seconds"),
         )
     except typer.Exit as e:  # noqa: F841
         return int(e.exit_code) if e.exit_code is not None else 0

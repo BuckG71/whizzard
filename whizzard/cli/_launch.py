@@ -42,6 +42,7 @@ def _perform_launch(
     harness: str,
     platform_restriction: list[str] | None = None,
     preset_name: str | None = None,
+    duration_override_seconds: int | None = None,
 ) -> None:
     """Shared launch core. Called by `run` (CLI flags) and `preset launch`
     (preset-resolved args). Handles profile / harness / mount resolution,
@@ -51,6 +52,10 @@ def _perform_launch(
     platform_restriction: optional subset of the harness's declared platforms
     (per D-89 amended) — when provided, overlays on the harness config dict
     so the adapter sees the restricted set.
+
+    duration_override_seconds: optional override of the profile's duration
+    cap (Stage 15) — an `oiq adjust --extend` relaunch passes the extended
+    limit through here.
     """
     try:
         prof = get_profile(profile_name)
@@ -180,5 +185,6 @@ def _perform_launch(
         overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
         adapter=adapter,
         preset_name=preset_name,
+        duration_override_seconds=duration_override_seconds,
     )
     raise typer.Exit(code=result.exit_code)

@@ -268,3 +268,21 @@ def test_merge_agent_events_preserves_existing_origin(tmp_path: Path):
 
     entry = json.loads(target.read_text().splitlines()[0])
     assert entry["origin"] == "agent"
+
+
+# --- Stage 15: expiry_reason on session_end -------------------------------
+
+
+def test_session_end_defaults_expiry_reason_to_clean(tmp_path: Path):
+    target = tmp_path / "s.jsonl"
+    log_session_end("s", "cid", 0, 1_700_000_010.0, 10.0, path=target)
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["expiry_reason"] == "clean"
+
+
+def test_session_end_records_expiry_reason(tmp_path: Path):
+    target = tmp_path / "s.jsonl"
+    log_session_end("s", "cid", 137, 1_700_000_010.0, 10.0, path=target,
+                    expiry_reason="idle")
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["expiry_reason"] == "idle"

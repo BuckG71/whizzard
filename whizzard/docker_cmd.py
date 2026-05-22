@@ -16,6 +16,7 @@ from pathlib import Path
 
 from whizzard.adapters import GenericShellAdapter, HarnessAdapter
 from whizzard.config import STATE_DIR, Profile
+from whizzard.enforcement import monitor_and_enforce
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
     SESSIONS_LOG,
@@ -226,6 +227,7 @@ def run_shell(
     overrides_used: list[dict] | None = None,
     adapter: HarnessAdapter | None = None,
     preset_name: str | None = None,
+    duration_override_seconds: int | None = None,
 ) -> RunResult:
     """Launch a contained interactive shell. Blocks until the shell exits.
 
@@ -236,6 +238,13 @@ def run_shell(
     Stage 6: any safety overrides the user opted into (--allow-broad-mount)
     are recorded in the session_start event so audits can see what was
     overridden.
+
+    Stage 15: the container is launched via `subprocess.Popen` and handed to
+    `monitor_and_enforce`, which blocks until the container exits or a limit
+    is hit. The effective duration limit is `duration_override_seconds` when
+    set (an `oiq adjust --extend` relaunch passes it) else the profile's
+    `duration_seconds`; the idle limit is the profile's `idle_timeout_seconds`.
+    The session_end event records `expiry_reason` (clean / duration / idle).
     """
     # Defensive: callers (cli.py) should pre-flight these and surface red
     # errors. If we land here without docker or the image, return an error
@@ -267,12 +276,21 @@ def run_shell(
     )
 
     image_id = get_image_id(image)
+    # Stage 15: the effective duration limit is the --extend override when
+    # present (an `oiq adjust --extend` relaunch supplies it), else the
+    # profile's duration. The session_start event logs the *effective*
+    # limit so chained extends accumulate correctly.
+    duration_limit = (
+        duration_override_seconds if duration_override_seconds is not None
+        else profile.duration_seconds
+    )
+    idle_limit = profile.idle_timeout_seconds
     start_time = time.time()
     log_session_start(
         session_id=session_id,
         profile_name=profile.name,
         network_enabled=profile.network_enabled,
-        duration_limit_seconds=profile.duration_seconds,
+        duration_limit_seconds=duration_limit,
         allow_broad_mount=profile.allow_broad_mount,
         image_tag=image,
         image_id=image_id,
@@ -283,15 +301,30 @@ def run_shell(
         preset_name=preset_name,
     )
 
-    completed = subprocess.run(argv, env=_docker_env())
+    # Stage 15: launch via Popen so a duration / idle limit can interrupt
+    # the session. monitor_and_enforce blocks until the container exits or
+    # a limit is hit, gracefully stopping the container in the latter case.
+    proc = subprocess.Popen(argv, env=_docker_env())
+
+    def _read_container_id() -> str | None:
+        if cidfile.exists():
+            return cidfile.read_text().strip() or None
+        return None
+
+    expiry_reason = monitor_and_enforce(
+        proc,
+        container_id_reader=_read_container_id,
+        adapter=adapter,
+        session_id=session_id,
+        start_time=start_time,
+        duration_limit=duration_limit,
+        idle_limit=idle_limit,
+    )
 
     end_time = time.time()
-    container_id: str | None = None
-    if cidfile.exists():
-        try:
-            container_id = cidfile.read_text().strip() or None
-        finally:
-            cidfile.unlink(missing_ok=True)
+    container_id = _read_container_id()
+    cidfile.unlink(missing_ok=True)
+    exit_code = proc.returncode if proc.returncode is not None else 0
 
     # Stage 9 / D-156: merge any agent-emitted events from this session's
     # event file into the main audit log BEFORE writing session_end. Agent
@@ -305,9 +338,10 @@ def run_shell(
     log_session_end(
         session_id=session_id,
         container_id=container_id,
-        exit_status=completed.returncode,
+        exit_status=exit_code,
         end_time=end_time,
         duration_seconds=end_time - start_time,
+        expiry_reason=expiry_reason,
     )
 
-    return RunResult(container_id=container_id, exit_code=completed.returncode)
+    return RunResult(container_id=container_id, exit_code=exit_code)

@@ -323,17 +323,65 @@ Implementation: `whizzard/mcp_server.py` (3 new tools + `WHIZ_REQUEST_DIR` env v
 
 Depends on Stage 13 substrate. Network-egress-allowlist requests (`whiz_request_network`) require sidecar proxy and remain post-MVP.
 
-### Stage 15 — Duration + Idle Timeout Enforcement
+### Stage 15 — Duration + Idle Timeout Enforcement [SHIPPED 2026-05-22]
 
-Goal: time-bounded sessions become enforced (not just logged).
+Goal: time-bounded sessions become enforced, not just logged.
 
-Requirements:
-- hard duration cap kills the container at expiry
-- idle timeout kills the container after N minutes with no agent activity
-- both write to session log with expiry reason
-- pre-expiry warning at configurable lead time
+Design captured in D-166. `run_shell` launches the container with
+`subprocess.Popen` and hands it to `whizzard/enforcement.py`'s
+`monitor_and_enforce` — a single-threaded poll loop that checks the
+wall-clock deadline and samples activity, gracefully stopping the container
+on a limit hit. The session_end event records `expiry_reason`
+(`clean` / `duration` / `idle`).
 
-Builds on the duration tracking already present from Stage 5.
+Shipped:
+- **Hard duration cap** — wall-clock since launch; on expiry the adapter's
+  graceful wrap-up runs (or `docker stop` for adapters with no native
+  shutdown).
+- **Idle timeout** — hybrid detection (D-166): container resource activity
+  from `docker stats` (CPU, network, block I/O) plus agent event-file /
+  request-channel writes; any of those resets the idle clock.
+- `idle_timeout_seconds` added to the profile schema (optional; bundled
+  profiles carry sensible values, `default` stays always-on with none).
+- `oiq adjust --extend` now wires through — the relaunch carries a
+  `duration_override_seconds` = remaining time + extension (the D-163
+  forward-compat hook, realized).
+
+Implementation: `whizzard/enforcement.py` (new), `run_shell` rewritten to
+Popen + monitor, `config.py` profile schema, `adjust.py` extend wiring,
+`expiry_reason` on `log_session_end`. 41 new tests; 448 unit tests passing;
+87% coverage.
+
+Deferred: **pre-expiry warning at a configurable lead time** — needs a
+delivery-mechanism decision (host TTY vs. an audit-log event the agent polls
+vs. an agent event); the shared interactive TTY makes the obvious approach
+awkward. Tracked as a follow-on, not MVP-blocking.
+
+Builds on the duration tracking present from Stage 5.
+
+### Stage 15.5 — Hot-Restart of Idle-Ended Sessions
+
+Goal: an idle-ended session resumes on the next command instead of requiring
+a manual fresh launch. Follow-on to Stage 15 (conversation 2026-05-22).
+
+When a session ends with `expiry_reason == "idle"` it becomes eligible for
+hot-restart: a `whiz resume <session-id>` verb (and bare `whiz r` resuming
+the most-recent idle-ended session) reconstructs launch params from the
+`session_start` event — reusing `adjust._apply_changes`' reconstruction —
+and relaunches. For Hermes the bind-mounted HERMES_HOME (D-79) means the
+restart genuinely resumes: memory, state, conversation intact. The container
+is disposable; the harness state is not.
+
+Scope boundaries:
+- Only `expiry_reason: idle` sessions are hot-restartable. Duration-capped
+  sessions are not — the user set a hard budget; reviving one is a deliberate
+  fresh launch, not a side effect of "any command".
+- Host-CLI-triggered only for MVP. Platform-message-triggered restart (a
+  Discord DM auto-waking a killed bot) needs a host-side listener that
+  outlives the cell — that belongs with the Discord control plane (Stages
+  16-17) and the D-165 host-side-MCP revisit.
+- Hot-restart drops one-time `--allow-broad-mount` overrides rather than
+  silently re-applying them on an unattended restart.
 
 ### Stage 16 — Discord Control Plane (Read-Only)
 
