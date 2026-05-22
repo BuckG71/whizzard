@@ -1286,11 +1286,13 @@ Design: D-166. Hard duration cap + hybrid idle detection, enforced by
 ### Automated coverage
 
 `tests/test_enforcement.py` (size parsing, `docker stats`, `ActivityTracker`,
-`monitor_and_enforce` clean/duration/idle paths), `tests/test_config.py`
-(`idle_timeout_seconds` schema), `tests/test_docker_cmd.py` (`run_shell`
-expiry-reason + duration-override wiring), `tests/test_adjust.py` (`--extend`
-→ `duration_override_seconds`), `tests/test_session_log.py` (`expiry_reason`).
-448 unit tests pass; 87% coverage. Run: `make check && make coverage`.
+`monitor_and_enforce` clean/duration/idle paths, pre-expiry warning),
+`tests/test_config.py` (`idle_timeout_seconds` schema), `tests/test_docker_cmd.py`
+(`run_shell` expiry-reason + duration-override wiring), `tests/test_adjust.py`
+(`--extend` → `duration_override_seconds`), `tests/test_session_log.py`
+(`expiry_reason`, `log_expiry_warning`), `tests/test_cli_brevity_and_status.py`
+(`whiz status` time-remaining). 456 unit tests pass; 87% coverage. Run:
+`make check && make coverage`.
 
 ### Manual smoke (blocked on the same infra as Stage 9)
 
@@ -1314,8 +1316,6 @@ whiz sessions tail                  # relaunch's session_start duration_limit_se
 
 - [ ] Manual smoke above — blocked on the Stage 9 / Stage 8-M6 end-to-end
   infra (real container launch).
-- [ ] Pre-expiry warning at a configurable lead time (deferred — needs a
-  delivery-mechanism decision; see build plan §Stage 15).
 - [ ] Stage 15.5 hot-restart of idle-ended sessions (planned follow-on).
 
 ---

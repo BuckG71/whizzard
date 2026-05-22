@@ -29,6 +29,7 @@ from whizzard.cli._session import (
     _harness_from_event,
     _most_recent_preset,
     _read_session_events,
+    _remaining_seconds,
 )
 from whizzard.cli._shared import console
 from whizzard.cli.adjust import adjust_cmd
@@ -133,6 +134,19 @@ def run_cmd(
     )
 
 
+def _fmt_remaining(secs: float | None) -> str:
+    """Format seconds-until-duration-cap for the `whiz status` table."""
+    if secs is None:
+        return "—"
+    if secs <= 0:
+        return "[red]overdue[/red]"
+    if secs >= 3600:
+        return f"~{int(secs // 3600)}h{int((secs % 3600) // 60)}m"
+    if secs >= 60:
+        return f"~{int(secs // 60)}m"
+    return f"~{int(secs)}s"
+
+
 @app.command("status")
 def status_cmd() -> None:
     """Show session status: active sessions and recent history."""
@@ -178,7 +192,14 @@ def status_cmd() -> None:
         sid = ev.get("session_id", "")
         sid_short = sid[:8] if len(sid) >= 8 else sid
         is_active = sid in active
-        status = "[green]RUNNING[/green]" if is_active else "ended"
+        if is_active:
+            # Stage 15: show time left on the duration cap next to RUNNING
+            # (unlimited / unparseable sessions just show RUNNING).
+            remaining = _remaining_seconds(ev)
+            rem = f" {_fmt_remaining(remaining)}" if remaining is not None else ""
+            status = f"[green]RUNNING[/green]{rem}"
+        else:
+            status = "ended"
         table.add_row(
             status,
             sid_short,

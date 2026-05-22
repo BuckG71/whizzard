@@ -113,6 +113,27 @@ def log_session_end(
     )
 
 
+def log_expiry_warning(
+    session_id: str,
+    seconds_remaining: int,
+    path: Path | None = None,
+) -> None:
+    """Stage 15: a pre-expiry heads-up, written once when a session nears its
+    duration cap. The in-cell agent sees it via `whiz_audit_self`; the host
+    surfaces remaining time in `whiz status`. Lets either side react — extend
+    the session, or checkpoint — before the cap fires.
+    """
+    append_event(
+        {
+            "ts": _iso(),
+            "event": "session_expiry_warning",
+            "session_id": session_id,
+            "seconds_remaining": seconds_remaining,
+        },
+        path=path,
+    )
+
+
 def merge_agent_events(
     session_id: str,
     event_log_path: Path,

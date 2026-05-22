@@ -1,6 +1,8 @@
 """Stage 10 #4-#5: status command + brevity aliases (whiz r/s/p/m/pr) tests."""
 
+import calendar
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -285,3 +287,36 @@ def test_preset_launch_writes_preset_field_to_session_log(
     result = runner.invoke(app, ["preset", "launch", "shell"])
     assert result.exit_code == 0, result.output
     assert captured.get("preset_name") == "shell"
+
+
+# --- Stage 15: status duration-remaining display --------------------------
+
+
+def test_remaining_seconds_computes_time_left():
+    from whizzard.cli._session import _remaining_seconds
+    ev = {"duration_limit_seconds": 3600, "start_time": "2026-05-22T00:00:00Z"}
+    # 600s elapsed → 3000s left
+    remaining = _remaining_seconds(ev, now=calendar.timegm(
+        time.strptime("2026-05-22T00:10:00Z", "%Y-%m-%dT%H:%M:%SZ")))
+    assert remaining == 3000
+
+
+def test_remaining_seconds_none_for_unlimited_session():
+    from whizzard.cli._session import _remaining_seconds
+    assert _remaining_seconds({"duration_limit_seconds": None}) is None
+
+
+def test_remaining_seconds_none_when_timestamp_unparseable():
+    from whizzard.cli._session import _remaining_seconds
+    ev = {"duration_limit_seconds": 3600, "start_time": "not-a-date"}
+    assert _remaining_seconds(ev) is None
+
+
+def test_fmt_remaining_renders_units():
+    from whizzard.cli import _fmt_remaining
+    assert _fmt_remaining(None) == "—"
+    assert _fmt_remaining(0) == "[red]overdue[/red]"
+    assert _fmt_remaining(-5) == "[red]overdue[/red]"
+    assert _fmt_remaining(45) == "~45s"
+    assert _fmt_remaining(720) == "~12m"
+    assert _fmt_remaining(3 * 3600 + 600) == "~3h10m"

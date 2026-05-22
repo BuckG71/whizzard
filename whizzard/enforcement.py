@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from whizzard.adapters.base import HarnessAdapter, WrapUpStatus
+from whizzard.session_log import log_expiry_warning
 from whizzard.snapshot import event_log_path, request_dir
 
 # How often the monitor wakes to check limits. The clean-exit path is not
@@ -43,6 +44,16 @@ _CPU_ACTIVE_THRESHOLD = 1.0
 
 # Grace window handed to the adapter's wrap-up / `docker stop` on a limit hit.
 _STOP_GRACE_SECONDS = 30
+
+# Lead time for the pre-expiry warning before a duration cap.
+_DEFAULT_WARNING_LEAD_SECONDS = 300
+
+
+def _warning_lead(duration_limit: int) -> int:
+    """Lead time for the pre-expiry warning — the default, or a fifth of a
+    short cap, whichever is smaller (so a short session still gets a warning
+    rather than none)."""
+    return min(_DEFAULT_WARNING_LEAD_SECONDS, max(duration_limit // 5, 1))
 
 ExpiryReason = str  # "clean" | "duration" | "idle"
 
@@ -240,6 +251,7 @@ def monitor_and_enforce(
     poll_interval: float = POLL_INTERVAL_SECONDS,
     now: Callable[[], float] = time.time,
     sampler: Callable[[str, str], ActivitySample | None] = sample_activity,
+    warner: Callable[[str, int], None] = log_expiry_warning,
 ) -> ExpiryReason:
     """Block until the container exits or a limit is hit.
 
@@ -249,6 +261,10 @@ def monitor_and_enforce(
 
     `container_id_reader` is called lazily — the container id isn't known
     until docker writes the cidfile, a moment after launch.
+
+    `warner` is called once, at a lead time before a duration cap, with
+    `(session_id, seconds_remaining)` — the pre-expiry warning. It is not
+    called for idle limits (an idle session has nobody watching).
     """
     if duration_limit is None and idle_limit is None:
         # Nothing to enforce — just wait for the container, as pre-Stage-15.
@@ -258,6 +274,7 @@ def monitor_and_enforce(
     tracker = ActivityTracker(start_time) if idle_limit is not None else None
     container_id: str | None = None
     reason: ExpiryReason = "clean"
+    warned = False
 
     while True:
         try:
@@ -270,9 +287,14 @@ def monitor_and_enforce(
         if container_id is None:
             container_id = container_id_reader()
 
-        if duration_limit is not None and t - start_time >= duration_limit:
-            reason = "duration"
-            break
+        if duration_limit is not None:
+            elapsed = t - start_time
+            if elapsed >= duration_limit:
+                reason = "duration"
+                break
+            if not warned and elapsed >= duration_limit - _warning_lead(duration_limit):
+                warner(session_id, int(duration_limit - elapsed))
+                warned = True
 
         if tracker is not None and container_id is not None:
             tracker.observe(sampler(container_id, session_id), t)
