@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whizzard — Architecture Overview</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1a1d23; --muted: #5b626e;
+    --faint: #8c93a0; --line: #e3e6ea; --accent: #5b53d6; --accent-soft: #ece9fb;
+    --enforce: #2563eb; --enforce-soft: #e8eeff;
+    --behave: #d97706; --behave-soft: #fdf0db;
+    --coop: #0d9488; --coop-soft: #d9f3ef;
+    --ok: #15803d; --ok-soft: #e3f2e7;
+    --plan: #8c93a0; --plan-soft: #eef0f2;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  code { background: #eef0f2; padding: .08rem .32rem; border-radius: 4px; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px; }
+  .shell { display: grid; grid-template-columns: 220px 1fr; gap: 44px; align-items: start; }
+  @media (max-width: 900px) { .shell { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+  header.hero { padding: 46px 0 26px; border-bottom: 1px solid var(--line); }
+  header.hero h1 { font-size: 1.9rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
+  header.hero .tag { color: var(--muted); font-size: .96rem; }
+  header.hero .meta { color: var(--faint); font-size: .8rem; margin-top: .9rem; }
+
+  nav.toc { position: sticky; top: 24px; font-size: .87rem; padding-top: 40px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc li { margin: .35rem 0; }
+  nav.toc a { color: var(--muted); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+                 color: var(--faint); margin: 1.1rem 0 .4rem; }
+
+  main { padding: 40px 0 80px; min-width: 0; }
+  section { margin-bottom: 38px; }
+  h2 { font-size: 1.28rem; margin: 0 0 .2rem; letter-spacing: -.01em; }
+  h2 .num { color: var(--faint); font-weight: 600; margin-right: .5rem; }
+  .lede { color: var(--muted); margin: .1rem 0 1.1rem; }
+  h3 { font-size: 1rem; margin: 1.4rem 0 .4rem; }
+
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 12px; padding: 20px 22px; }
+  .principle { background: var(--accent-soft); border: 1px solid #d9d4f5;
+               border-radius: 12px; padding: 18px 22px; }
+  .principle p { margin: .25rem 0; font-weight: 600; }
+  .principle .why { font-weight: 400; color: var(--muted); font-size: .9rem; margin-top: .6rem; }
+
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft);
+             padding: .75rem 1rem; border-radius: 0 8px 8px 0; margin: 1rem 0; font-size: .92rem; }
+  .callout.warn { border-color: var(--behave); background: var(--behave-soft); }
+
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; }
+  th, td { border: 1px solid var(--line); padding: .5rem .65rem; text-align: left;
+           vertical-align: top; font-size: .87rem; }
+  th { background: #f0f1f3; font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; }
+  td.k { white-space: nowrap; font-family: var(--mono); font-size: .8rem; }
+
+  /* concentric control-layer diagram */
+  .layer { border-radius: 12px; padding: 16px 18px; }
+  .layer-h { font-weight: 700; font-size: .82rem; text-transform: uppercase;
+             letter-spacing: .05em; margin-bottom: .35rem; }
+  .layer p { margin: .25rem 0 0; font-size: .88rem; }
+  .layer.enforce { background: var(--enforce-soft); border: 2px solid var(--enforce); }
+  .layer.enforce > .layer-h { color: var(--enforce); }
+  .layer.behave  { background: var(--behave-soft); border: 2px solid var(--behave); margin-top: 14px; }
+  .layer.behave  > .layer-h { color: var(--behave); }
+  .layer.coop    { background: var(--coop-soft); border: 2px solid var(--coop); margin-top: 14px; }
+  .layer.coop    > .layer-h { color: var(--coop); }
+
+  .pill { display: inline-block; font-size: .68rem; font-weight: 700; padding: .1rem .45rem;
+          border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
+  .pill.ship { background: var(--ok-soft); color: var(--ok); }
+  .pill.plan { background: var(--plan-soft); color: var(--plan); }
+
+  details { margin: .7rem 0; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--panel); padding: 0 14px; }
+  details summary { cursor: pointer; padding: .65rem 0; font-weight: 600; font-size: .9rem; }
+  details[open] summary { border-bottom: 1px solid var(--line); margin-bottom: .6rem; }
+  ul.tight { margin: .3rem 0; padding-left: 1.2rem; }
+  ul.tight li { margin: .2rem 0; font-size: .9rem; }
+  footer { border-top: 1px solid var(--line); padding: 22px 0 50px;
+           color: var(--faint); font-size: .8rem; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="hero">
+  <h1>Whizzard — Architecture Overview</h1>
+  <div class="tag">Local capability governance for AI agents — a harness-neutral
+    containment and policy layer that decides what a contained agent can see and do.</div>
+  <div class="meta">Reflects <code>main</code> as of 2026-05-22 · Stages 1–15 shipped ·
+    source of truth: <code>docs/architecture.md</code>, <code>docs/mvp_build_plan.md</code>,
+    <code>docs/decisions.md</code></div>
+</header>
+</div>
+
+<div class="wrap">
+<div class="shell">
+
+<nav class="toc">
+  <div class="lbl">Contents</div>
+  <ol>
+    <li><a href="#principle">1 · Core principle</a></li>
+    <li><a href="#shape">2 · System shape</a></li>
+    <li><a href="#control">3 · Control layering</a></li>
+    <li><a href="#safety">4 · Safety policy</a></li>
+    <li><a href="#adapter">5 · Adapter contract</a></li>
+    <li><a href="#constants">6 · Architectural constants</a></li>
+    <li><a href="#impl">7 · Implementation map</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- 1 -->
+<section id="principle">
+  <h2><span class="num">1</span>Core principle</h2>
+  <p class="lede">The foundational trust model. It applies to profiles, mounts, adapters,
+    the cooperation layer, and every future integration.</p>
+  <div class="principle">
+    <p>Whizzard controls capabilities.</p>
+    <p>Agents request capabilities.</p>
+    <p>Agents do not grant themselves capabilities.</p>
+    <p class="why">Capability flow is one-way: host → cell, never cell → host (D-9). Every
+      part of the system is a refinement of this one rule.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="shape">
+  <h2><span class="num">2</span>System shape</h2>
+  <p class="lede">Whizzard is one product with three internal layers, split across a
+    hard host/container boundary.</p>
+
+  <h3>Host vs. container</h3>
+  <table>
+    <tr><th>Host machine — control plane</th><th>Container — execution plane ("cell")</th></tr>
+    <tr>
+      <td>CLI &amp; policy engine, the config registry
+        (<code>profiles.json</code>, <code>mounts.json</code>, <code>harnesses.json</code>,
+        <code>presets.json</code>), session logs, the Discord control bot (planned).</td>
+      <td>The agent runtime / shell, tool execution, and filesystem access — reachable
+        <em>only</em> through registered mounts. One container per session.</td>
+    </tr>
+  </table>
+  <div class="callout">The separation is mandatory. The agent lives entirely in the
+    execution plane; everything that <em>decides</em> its capabilities lives in the
+    control plane, out of its reach.</div>
+
+  <h3>The three internal layers</h3>
+  <table>
+    <tr><th>Layer</th><th>Owns</th><th>Must not know about</th></tr>
+    <tr>
+      <td class="k">Whizzard Core</td>
+      <td>Profiles, mount registry, policy resolution, container execution, network
+        controls, safety validation, session logging, dry-run preview, duration/idle
+        enforcement.</td>
+      <td>Hermes internals, any harness's internals, Discord, MCP specifics.
+        <strong>Harness-neutral — the most important rule (D-10).</strong></td>
+    </tr>
+    <tr>
+      <td class="k">Harness Adapter</td>
+      <td>Translating one harness's behavior into Whizzard-compatible execution: launch,
+        wrap-up, env/credential injection, capability surfacing, identity at the harness
+        boundary.</td>
+      <td>—  harness-specific identifiers stay confined here (D-153).</td>
+    </tr>
+    <tr>
+      <td class="k">Execution Backend</td>
+      <td>Running the cell. Docker today; abstracted so Podman / Firecracker / Apple
+        Virtualization / cloud cells can be added without touching Core or adapters.</td>
+      <td>—</td>
+    </tr>
+  </table>
+</section>
+
+<!-- 3 -->
+<section id="control">
+  <h2><span class="num">3</span>Control layering</h2>
+  <p class="lede">Whizzard's controls compose in three <em>concentric</em> layers. Each has a
+    different shape, a different enforcer, and a different owner — they never collapse
+    into each other.</p>
+
+  <div class="layer enforce">
+    <div class="layer-h">Enforcement layer — Whizzard-owned · kernel &amp; Docker enforce</div>
+    <p>Mounts, network policy, capability drops, image identity, container hardening,
+      session duration. Set at launch via container flags; they exist before the agent
+      does. The agent can never see or modify them — changing them requires a
+      stop+restart (D-27). This is where the safety policy operates.</p>
+
+    <div class="layer behave">
+      <div class="layer-h">Behavioral layer — harness-owned</div>
+      <p>Dangerous-command interception, in-session approval flows, intent gating,
+        <code>/yolo</code>-style bypass. Intent-time, fine-grained decisions that live
+        <em>inside</em> the harness. <strong>Whizzard deliberately does not recreate
+        these</strong> — duplicating them would add surface the harness already maintains.</p>
+
+      <div class="layer coop">
+        <div class="layer-h">Cooperation layer — Whizzard MCP, in-cell</div>
+        <p>An agent-facing API to the host-side capability brain: introspect own
+          constraints, write structured audit entries, and <em>request</em> structural
+          changes. Requests are mediated host-side and applied via stop+restart. It never
+          replaces the enforcement layer — it is a structured window onto it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout"><strong>Composition rule:</strong> the enforcement layer decides what
+    the agent <em>could</em> do; the behavioral layer decides what it <em>will be allowed
+    to attempt</em> within that envelope; the cooperation layer decides what it can
+    <em>ask Whizzard to change</em> about the envelope. Mixing layers breaks the model.</div>
+</section>
+
+<!-- 4 -->
+<section id="safety">
+  <h2><span class="num">4</span>Safety policy</h2>
+  <p class="lede">Safety validation classifies every mount target into one of three tiers.
+    Block by default; require explicit, logged user action to proceed.</p>
+  <table>
+    <tr><th>Tier</th><th>Targets</th><th>Gate</th></tr>
+    <tr>
+      <td class="k">Hard block</td>
+      <td><code>/</code>, <code>$HOME</code>, <code>~/.ssh</code>, <code>~/Library</code>,
+        keychains, browser profiles, the Docker socket, the Whizzard config directory.</td>
+      <td>No override. Ever.</td>
+    </tr>
+    <tr>
+      <td class="k">Override-required</td>
+      <td>Broad folders (<code>~/Documents</code>, <code>~/Desktop</code>, …), cloud-sync
+        roots (iCloud, Dropbox, OneDrive), parents of registered mounts.</td>
+      <td><code>--allow-broad-mount</code> + a profile that permits it (the two-gate model,
+        D-46). Every override is logged to the session record.</td>
+    </tr>
+    <tr>
+      <td class="k">Allowed</td>
+      <td>Registered mounts in <code>mounts.json</code> whose paths fall outside the
+        above.</td>
+      <td>None.</td>
+    </tr>
+  </table>
+  <div class="callout warn"><strong>Config write-protection invariant.</strong> The
+    Whizzard config directory must never be reachable from any agent-writable mount —
+    regardless of what the policy files say. An agent that can write files Whizzard reads
+    can influence its own policies. Enforced at the safety-validation layer; not
+    overridable by any profile or preset.</div>
+  <p style="font-size:.85rem;color:var(--muted)">Override friction is intentional —
+    warnings get ignored, so the gate is "block, require explicit action, log it."</p>
+</section>
+
+<!-- 5 -->
+<section id="adapter">
+  <h2><span class="num">5</span>Harness adapter contract</h2>
+  <p class="lede">An adapter is the only seam between harness-specific behavior and the
+    harness-neutral Core. Whizzard decides <em>what capabilities the cell has</em>; the
+    adapter decides <em>what runs inside it</em>.</p>
+
+  <p>The contract is the <code>HarnessAdapter</code> Protocol in
+    <code>whizzard/adapters/base.py</code>. Two adapters ship today —
+    <code>GenericShellAdapter</code> (a plain shell) and <code>HermesAdapter</code> (the
+    Hermes agent harness). A NanoClaw adapter is planned for v1.0; the core-maintained
+    slate is capped at three (D-155).</p>
+
+  <table>
+    <tr><th>Protocol method</th><th>Responsibility</th></tr>
+    <tr><td class="k">start_command()</td><td>Argv run inside the cell as the entrypoint.</td></tr>
+    <tr><td class="k">container_env()</td><td>Env vars to inject — incl. harness-config
+      credentials via OneCLI / env fallback (D-134, D-162).</td></tr>
+    <tr><td class="k">container_mounts()</td><td>Harness-required host→cell mounts
+      (e.g. Hermes <code>HERMES_HOME</code> for state persistence, D-79).</td></tr>
+    <tr><td class="k">working_dir()</td><td>Cell working directory, or none.</td></tr>
+    <tr><td class="k">wrap_up()</td><td>Harness-native graceful shutdown before SIGTERM,
+      bounded by a grace window. No-op for the generic shell.</td></tr>
+    <tr><td class="k">preflight()</td><td>Pre-launch checks (e.g. Hermes refuses to launch
+      over a live gateway, D-87).</td></tr>
+    <tr><td class="k">active_capabilities()</td><td>Human-readable capability strings for
+      the pre-launch banner.</td></tr>
+    <tr><td class="k">mcp_env()</td><td>Env wiring for the in-cell Whiz MCP server (D-156).</td></tr>
+    <tr><td class="k">health_check_command()</td><td>Optional readiness probe.</td></tr>
+  </table>
+  <p style="font-size:.85rem;color:var(--muted)">Adapters are built from declarative
+    entries in <code>harnesses.json</code> (a versioned schema). Harness-specific
+    identifiers — paths, filenames, env-var names, CLI flags — never appear outside the
+    adapter module (D-153).</p>
+</section>
+
+<!-- 6 -->
+<section id="constants">
+  <h2><span class="num">6</span>Architectural constants</h2>
+  <p class="lede">Five rules that apply to all phases — MVP, v1, beyond — and cannot be
+    relaxed by future work.</p>
+  <table>
+    <tr><td class="k">One-way</td><td>Capability flow is one-way. Agents request;
+      Whizzard grants; agents never self-grant.</td></tr>
+    <tr><td class="k">Neutral core</td><td>Whizzard Core stays harness-neutral. Harness
+      behavior lives in adapters.</td></tr>
+    <tr><td class="k">Mounts = policy</td><td>The mount list <em>is</em> the permission
+      model — visible, named, scoped capability grants.</td></tr>
+    <tr><td class="k">Config integrity</td><td>Agent-reachable paths cannot include the
+      config directory. Non-negotiable.</td></tr>
+    <tr><td class="k">Time-bounded</td><td>Time-bounded sessions are enforced, not
+      advisory. Duration is a first-class primitive.</td></tr>
+  </table>
+</section>
+
+<!-- 7 -->
+<section id="impl">
+  <h2><span class="num">7</span>Implementation map</h2>
+  <p class="lede">How the architecture lands in code today. The CLI binary is
+    <code>whizzard</code> / <code>whiz</code>; one container per session; Python +
+    Typer + Docker.</p>
+
+  <h3>Module map</h3>
+  <table>
+    <tr><th>Module</th><th>Layer</th><th>Role</th></tr>
+    <tr><td class="k">cli/</td><td>Core</td><td>Typer CLI package — <code>run</code>,
+      <code>status</code>, <code>adjust</code>, <code>requests</code>, brevity aliases
+      (<code>r/s/p/m/pr</code>), and per-area sub-apps. <code>_launch.py</code> holds the
+      shared launch core.</td></tr>
+    <tr><td class="k">config.py</td><td>Core</td><td>Profiles — network, duration cap,
+      idle timeout, broad-mount permission.</td></tr>
+    <tr><td class="k">mounts.py</td><td>Core</td><td>The mount registry — named host→cell
+      path grants with ro/rw modes.</td></tr>
+    <tr><td class="k">safety.py</td><td>Core</td><td>The three-tier safety policy +
+      config write-protection.</td></tr>
+    <tr><td class="k">preset_config.py</td><td>Core</td><td>Presets — saved
+      profile+harness+mounts bundles.</td></tr>
+    <tr><td class="k">docker_cmd.py</td><td>Core</td><td>Builds the <code>docker run</code>
+      invocation and runs the session.</td></tr>
+    <tr><td class="k">enforcement.py</td><td>Core</td><td>Duration + idle-timeout
+      enforcement — the <code>monitor_and_enforce</code> poll loop (D-166).</td></tr>
+    <tr><td class="k">adjust.py</td><td>Core</td><td>Mid-session capability change via
+      stop+restart — the library both <code>whiz adjust</code> and the agent request path
+      call (D-163).</td></tr>
+    <tr><td class="k">requests.py</td><td>Core</td><td>Host-side reader for agent
+      capability requests; routes approved ones through <code>adjust</code> (D-165).</td></tr>
+    <tr><td class="k">session_log.py</td><td>Core</td><td>Append-only JSONL audit log.</td></tr>
+    <tr><td class="k">snapshot.py</td><td>Core</td><td>Per-session state snapshot the
+      in-cell MCP server reads.</td></tr>
+    <tr><td class="k">mcp_server.py</td><td>Cooperation</td><td>The in-cell Whiz MCP
+      server — read tools + request tools (runs inside the cell, D-156).</td></tr>
+    <tr><td class="k">adapters/</td><td>Adapter</td><td><code>base.py</code> (the Protocol),
+      <code>generic.py</code>, <code>hermes.py</code>, <code>_credentials.py</code>.</td></tr>
+  </table>
+
+  <h3>Key flows</h3>
+  <ul class="tight">
+    <li><strong>Launch</strong> — <code>whiz run</code> / <code>whiz r &lt;preset&gt;</code>
+      → <code>_perform_launch</code> resolves profile + mounts + adapter, runs safety
+      validation, writes the snapshot → <code>run_shell</code> launches the cell and hands
+      it to the enforcement monitor.</li>
+    <li><strong>Adjust</strong> — <code>whiz adjust &lt;session&gt;</code> →
+      <code>adjust_session</code> stops the cell and relaunches with new capabilities;
+      harness state persists across the restart via its bind mount.</li>
+    <li><strong>Agent request</strong> — the in-cell agent calls
+      <code>whiz_request_mount</code> / <code>whiz_request_extend</code> → a request file
+      lands in the cell's <code>/run/whiz/requests/</code> → the operator reviews it with
+      <code>whiz requests</code> → approval routes through <code>adjust_session</code>.</li>
+    <li><strong>Enforcement</strong> — <code>monitor_and_enforce</code> polls the running
+      cell; on a duration cap or idle timeout it runs the adapter wrap-up and records the
+      expiry reason.</li>
+  </ul>
+
+  <h3>Build status</h3>
+  <p style="font-size:.9rem">
+    <span class="pill ship">Shipped</span> Stages 1–15 — generic + Hermes containment,
+    profiles, mounts, safety policy, dry-run, session logging, adapters, the read-only
+    and request-side MCP cooperation layer, presets + CLI ergonomics, OneCLI credentials,
+    mid-session adjust, and duration/idle enforcement.
+  </p>
+  <p style="font-size:.9rem">
+    <span class="pill plan">Planned</span> Stage 15.5 (hot-restart of idle-ended
+    sessions), 16–17 (Discord control plane), 18 (image management), and the MVP+ stages
+    19–20 (packaging &amp; install, security review) ahead of OSS-launch.
+  </p>
+
+  <details>
+    <summary>Naming &amp; lineage notes</summary>
+    <ul class="tight">
+      <li>Earlier drafts split the policy/containment layer into a sub-component
+        "Airlock"; that split was retired (D-144) — Whizzard is one named entity.</li>
+      <li>A product rename Whizzard → Osmotiq is planned post-MVP (D-158); the CLI binary
+        becomes <code>oiq</code>.</li>
+      <li>This document supersedes an earlier architecture HTML that described the repo at
+        2026-05-09 state, before Stages 8–15 shipped.</li>
+    </ul>
+  </details>
+</section>
+
+<footer>
+  Whizzard architecture overview · generated 2026-05-22 · regenerate against
+  <code>docs/architecture.md</code> + <code>docs/mvp_build_plan.md</code> when the
+  architecture or shipped-stage set changes.
+</footer>
+
+</main>
+</div>
+</div>
+
+</body>
+</html>
