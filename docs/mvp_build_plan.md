@@ -41,6 +41,8 @@ The MVP is operational when the system can:
 17. Start, stop, extend, switch profile, and approve mount additions remotely via Discord write/approve flow with single-use identity-bound tokens.
 18. Build, audit, and pin by digest the container image used for execution.
 
+Beyond Stage 18, two **MVP+ stages** (19–20) prepare the system for external review and OSS-launch. They add no new governance capability — they package and harden what the MVP already does — but they are prerequisites for any external eyes. See the **MVP+ — Pre-OSS-Launch Stages** section below; both are the first concrete work of the OSS-launch milestone whose scope D-131 leaves open.
+
 ---
 
 ## Build Order
@@ -424,6 +426,64 @@ Requirements:
 Stale images are a silent risk: a compromised or outdated base image defeats the containment model regardless of policy correctness. Image provenance must be visible and auditable.
 
 This stage was originally Stage 9, then Stage 11, then Stage 17; it now lands at Stage 18 (D-143). It's polish-relative-to-functionality compared to the personal-use capability stages and benefits from being the last MVP stage so the security audit before OSS-launch starts from a fully digest-pinned baseline.
+
+---
+
+## MVP+ — Pre-OSS-Launch Stages
+
+Stages 19–20 are **not part of the MVP** — the MVP is operational at Stage 18. They are the first concrete work of the OSS-launch milestone whose scope D-131 leaves open. Neither stage adds a governance capability; together they make the MVP installable by someone other than the maintainer and verify the containment model before any external exposure.
+
+Sequencing: Stage 19 must land before the project is shared with reviewers (they need an install path). Stage 20 is the final gate before public launch — it comes after Stage 19 because the published artifact and install path are themselves attack surface, and it folds in reviewer findings.
+
+### Stage 19 — Packaging & Install
+
+Goal: a person who is not the maintainer can install and run Whizzard from a published artifact, without cloning the repo or knowing the dev workflow.
+
+Until this stage the only install path is the README's "Install (development)" — clone + `pip install -e ".[dev]"` — which is correct for the D-101 personal-use threshold (the MVP user IS the maintainer) but unusable for reviewers or the public.
+
+Deliverables:
+
+- **Published Python distribution.** Build sdist + wheel from the existing `[build-system]`; publish to an index. The reviewer round uses TestPyPI or a tagged pre-release; public launch uses PyPI. The `whizzard` / `whiz` console entry points already exist in `pyproject.toml`.
+- **Execution-image distribution.** Decide and implement one of: publish a digest-pinned execution image to a registry (e.g. GHCR) so users pull rather than build, or make `whizzard image build` a bulletproof, well-messaged first-run step. Ties directly to Stage 18 digest pinning. The Hermes image (`docker/Dockerfile.hermes`) gets the same treatment or a clearly documented build step.
+- **Clean-machine install verification.** A documented, tested end-to-end path on a fresh environment: install → `whizzard image build`/pull → `whizzard run` → containment confirmed. The README gains a user-facing "Install" section distinct from "Install (development)".
+- **First-run / no-config experience.** With no `~/.whizzard/config/` present, the CLI guides the user through config init and image setup instead of erroring cryptically. Bare `whiz` already maps to status (Stage 10); add the no-config fallback.
+- **Release hygiene.** Tagged release, `CHANGELOG.md` entry, version bump (`pyproject.toml` is the version source of truth, D-07). The release build runs in CI and is reproducible.
+- **Reviewer-distribution mechanism.** Pick and document how pre-launch reviewers receive the build (TestPyPI install, private wheel, or tagged pre-release) and the feedback channel they use.
+
+Rationale: this stage closes the "no install story at all" gap — currently wider than the structural Docker-floor friction, because nothing ships at all. It is a hard prerequisite for external review and the first deliverable of the D-131 OSS-launch milestone.
+
+### Stage 20 — Security Review & Hardening Audit
+
+Goal: adversarially verify the containment model before any public exposure. Whizzard's entire value proposition is that the permission boundary holds; this stage is where that claim is *tested* rather than asserted. Stage 18's closing note anticipates "a security audit before OSS-launch" — this is that audit, scoped.
+
+This is the final pre-launch gate. Expect findings to reopen earlier coding work; doing it before launch rather than after is the point.
+
+Deliverables:
+
+1. **Consolidated threat model** (`docs/threat_model.md`). architecture.md states the invariants but scatters the adversarial view. Consolidate it: adversaries (a malicious agent or skill inside the cell, a malicious harness, a hostile registered-mount payload), assets (host filesystem outside mounts, credentials, the Whizzard config directory, the host control plane), trust boundaries, and the explicit non-goals (a shadow environment does not prove safety, etc.).
+
+2. **Adversarial ("red-team") test suite**, committed as permanent regression tests — one cluster per invariant, each test failing if the invariant breaks:
+   - *Containment escape* — Docker socket unreachable; privilege escalation blocked; `no-new-privileges`, capability drops, non-root user, and `--read-only`/tmpfs actually applied to the launched container.
+   - *Config write-protection* — the foundational invariant (architecture.md): the config directory is unreachable from any agent-writable path via symlink, `..` traversal, parent-directory mount, or snapshot/event-file poisoning. Heaviest coverage here.
+   - *Mount boundary* — a registered mount cannot be widened via symlink or traversal; read-only mounts are genuinely read-only.
+   - *Network policy* — network-off means no host reachability (`host.docker.internal`, the Docker bridge, DNS).
+   - *Cooperation-layer abuse* — `AGENT_DENIED_CHANGES` (broad-mount, profile change) cannot be bypassed from the agent path; request files in `/run/whiz` cannot be forged to mimic operator approvals; no injection via mount/preset names in request JSON.
+   - *Stop+restart / adjust* — the agent cannot influence relaunch flags; the carried snapshot cannot be poisoned to gain capability; the approval flow cannot be spoofed.
+   - *Discord control plane* — approval tokens are single-use, expiring, and identity-bound (D-113); the control channel is separate from the agent channel; no command injection via message content.
+
+3. **Fail-closed audit.** This stage must close D-133 (framework-level failure-mode policy, currently open). The strong default for a security product is fail-closed: any safety-relevant path — safety validation, mount resolution, network configuration, image checks — that throws or is indeterminate aborts the launch rather than proceeding with a weaker boundary. Includes verifying the dry-run preview cannot diverge from the actual launch: the preview and the real `docker run` invocation must resolve from one code path. A preview that lies is a security bug.
+
+4. **Injection / command-construction audit.** `docker_cmd.py` and every site where user- or agent-supplied input (mount names, profile/preset names, session IDs, durations) flows into a subprocess: argument-injection into `docker run`, no shell-string construction, strict input validation at the boundary.
+
+5. **Credential-handling audit.** `auth.json` never enters the cell (D-80); credential values never reach session logs, `harnesses.json`, or any agent-readable file; the OneCLI env-var fallback does not over-expose.
+
+6. **Supply-chain scan, wired into CI.** `pip-audit` (or equivalent) over the dependency tree on every push; base-image and Hermes-image digest pinning verified (Stage 18); the Stage 19 published artifact is in scope.
+
+7. **Independent review pass.** Run the repo's `security-review` tooling over the full diff, and route the consolidated threat model plus the installable build to the external reviewers. Triage all findings: launch-blockers fixed within this stage; non-blockers captured as decisions or backlog items.
+
+Exit criteria: every invariant in architecture.md "Architectural Constants" has at least one adversarial test that fails if the invariant is broken; all launch-blocker findings resolved; CI runs the adversarial suite and the dependency scan on every push.
+
+Rationale: for a containment product, "the boundary holds" must be a tested, regression-protected property, not a design assertion. This stage is the trust gate between a working personal tool and a publicly launched security product — and it (plus reviewer turnaround), not feature velocity, is the critical path to launch.
 
 ---
 
