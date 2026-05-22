@@ -79,3 +79,32 @@ def whizzard_base_image() -> str:
             f"stderr: {result.stderr[-2000:]}"
         )
     return WHIZZARD_BASE_IMAGE
+
+
+@pytest.fixture
+def run_in_cell(whizzard_base_image: str):
+    """Launch a real contained cell and run a command in it non-interactively.
+
+    Returns a callable `run(cmd, *, profile=..., timeout=...)` that goes
+    through the real `build_run_argv` launch path — so the containment flags
+    under test are the actual ones OIQ applies — strips `-it` (pytest has no
+    TTY), runs `cmd` in place of the harness start-command, and returns the
+    `CompletedProcess`. Shared harness for the real-Docker smoke + adversarial
+    probe tests.
+    """
+    from whizzard.config import get_profile
+    from whizzard.docker_cmd import build_run_argv
+
+    def _run(cmd: list[str], *, profile: str = "default", timeout: int = 60):
+        argv = build_run_argv(get_profile(profile), image=whizzard_base_image)
+        # build_run_argv's argv tail is [image, *start_command]. Find the
+        # image, drop `-it`, and replace the start-command tail with `cmd`.
+        image_idx = next(
+            i for i, a in enumerate(argv) if a == whizzard_base_image
+        )
+        launch = [a for a in argv[:image_idx] if a != "-it"]
+        launch.append(whizzard_base_image)
+        launch.extend(cmd)
+        return subprocess.run(launch, capture_output=True, text=True, timeout=timeout)
+
+    return _run
