@@ -144,8 +144,12 @@ def tool_whiz_emit_event(event_type: str, detail: str = "") -> dict[str, Any]:
 # use cases were thin — the cell already sees its own preset via
 # whiz_status, and listing other presets is informational, not
 # action-enabling. Removed in the catch-up review rather than implemented
-# to avoid publishing a marginally-useful surface; re-add later if a clear
-# need surfaces.
+# to avoid publishing a marginally-useful surface.
+#
+# RE-INTRODUCE IF D-171 (sub-agent permission scoping) lands: a parent
+# agent choosing how to scope a sub-agent could legitimately want to
+# enumerate presets to pick a narrower one. At that point the use case
+# becomes action-enabling and the tool is worth bringing back.
 
 
 # --- Stage 14: request-side tools ----------------------------------------

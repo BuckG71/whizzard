@@ -17,27 +17,54 @@ The CLI command + TTY approver live in `whizzard/cli/adjust.py`. Tests in
 
 from __future__ import annotations
 
-import calendar
 import json
 import re
 import subprocess
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 
-from whizzard.session_log import SESSIONS_LOG
+from whizzard.session_log import SESSIONS_LOG, append_event
 
 # --- Constants --------------------------------------------------------------
 
-# Stage 14 forward-compat (D-163 Notes): mutations the agent-via-MCP path
-# is NEVER allowed to request. The human-on-TTY adjust path ignores this
-# list. Anything mutation that crosses a safety gate, escalates privilege,
-# or fundamentally changes the cell's posture belongs here.
-AGENT_DENIED_CHANGES: frozenset[str] = frozenset({
-    "allow_broad_mount",
-    "change_profile",
+# F-G-06: allowlist (default-deny) for agent-via-MCP requests. Anything in
+# `Changes` not listed here is rejected for `agent_initiated=True` calls.
+# The human-on-TTY adjust path bypasses this filter. Default-deny is
+# important because adding a new `Changes` field (e.g., a future
+# `change_profile` axis) must NOT silently become agent-requestable — it
+# must be explicitly opted in by adding the field name here. Stage 14
+# (D-165) and the host-side MCP path build on this guarantee.
+AGENT_ALLOWED_CHANGES: frozenset[str] = frozenset({
+    "add_mounts",
+    "remove_mounts",
+    "extend_seconds",
 })
+
+# F-G-14: hard upper bound on `--extend` to prevent a typo (`--extend
+# 99999h`) from effectively unlimiting the session. 7 days is generous
+# for a single extend; users can extend again if they really need more.
+_MAX_EXTEND_SECONDS = 7 * 24 * 60 * 60  # 604_800
+
+# Daemon-down indicators — mirrors `docker_cmd._DAEMON_DOWN_INDICATORS`
+# (kept local to avoid importing the docker_cmd module for the substring
+# match alone). If `docker ps` returns these phrases in stderr, the
+# daemon is unreachable — surfaced as a distinct resolution status so
+# the user sees "Docker Desktop not running" instead of "session not
+# found" (F-G-10).
+_DAEMON_DOWN_INDICATORS = (
+    "Cannot connect to the Docker daemon",
+    "Is the docker daemon running",
+    "error during connect",
+)
+
+
+class DockerDaemonUnavailable(Exception):
+    """Raised by `_docker_label_lookup` when docker stderr indicates the
+    daemon is unreachable (vs. simply having no containers with our
+    label). Caught at `resolve_session` and converted to a distinct
+    `ResolutionStatus.DAEMON_UNAVAILABLE` (F-G-10)."""
 
 
 # --- Types ------------------------------------------------------------------
@@ -92,6 +119,10 @@ class ResolutionStatus(Enum):
     ENDED = "ended"
     CRASHED = "crashed"
     NOT_FOUND = "not_found"
+    # F-G-10: docker CLI is installed but the daemon isn't reachable.
+    # Distinct from NOT_FOUND so the user sees "start Docker Desktop"
+    # instead of "use a longer prefix."
+    DAEMON_UNAVAILABLE = "daemon_unavailable"
 
 
 @dataclass(frozen=True)
@@ -135,6 +166,14 @@ def parse_duration(spec: str) -> int:
     Bare integer is interpreted as seconds for backward-compat with anyone
     who'd write `--extend 1800`. Letter-suffix forms (s/m/h, with optional
     full-word variants) are preferred in user-facing docs.
+
+    F-G-07: rejects 0 (and anything ≤0) — a 0-second extension is not a
+    real change, but `Changes(extend_seconds=0)` previously satisfied
+    `is_empty()` and triggered a real stop+restart cycle.
+
+    F-G-14: hard-caps at 7 days. A typo (`--extend 99999h`) effectively
+    unlimits the session, defeating the safety budget. The user can
+    extend again if they really need more.
     """
     spec = spec.strip()
     m = _DURATION_RE.match(spec)
@@ -143,12 +182,23 @@ def parse_duration(spec: str) -> int:
     value = int(m.group(1))
     unit = (m.group(2) or "s").lower()
     if unit in ("s", "sec"):
-        return value
-    if unit in ("m", "min"):
-        return value * 60
-    if unit in ("h", "hr"):
-        return value * 3600
-    raise ValueError(f"invalid duration unit in {spec!r}")
+        seconds = value
+    elif unit in ("m", "min"):
+        seconds = value * 60
+    elif unit in ("h", "hr"):
+        seconds = value * 3600
+    else:
+        raise ValueError(f"invalid duration unit in {spec!r}")
+    if seconds <= 0:
+        raise ValueError(
+            f"invalid duration {spec!r}; must be positive"
+        )
+    if seconds > _MAX_EXTEND_SECONDS:
+        raise ValueError(
+            f"duration {spec!r} exceeds the {_MAX_EXTEND_SECONDS // 86400}-day "
+            f"cap on a single extend; extend again later if you need more"
+        )
+    return seconds
 
 
 def _read_session_events() -> list[dict]:
@@ -172,16 +222,36 @@ def _read_session_events() -> list[dict]:
 def _docker_label_lookup(session_id_prefix: str) -> list[tuple[str, str]]:
     """Return [(session_id, container_id), ...] for running containers whose
     `whizzard.session_id` label starts with the given prefix. Empty list
-    means no match. Defensive against `docker` not being on PATH."""
+    means no match.
+
+    F-G-10: raises ``DockerDaemonUnavailable`` when docker stderr matches
+    the daemon-down patterns — distinguishes "daemon not running" from
+    "no session matching prefix". Previously both surfaced as an empty
+    list and the user got a misleading "session not found" message when
+    Docker Desktop was just paused. ``FileNotFoundError`` (docker CLI
+    not on PATH) still returns [] so the session-log fallback path runs.
+    """
     try:
         result = subprocess.run(
             ["docker", "ps", "--no-trunc",
              "--format", "{{.Label \"whizzard.session_id\"}}\t{{.ID}}"],
             capture_output=True, text=True, timeout=10,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError:
+        # docker CLI not installed — fall back to session-log lookup;
+        # ENDED/NOT_FOUND outcomes are still meaningful in that mode.
         return []
+    except subprocess.TimeoutExpired as exc:
+        raise DockerDaemonUnavailable(
+            f"docker ps timed out after 10s ({exc}); is the docker daemon "
+            "responsive?"
+        ) from exc
     if result.returncode != 0:
+        stderr = (result.stderr or "")
+        if any(token in stderr for token in _DAEMON_DOWN_INDICATORS):
+            raise DockerDaemonUnavailable(
+                f"Docker daemon unreachable: {stderr.strip()}"
+            )
         return []
     matches: list[tuple[str, str]] = []
     for line in result.stdout.splitlines():
@@ -214,7 +284,16 @@ def resolve_session(session_id_or_prefix: str) -> SessionResolution:
         )
 
     # Docker lookup (handles both exact and prefix; exact is just len-equal prefix)
-    matches = _docker_label_lookup(prefix)
+    try:
+        matches = _docker_label_lookup(prefix)
+    except DockerDaemonUnavailable as exc:
+        # F-G-10: daemon down — distinct from "no match". Surface a clear
+        # error instead of falling through to the session-log path (which
+        # would mis-blame the session as ENDED/NOT_FOUND).
+        return SessionResolution(
+            status=ResolutionStatus.DAEMON_UNAVAILABLE,
+            detail=str(exc),
+        )
     if len(matches) == 1:
         sid, cid = matches[0]
         return SessionResolution(
@@ -312,15 +391,44 @@ class DeniedChange:
 
 def check_agent_allowed(changes: Changes) -> DeniedChange | None:
     """For agent-initiated `adjust_session()` calls (Stage 14), reject any
-    change that touches a field in AGENT_DENIED_CHANGES. Human-initiated
-    calls bypass this check.
+    change that touches a field NOT in ``AGENT_ALLOWED_CHANGES``.
+    Human-initiated calls bypass this check.
+
+    F-G-06: the filter is an allowlist (default-deny). Previously it was
+    a denylist (`AGENT_DENIED_CHANGES`), which meant any future
+    ``Changes`` field — for example, a hypothetical ``change_profile``
+    or ``disable_idle`` axis — would default-permit if someone forgot
+    to add it to the deny set. With the allowlist, only ``add_mounts``,
+    ``remove_mounts``, and ``extend_seconds`` are agent-requestable;
+    every other current and future axis is denied by default. Approving
+    a new axis for agents is an explicit edit to ``AGENT_ALLOWED_CHANGES``.
 
     Returns the first denied change found, or None if all changes are
     agent-permitted.
     """
-    if changes.allow_broad_mount and "allow_broad_mount" in AGENT_DENIED_CHANGES:
+    if changes.allow_broad_mount and "allow_broad_mount" not in AGENT_ALLOWED_CHANGES:
         return DeniedChange(field="allow_broad_mount")
-    # change_profile not yet a field on Changes; added when that feature lands.
+    # When a new sensitive axis lands on Changes, add a check here AND
+    # decide whether to include it in AGENT_ALLOWED_CHANGES. The dataclass
+    # introspection below catches forgotten checks: any non-empty field
+    # not in the allowlist also denies, so a missing per-field check is
+    # a safety belt rather than a silent permit.
+    allowed_fields = AGENT_ALLOWED_CHANGES
+    sensitive_fields = {"allow_broad_mount"}  # explicitly checked above
+    for field_name in changes.__dataclass_fields__:
+        if field_name in allowed_fields or field_name in sensitive_fields:
+            continue
+        value = getattr(changes, field_name)
+        # "Empty" = the field-default sentinel: empty tuple, None, False.
+        if value in ((), None, False):
+            continue
+        return DeniedChange(
+            field=field_name,
+            reason=(
+                f"field {field_name!r} is not in AGENT_ALLOWED_CHANGES; "
+                "explicit allowlist entry required to permit it for agents"
+            ),
+        )
     return None
 
 
@@ -411,15 +519,31 @@ def _stop_container(container_id: str, grace_seconds: int = 30) -> tuple[int, st
 
 def _session_elapsed_seconds(start_event: dict) -> float:
     """Seconds elapsed since the session originally started, derived from
-    the session_start event's timestamp. Returns 0.0 if unparseable."""
+    the session_start event's timestamp. Returns 0.0 if unparseable.
+
+    F-G-01: previously used `time.strptime(..., "%Y-%m-%dT%H:%M:%SZ")`,
+    which broke when F-D-08 changed `session_log._iso()` to microsecond
+    ISO with `+00:00` offset. A failed parse returned 0.0 and
+    `adjust --extend` silently reset the duration cap to "full original
+    limit + extension" instead of "remaining + N". Now uses
+    `datetime.fromisoformat` which accepts both the old `Z` suffix
+    (Python 3.11+) and the current `+00:00` offset.
+    """
     raw = start_event.get("start_time") or start_event.get("ts")
     if not isinstance(raw, str):
         return 0.0
+    # `fromisoformat` accepts trailing 'Z' in 3.11+. For 3.10 compat
+    # (the project floor) substitute it with '+00:00' first.
+    candidate = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
     try:
-        struct = time.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+        parsed = datetime.fromisoformat(candidate)
     except ValueError:
         return 0.0
-    return max(0.0, time.time() - calendar.timegm(struct))
+    # Naive datetimes are unexpected but defensible — treat as UTC.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    elapsed = datetime.now(UTC).timestamp() - parsed.timestamp()
+    return max(0.0, elapsed)
 
 
 def _apply_changes(start_event: dict, changes: Changes) -> dict:
@@ -452,13 +576,22 @@ def _apply_changes(start_event: dict, changes: Changes) -> dict:
         remaining = original_limit - _session_elapsed_seconds(start_event)
         duration_override = max(int(remaining) + (changes.extend_seconds or 0), 60)
 
+    # F-G-02: the carried-forward `allow_broad_mount` signal must reflect
+    # whether the original launch *actually invoked* the override — not
+    # just whether the profile permits it. `start_event["allow_broad_mount"]`
+    # is the profile *capability* and would re-grant the override on every
+    # adjust even when the original user never typed the flag (silently
+    # collapsing D-46's two-gate model). `overrides_used` is non-empty iff
+    # at least one safety override actually fired at the original launch,
+    # which is the load-bearing signal. The adjust user can re-affirm at
+    # adjust time via `--allow-broad-mount` (the OR with `changes.allow_broad_mount`).
+    original_used_override = bool(start_event.get("overrides_used"))
     return {
         "profile_name": start_event.get("profile", "default"),
         "mount_specs": mount_specs,
         "image": start_event.get("image_tag", ""),
         "allow_broad_mount": (
-            changes.allow_broad_mount
-            or bool(start_event.get("allow_broad_mount"))
+            changes.allow_broad_mount or original_used_override
         ),
         "harness": _harness_from_argv(start_event.get("argv", []) or []) or "generic",
         "preset_name": start_event.get("preset"),
@@ -466,17 +599,34 @@ def _apply_changes(start_event: dict, changes: Changes) -> dict:
     }
 
 
-def _log_adjustment(superseded_session_id: str, changes: Changes,
-                    new_session_id: str | None = None) -> None:
+def _log_adjustment(
+    superseded_session_id: str,
+    changes: Changes,
+    new_session_id: str | None = None,
+    *,
+    event: str = "session_adjusted",
+    detail: str = "",
+) -> None:
     """Append an adjustment event to the session log linking the old session
     to the new. Lightweight: not a session_start/session_end pair, just a
-    breadcrumb so audit consumers can follow the chain."""
-    import datetime as _dt
+    breadcrumb so audit consumers can follow the chain.
+
+    F-G-11: uses ``append_event`` (the canonical audit-log writer), so
+    the entry gets microsecond ISO timestamps (F-D-08) and the ``v: 1``
+    schema-version stamp (F-D-10) — previously the manual write produced
+    a Z-suffix mix and no version stamp.
+
+    F-G-04 / F-G-05: ``event`` parameter lets the caller distinguish
+    ``session_adjusted`` (success) from ``session_adjust_failed`` (stop
+    succeeded but relaunch did not). The default preserves the original
+    success path; failure callers pass the failed-variant.
+    """
     payload = {
-        "ts": _dt.datetime.now(_dt.UTC).isoformat().replace("+00:00", "Z"),
-        "event": "session_adjusted",
+        "ts": datetime.now(UTC).isoformat(),
+        "event": event,
         "superseded_session_id": superseded_session_id,
         "new_session_id": new_session_id,
+        "origin": "whizzard",
         "changes": {
             "add_mounts": [{"name": m.name, "mode": m.mode} for m in changes.add_mounts],
             "remove_mounts": list(changes.remove_mounts),
@@ -484,14 +634,22 @@ def _log_adjustment(superseded_session_id: str, changes: Changes,
             "allow_broad_mount": changes.allow_broad_mount,
         },
     }
-    SESSIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with SESSIONS_LOG.open("a") as fh:
-        fh.write(json.dumps(payload) + "\n")
+    if detail:
+        payload["detail"] = detail
+    append_event(payload)
 
 
 def _resolution_error_message(resolution: SessionResolution,
                               session_id_or_prefix: str) -> str:
     """Format a user-facing error for non-FOUND resolutions per D-163."""
+    if resolution.status == ResolutionStatus.DAEMON_UNAVAILABLE:
+        return (
+            f"docker daemon unreachable while looking up session "
+            f"{session_id_or_prefix!r}.\n"
+            f"On macOS/Windows, start Docker Desktop. On Linux, check "
+            f"`systemctl status docker`.\n"
+            f"({resolution.detail})"
+        )
     if resolution.status == ResolutionStatus.AMBIGUOUS_PREFIX:
         short = [c[:12] for c in resolution.candidates]
         return (
@@ -529,7 +687,7 @@ def adjust_session(
     approver: Approver,
     *,
     agent_initiated: bool = False,
-    relauncher: Callable[[dict], int] | None = None,
+    relauncher: Callable[[dict], int | tuple[int, str | None]] | None = None,
 ) -> AdjustResult:
     """End-to-end adjust: resolve session, validate, prompt, stop, relaunch.
 
@@ -596,26 +754,93 @@ def adjust_session(
     if not effective_changes.is_narrowing_only() and not approver(diff):
         return AdjustResult(exit_code=1, detail="cancelled")
 
+    # F-G-08: narrowing-only path skips the approver, but any no-op
+    # warnings (e.g. "--remove-mount Y, Y wasn't attached") would
+    # otherwise be silently dropped. Carry them in the result detail
+    # so the CLI can surface them.
+    warning_prefix = "\n".join(warnings) + "\n" if warnings else ""
+
     new_params = _apply_changes(start_event, effective_changes)
 
     stop_code, stop_detail = _stop_container(container_id)
     if stop_code != 0:
         return AdjustResult(
             exit_code=stop_code,
-            detail=f"failed to stop container: {stop_detail}",
+            detail=f"{warning_prefix}failed to stop container: {stop_detail}",
         )
-
-    _log_adjustment(session_id, effective_changes)
 
     if relauncher is None:
         relauncher = _default_relauncher
-    relaunch_code = relauncher(new_params)
-    return AdjustResult(exit_code=relaunch_code, detail="adjusted")
+    # F-G-12: any unexpected exception from the relauncher must not break
+    # the AdjustResult contract; capture it and surface as an error result.
+    try:
+        relaunch_result = relauncher(new_params)
+    except Exception as exc:
+        # F-G-04/F-G-05: container already stopped; relaunch failed. Log
+        # a distinct failed-variant audit event so the chain is visible.
+        _log_adjustment(
+            session_id, effective_changes,
+            new_session_id=None,
+            event="session_adjust_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
+        return AdjustResult(
+            exit_code=125,
+            detail=(
+                f"{warning_prefix}stop succeeded but relaunch raised "
+                f"{type(exc).__name__}: {exc}. The original session is "
+                "gone; start a new one with `oiq r`."
+            ),
+        )
+
+    # Relauncher API: int exit code OR (exit_code, new_session_id) tuple.
+    # _default_relauncher returns the tuple; older callers (tests) may
+    # still pass int-returning fakes.
+    if isinstance(relaunch_result, tuple):
+        relaunch_code, new_session_id = relaunch_result
+    else:
+        relaunch_code = int(relaunch_result)
+        new_session_id = None
+
+    if relaunch_code == 0:
+        _log_adjustment(
+            session_id, effective_changes, new_session_id=new_session_id,
+        )
+        return AdjustResult(
+            exit_code=0,
+            detail=f"{warning_prefix}session adjusted",
+            new_session_id=new_session_id,
+        )
+
+    # F-G-04/F-G-05: relaunch returned non-zero. Audit log records a
+    # distinct event so the chain shows "adjusted (succeeded)" vs
+    # "adjust_failed (session torched)" without ambiguity.
+    _log_adjustment(
+        session_id, effective_changes,
+        new_session_id=new_session_id,
+        event="session_adjust_failed",
+        detail=f"relauncher returned exit code {relaunch_code}",
+    )
+    return AdjustResult(
+        exit_code=relaunch_code,
+        detail=(
+            f"{warning_prefix}stop succeeded but relaunch returned exit "
+            f"{relaunch_code}; the original session is gone."
+        ),
+    )
 
 
-def _default_relauncher(new_params: dict) -> int:
-    """Default relaunch path: invoke the CLI's `_perform_launch`. `_perform_launch`
-    raises typer.Exit on every path; translate that to an integer exit code."""
+def _default_relauncher(new_params: dict) -> tuple[int, str | None]:
+    """Default relaunch path: invoke the CLI's `_perform_launch`.
+
+    Returns ``(exit_code, new_session_id)``. ``_perform_launch`` raises
+    ``typer.Exit`` on every path; we translate to an int. The new
+    session_id is not yet wired through ``_perform_launch``'s return
+    path (it mints internally via `new_session_id()`), so this returns
+    ``None`` for the id — the audit-log breadcrumb still links the
+    superseded sid forward, just without the new sid filled in. Future
+    work: have ``_perform_launch`` return its sid for cleaner audit.
+    """
     import typer
 
     from whizzard.cli._launch import _perform_launch
@@ -632,5 +857,5 @@ def _default_relauncher(new_params: dict) -> int:
             duration_override_seconds=new_params.get("duration_override_seconds"),
         )
     except typer.Exit as e:  # noqa: F841
-        return int(e.exit_code) if e.exit_code is not None else 0
-    return 0
+        return (int(e.exit_code) if e.exit_code is not None else 0, None)
+    return (0, None)

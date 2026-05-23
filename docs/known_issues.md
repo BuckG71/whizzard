@@ -148,6 +148,19 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### Wake selection-rule doc and code use different phrasings
+D-169 describes the wake-eligibility rule as "most-recent session with
+`expiry_reason: idle` AND no subsequent `session_start` for that sid".
+The implementation tracks `session_woken` events instead and excludes
+sids that appear as `superseded_session_id` in such events. The two are
+behaviorally equivalent today (every adjust and wake mints a new sid),
+so this is purely a doc/code drift — no behavior change required.
+Cleanest fix: reconcile the D-169 text with the actual implementation
+(or, equivalently, add a code comment in `wake._build_index` pointing
+to the D-169 phrasing as an alternative invariant).
+*Source:* catch-up review 2026-05-23 finding F-G-13.
+*Disposition:* defer — doc reconciliation, no behavior change.
+
 ### Unlimited-profile enforcer can hang forever if `docker run` client wedges
 When both `duration_seconds` and `idle_timeout_seconds` are `None`,
 `monitor_and_enforce` calls `proc.wait()` with no timeout — pre-Stage-15

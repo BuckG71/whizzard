@@ -32,8 +32,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from whizzard.adjust import _docker_label_lookup, _harness_from_argv
-from whizzard.session_log import SESSIONS_LOG
+from whizzard.adjust import (
+    DockerDaemonUnavailable,
+    _docker_label_lookup,
+    _harness_from_argv,
+)
+from whizzard.session_log import SESSIONS_LOG, append_event
 
 
 class WakeStatus(Enum):
@@ -110,8 +114,17 @@ def _build_index(events: list[dict]) -> tuple[dict[str, dict], dict[str, dict], 
 
 
 def _is_active(session_id: str) -> bool:
-    """True iff a docker container is currently running with this sid label."""
-    return bool(_docker_label_lookup(session_id))
+    """True iff a docker container is currently running with this sid label.
+
+    F-G-10 carryover: if the docker daemon is unreachable, we can't tell
+    — treat as "not currently active" so the wake attempt proceeds to
+    relaunch. The relaunch itself will fail loudly if the daemon is
+    down, surfacing the real problem.
+    """
+    try:
+        return bool(_docker_label_lookup(session_id))
+    except DockerDaemonUnavailable:
+        return False
 
 
 def find_wakeable(
@@ -259,11 +272,20 @@ def reconstruct_launch_params(
         mode = m.get("mode")
         mount_specs.append(f"{name}:{mode}" if mode else name)
 
+    # F-G-02: source `allow_broad_mount` from `overrides_used` (whether the
+    # original launch actually invoked the override), not from
+    # `allow_broad_mount` (which is the profile *capability*).
+    # `start_event["allow_broad_mount"]` being True only means the profile
+    # permits the override — but the original user may not have actually
+    # opted in via `--allow-broad-mount`. D-168 says wake preserves the
+    # prior permission *set*, meaning the override is carried forward iff
+    # it was actually used.
+    original_used_override = bool(start_event.get("overrides_used"))
     return {
         "profile_name": start_event.get("profile", "default"),
         "mount_specs": mount_specs,
         "image": start_event.get("image_tag", ""),
-        "allow_broad_mount": bool(start_event.get("allow_broad_mount", False)),
+        "allow_broad_mount": original_used_override,
         "harness": _harness_from_argv(start_event.get("argv", []) or []) or "generic",
         "preset_name": start_event.get("preset"),
     }
@@ -293,23 +315,46 @@ def log_wake_event(
     new_session_id: str | None = None,
     dropped_mounts: list[str] | None = None,
     path: Path | None = None,
+    *,
+    event: str = "session_woken",
+    detail: str = "",
 ) -> None:
     """Append a `session_woken` audit event linking the old sid to the new.
 
     Same shape as `adjust._log_adjustment` but for wakes. The
-    `superseded_session_id` field is the load-bearing piece — `find_wakeable`
-    uses it to exclude already-woken sids from future bare-wake matches.
-    """
-    import datetime as _dt
+    `superseded_session_id` field is the load-bearing piece —
+    ``find_wakeable`` uses it to exclude already-woken sids from future
+    bare-wake matches.
 
-    payload = {
-        "ts": _dt.datetime.now(_dt.UTC).isoformat().replace("+00:00", "Z"),
-        "event": "session_woken",
+    F-G-11: uses ``append_event`` for consistent microsecond ISO + ``v: 1``
+    schema-version stamping (F-D-08, F-D-10), instead of a manual JSON
+    write that produced a Z-suffix mix and no version stamp.
+
+    F-G-03: ``event`` lets the caller distinguish ``session_woken``
+    (success — recorded only after a successful relaunch) from
+    ``session_wake_failed`` (attempted but relaunch failed). The
+    failure variant does NOT add the sid to the woken set (the woken
+    set keys off ``session_woken`` specifically), so a failed wake
+    remains visible to bare ``whiz wake``.
+    """
+    from datetime import UTC, datetime
+    from typing import Any
+
+    payload: dict[str, Any] = {
+        "ts": datetime.now(UTC).isoformat(),
+        "event": event,
         "superseded_session_id": superseded_session_id,
         "new_session_id": new_session_id,
         "dropped_mounts": dropped_mounts or [],
+        "origin": "whizzard",
     }
-    target = path or SESSIONS_LOG
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("a") as fh:
-        fh.write(json.dumps(payload) + "\n")
+    if detail:
+        payload["detail"] = detail
+    if path is not None:
+        # Tests still pass an explicit path; preserve the override.
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload["v"] = 1  # match append_event's stamp
+        with path.open("a") as fh:
+            fh.write(json.dumps(payload) + "\n")
+    else:
+        append_event(payload)

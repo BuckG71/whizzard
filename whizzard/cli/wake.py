@@ -131,15 +131,17 @@ def wake_cmd(
             console.print(f"  Dropped mounts: {', '.join(sorted(drop_names))}")
         return
 
-    # Audit-log the wake before relaunching (so the link survives a relaunch
-    # failure — the operator can see what was attempted).
-    log_wake_event(
-        superseded_session_id=candidate.session_id,
-        new_session_id=None,  # filled in by relaunch via _perform_launch's own log
-        dropped_mounts=sorted(drop_names) if drop_names else [],
-    )
-
-    # Relaunch via the shared launch core.
+    # F-G-03: log the `session_woken` event AFTER a successful relaunch.
+    # Previously this fired before relaunch on the theory that "the link
+    # survives a failure," but the event also marks the sid as already
+    # woken — a failed wake would invisibly block the next bare
+    # `whiz wake` from picking the same idle session up again. Now: log
+    # `session_woken` only on success; log `session_wake_failed` (which
+    # is NOT in the woken-set predicate) on failure, so the user can
+    # retry. F-G-12: broad-except on the relaunch so an unexpected
+    # exception is recorded as wake-failed instead of leaking a
+    # traceback to the user with no audit trace.
+    relaunch_code = 0
     try:
         _perform_launch(
             profile_name=new_params["profile_name"],
@@ -151,5 +153,39 @@ def wake_cmd(
             preset_name=new_params.get("preset_name"),
         )
     except typer.Exit as e:
-        # Bubble the launch exit code.
-        raise typer.Exit(code=int(e.exit_code) if e.exit_code is not None else 0) from e
+        relaunch_code = int(e.exit_code) if e.exit_code is not None else 0
+    except Exception as exc:
+        log_wake_event(
+            superseded_session_id=candidate.session_id,
+            new_session_id=None,
+            dropped_mounts=sorted(drop_names) if drop_names else [],
+            event="session_wake_failed",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
+        console.print(
+            f"[red]Wake failed: {type(exc).__name__}: {exc}[/red]\n"
+            f"The original idle session is still wakeable; retry "
+            f"`whiz wake {candidate.session_id[:8]}` after fixing the issue."
+        )
+        raise typer.Exit(code=125) from exc
+
+    if relaunch_code == 0:
+        log_wake_event(
+            superseded_session_id=candidate.session_id,
+            new_session_id=None,
+            dropped_mounts=sorted(drop_names) if drop_names else [],
+        )
+    else:
+        log_wake_event(
+            superseded_session_id=candidate.session_id,
+            new_session_id=None,
+            dropped_mounts=sorted(drop_names) if drop_names else [],
+            event="session_wake_failed",
+            detail=f"relaunch returned exit {relaunch_code}",
+        )
+        console.print(
+            f"[red]Wake relaunch returned exit {relaunch_code}.[/red] "
+            f"The idle session remains wakeable; retry once the "
+            f"underlying issue is fixed."
+        )
+        raise typer.Exit(code=relaunch_code)

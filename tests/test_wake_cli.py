@@ -255,7 +255,12 @@ def test_wake_bare_picks_most_recent_idle_ended_and_relaunches(tmp_path, monkeyp
 
 
 def test_wake_preserves_allow_broad_mount(tmp_path, monkeypatch):
-    """D-168: a session launched with --allow-broad-mount stays broad on wake."""
+    """D-168: a session launched with --allow-broad-mount stays broad on wake.
+
+    F-G-02: the signal is `overrides_used` (whether the original launch
+    actually invoked the override), NOT `allow_broad_mount` capability.
+    Tests must seed `overrides_used` to simulate the original opt-in.
+    """
     log = tmp_path / "sessions.jsonl"
     real = tmp_path / "mount-dir"
     real.mkdir()
@@ -263,6 +268,10 @@ def test_wake_preserves_allow_broad_mount(tmp_path, monkeypatch):
         {"name": "m1", "mode": "rw", "host_path": str(real)},
     ])
     start["allow_broad_mount"] = True
+    # F-G-02: original launch actually invoked the override.
+    start["overrides_used"] = [
+        {"path": str(real), "reason": "user invoked --allow-broad-mount"}
+    ]
     events = [start, _end("aaa11111", reason="idle")]
     _write_log(log, events)
     monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
@@ -291,9 +300,11 @@ def test_wake_logs_audit_event_on_relaunch(tmp_path, monkeypatch):
         _end("aaa11111", reason="idle"),
     ]
     _write_log(log, events)
-    # Both modules read SESSIONS_LOG; patch both to ensure the audit
-    # event writes into the test file we can read back.
+    # F-G-11: log_wake_event now writes through session_log.append_event,
+    # which reads SESSIONS_LOG from the session_log module. Patch that
+    # module's constant alongside the wake-module one.
     monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
     monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
     monkeypatch.setattr("whizzard.cli.wake._perform_launch", lambda **kw: None)
 

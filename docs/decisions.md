@@ -2707,6 +2707,8 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Rationale:** For Bryan's MVP threshold (D-101: single trusted user) the single-boundary model is adequate — a buggy sub-agent's blast radius is the cell, which the parent's mount set already bounds. For OSS launch, sub-agent scoping is a defense-in-depth story relevant mainly to users running third-party agent code; the marginal value over container-level scoping is modest for the majority audience. The cleanest implementation path is sub-cells via host request (one Whizzard cell per scoped sub-agent, IPC over a pipe) — this matches Anthropic's `sandbox-runtime` shape and is consistent with D-9 (one-way capability flow) and D-164 (no docker-in-docker). In-container namespace isolation is ruled out: it requires `CAP_SYS_ADMIN`, which D-3 explicitly drops.
 
+**Impact on prior decisions if resolved in the affirmative:** the F-E-01 removal of `whiz_list_presets` (catch-up review 2026-05-23) was justified on "the agent has no actionable need for the preset registry." Sub-agent scoping makes that thin — a parent agent choosing how to scope a sub-agent could legitimately want to enumerate presets to pick a narrower one. If D-171 lands, re-introduce `whiz_list_presets` as part of the sub-agent control surface.
+
 **Source:** conversation 2026-05-23 (catch-up code review Chunk E).
 
 **Status:** open

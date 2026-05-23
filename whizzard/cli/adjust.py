@@ -122,8 +122,7 @@ def adjust_cmd(
 
     if result.detail:
         if result.exit_code == 0:
-            console.print(f"[green]{result.detail}[/green]" if result.detail != "adjusted"
-                          else "[green]session adjusted[/green]")
+            console.print(f"[green]{result.detail}[/green]")
         elif result.exit_code == 1:
             console.print(f"[yellow]{result.detail}[/yellow]")
         else:

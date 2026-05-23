@@ -19,7 +19,22 @@ def _write_log(path: Path, events: list[dict]) -> None:
 
 def _start(sid: str, *, profile: str = "default", mounts: list[dict] | None = None,
            allow_broad_mount: bool = False, preset: str | None = None,
-           ts: str = "2026-05-22T10:00:00Z", argv: list[str] | None = None) -> dict:
+           ts: str = "2026-05-22T10:00:00Z", argv: list[str] | None = None,
+           used_override: bool = False) -> dict:
+    """Build a synthetic session_start event.
+
+    F-G-02: `used_override` controls the `overrides_used` field (non-empty
+    list = an override actually fired at original launch). The
+    `allow_broad_mount` argument controls only the profile-capability
+    record. Wake's reconstruct_launch_params now reads `overrides_used`
+    (post-F-G-02), so tests that want the relaunch's
+    `allow_broad_mount=True` must set `used_override=True`.
+    """
+    overrides = (
+        [{"path": "/host/some/broad/path", "reason": "user invoked --allow-broad-mount"}]
+        if used_override
+        else []
+    )
     ev = {
         "event": "session_start",
         "session_id": sid,
@@ -33,7 +48,7 @@ def _start(sid: str, *, profile: str = "default", mounts: list[dict] | None = No
         "network_enabled": False,
         "start_time": ts,
         "ts": ts,
-        "overrides_used": [],
+        "overrides_used": overrides,
     }
     if preset is not None:
         ev["preset"] = preset
@@ -218,6 +233,7 @@ def test_reconstruct_carries_all_params(tmp_path):
         "abc",
         profile="build",
         allow_broad_mount=True,
+        used_override=True,  # F-G-02: original launch invoked --allow-broad-mount
         preset="alpha",
         mounts=[
             {"name": "a", "mode": "rw", "host_path": str(tmp_path)},
@@ -231,6 +247,23 @@ def test_reconstruct_carries_all_params(tmp_path):
     assert params["preset_name"] == "alpha"
     assert params["harness"] == "hermes"
     assert sorted(params["mount_specs"]) == ["a:rw", "b:ro"]
+
+
+def test_reconstruct_does_not_grant_broad_mount_when_profile_permits_but_user_did_not_invoke(tmp_path):
+    """F-G-02: profile capability ≠ user opt-in. A wake should NOT carry
+    `allow_broad_mount=True` just because the profile permitted it —
+    only if the original user actually invoked the override (which
+    `overrides_used` records)."""
+    start = _start(
+        "abc",
+        profile="default",  # default permits broad mount per D-157
+        allow_broad_mount=True,  # capability, but no user opt-in
+        used_override=False,  # F-G-02: user did NOT invoke --allow-broad-mount
+        mounts=[{"name": "a", "mode": "rw", "host_path": str(tmp_path)}],
+    )
+    params = wake.reconstruct_launch_params(start)
+    # MUST NOT silently re-grant the override.
+    assert params["allow_broad_mount"] is False
 
 
 def test_reconstruct_drops_named_mounts():
