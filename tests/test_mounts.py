@@ -135,3 +135,84 @@ def test_docker_volume_arg_uses_effective_mode():
     m = Mount(name="alpha", host_path=Path("/host/alpha"), default_mode="rw")
     assert m.docker_volume_arg() == "/host/alpha:/mounts/alpha:rw"
     assert m.docker_volume_arg(mode="ro") == "/host/alpha:/mounts/alpha:ro"
+
+
+# --- F-A-02: mount-name validation ---------------------------------------
+
+
+@pytest.mark.parametrize("bad_name", [
+    "",                    # empty
+    "../etc",              # path traversal
+    "with/slash",          # slash splits container path
+    "with:colon",          # colon corrupts -v argument
+    "with space",          # whitespace
+    "-leading-dash",       # leading dash (docker option-like)
+    "tab\there",           # control char
+    "x" * 65,              # over the 64-char ceiling
+])
+def test_load_rejects_invalid_mount_names(tmp_path: Path, bad_name: str):
+    target_dir = tmp_path / "real"
+    target_dir.mkdir()
+    bad = tmp_path / "mounts.json"
+    bad.write_text(json.dumps({
+        "mounts": {bad_name: {"host_path": str(target_dir), "default_mode": "ro"}}
+    }))
+    with pytest.raises(MountRegistryError, match="invalid mount name"):
+        load_mounts(bad)
+
+
+@pytest.mark.parametrize("good_name", [
+    "a",
+    "claude-projects",
+    "ai_sandbox",
+    "X9",
+    "a" * 64,
+])
+def test_load_accepts_valid_mount_names(tmp_path: Path, good_name: str):
+    target_dir = tmp_path / "real"
+    target_dir.mkdir()
+    f = tmp_path / "mounts.json"
+    f.write_text(json.dumps({
+        "mounts": {good_name: {"host_path": str(target_dir), "default_mode": "ro"}}
+    }))
+    registry = load_mounts(f)
+    assert good_name in registry
+
+
+# --- F-A-04: default_mounts canonicalizes paths the same way as load_mounts
+
+
+def test_default_mounts_paths_are_absolute_resolved():
+    """default_mounts() must resolve paths just like load_mounts(), so two
+    Mounts pointing at the same logical target compare equal regardless of
+    provenance."""
+    for mount in default_mounts().values():
+        assert mount.host_path.is_absolute()
+        # Path.resolve() removes any symlinks and produces a normalized form.
+        # Idempotency check: resolving an already-resolved path is a no-op.
+        assert mount.host_path == mount.host_path.resolve()
+
+
+# --- F-A-06: top-level non-dict gives a clean error ----------------------
+
+
+def test_load_rejects_non_dict_toplevel(tmp_path: Path):
+    bad = tmp_path / "mounts.json"
+    bad.write_text(json.dumps(["this", "is", "a", "list"]))
+    with pytest.raises(MountRegistryError, match="top-level"):
+        load_mounts(bad)
+
+
+# --- F-A-03: schema_version enforcement ----------------------------------
+
+
+def test_load_rejects_unsupported_schema_version(tmp_path: Path):
+    target_dir = tmp_path / "real"
+    target_dir.mkdir()
+    f = tmp_path / "mounts.json"
+    f.write_text(json.dumps({
+        "schema_version": 2,
+        "mounts": {"x": {"host_path": str(target_dir), "default_mode": "ro"}},
+    }))
+    with pytest.raises(MountRegistryError, match="schema_version"):
+        load_mounts(f)

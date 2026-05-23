@@ -27,15 +27,25 @@ caps the maximum permission: a mount registered "ro" cannot be requested
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from whizzard.config import CONFIG_DIR
+from whizzard.config import CONFIG_DIR, validate_schema_version
 
 MountMode = Literal["ro", "rw"]
 MOUNTS_FILE = CONFIG_DIR / "mounts.json"
 CONTAINER_MOUNT_ROOT = "/mounts"
+
+# Mount names flow directly into the container path (/mounts/<name>) and the
+# docker `-v host:container:mode` argument. The colon separator and the
+# container-path resolver make path-shaped names dangerous: a name like
+# "../etc" would resolve to /etc inside the cell, weakening the D-11
+# "mount list IS the permission model" invariant. The regex below allows
+# alphanumerics, dash, and underscore — what `docker run -v` reliably
+# accepts as a directory segment.
+_MOUNT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -72,13 +82,32 @@ _DEFAULT_MOUNTS: dict[str, dict[str, str]] = {
 }
 
 
+def _validate_mount_name(name: str) -> None:
+    """Reject names that would corrupt the container path or `-v` argument.
+
+    F-A-02: names flow into `/mounts/<name>` and the docker volume spec
+    unsanitized. A name with `/`, `..`, `:` or whitespace would either
+    escape the container mount root or break the colon-separated docker
+    argument. The regex below is intentionally narrow.
+    """
+    if not isinstance(name, str) or not _MOUNT_NAME_RE.fullmatch(name):
+        raise MountRegistryError(
+            f"invalid mount name {name!r}: must match "
+            f"^[A-Za-z0-9][A-Za-z0-9_-]{{0,63}}$ "
+            "(alphanumerics, dash, underscore; ≤64 chars)"
+        )
+
+
 def default_mounts() -> dict[str, Mount]:
     """Return a fresh dict of bundled-default mounts."""
     registry: dict[str, Mount] = {}
     for name, spec in _DEFAULT_MOUNTS.items():
         registry[name] = Mount(
             name=name,
-            host_path=Path(spec["host_path"]).expanduser(),
+            # F-A-04: resolve() so default and user-loaded Mounts share the
+            # same canonicalization. Symlinks are followed, and `==` on two
+            # Mounts pointing at the same logical target works.
+            host_path=Path(spec["host_path"]).expanduser().resolve(),
             default_mode=spec["default_mode"],  # type: ignore[arg-type]
             description=spec["description"],
         )
@@ -104,12 +133,20 @@ def load_mounts(path: Path | None = None) -> dict[str, Mount]:
     except json.JSONDecodeError as e:
         raise MountRegistryError(f"invalid {target}: {e}") from e
 
+    # F-A-06: assert the top-level shape before reaching .get(), so a
+    # non-dict JSON file produces a clean MountRegistryError instead of
+    # AttributeError on `data.get`.
+    if not isinstance(data, dict):
+        raise MountRegistryError(f"{target}: top-level must be an object")
+    validate_schema_version(data, target, MountRegistryError)
+
     mounts_data = data.get("mounts", {})
     if not isinstance(mounts_data, dict):
         raise MountRegistryError(f"{target}: 'mounts' must be an object")
 
     registry: dict[str, Mount] = {}
     for name, spec in mounts_data.items():
+        _validate_mount_name(name)
         if not isinstance(spec, dict):
             raise MountRegistryError(f"mount {name!r}: spec must be an object")
         host_path_raw = spec.get("host_path", "")

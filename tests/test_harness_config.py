@@ -236,3 +236,16 @@ def test_load_rejects_empty_secret_name(tmp_path: Path):
     })
     with pytest.raises(HarnessConfigError, match="not a valid env-var name"):
         load_harnesses(f)
+
+
+# --- F-A-03: schema_version enforcement ----------------------------------
+
+
+def test_load_rejects_unsupported_schema_version(tmp_path: Path):
+    f = tmp_path / "harnesses.json"
+    f.write_text(json.dumps({
+        "schema_version": 2,
+        "harnesses": {"generic": {"type": "shell", "start_command": "/bin/bash"}},
+    }))
+    with pytest.raises(HarnessConfigError, match="schema_version"):
+        load_harnesses(f)

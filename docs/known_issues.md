@@ -114,6 +114,17 @@ v1.0 / Stage 20 pass, may want to make these configurable per-profile.
 *Source:* D-166 / `whizzard/enforcement.py`.
 *Disposition:* defer to v1.0 / OSS-launch.
 
+### Config loaders re-read JSON on every call; no caching
+`config.load_profiles()`, `harness_config.load_harnesses()`,
+`preset_config.load_presets()`, and `mounts.load_mounts()` re-read and
+re-validate the JSON file every time they're invoked. A single CLI run
+often calls them several times (completion, launch, snapshot writer). Not
+a correctness bug today, but the "this file is read once per session"
+mental model is wrong, and a malformed-after-launch config could raise
+mid-session in unexpected places.
+*Source:* catch-up review 2026-05-23 finding F-A-08.
+*Disposition:* defer to v1.0 / OSS-launch.
+
 ### Integration test fixture: image-staleness detection
 `whizzard_hermes_image` fixture currently checks only that the image exists,
 not that it's current relative to `Dockerfile.hermes`. A stale image (built

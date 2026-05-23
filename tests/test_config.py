@@ -248,3 +248,30 @@ def test_idle_timeout_rejects_non_positive(tmp_path: Path):
     })
     with pytest.raises(ProfileConfigError, match="positive"):
         load_profiles(f)
+
+
+# --- F-A-03: schema_version enforcement ----------------------------------
+
+
+def test_load_rejects_unsupported_schema_version(tmp_path: Path):
+    f = tmp_path / "p.json"
+    f.write_text(json.dumps({
+        "schema_version": 2,
+        "profiles": {
+            "x": {"network_enabled": True, "duration_seconds": 60},
+        },
+    }))
+    with pytest.raises(ProfileConfigError, match="schema_version"):
+        load_profiles(f)
+
+
+def test_load_accepts_missing_schema_version(tmp_path: Path):
+    """Missing schema_version is treated as v1 — older configs keep working."""
+    f = tmp_path / "p.json"
+    f.write_text(json.dumps({
+        "profiles": {
+            "x": {"network_enabled": True, "duration_seconds": 60},
+        },
+    }))
+    profiles = load_profiles(f)
+    assert "x" in profiles

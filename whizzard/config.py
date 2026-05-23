@@ -50,6 +50,50 @@ class ProfileConfigError(Exception):
     pass
 
 
+SUPPORTED_SCHEMA_VERSION = 1
+
+
+def validate_schema_version(
+    data: dict, source: Path, error_cls: type[Exception]
+) -> None:
+    """Reject configs that declare an unsupported schema_version.
+
+    Missing field is treated as v1 (the only version that has ever shipped),
+    so older user configs keep working. A present-but-wrong value (e.g. a
+    future v2 read by old code) raises with a clear message.
+    """
+    if "schema_version" not in data:
+        return
+    version = data["schema_version"]
+    if version != SUPPORTED_SCHEMA_VERSION:
+        raise error_cls(
+            f"{source}: unsupported schema_version {version!r} "
+            f"(this Whizzard build supports schema_version {SUPPORTED_SCHEMA_VERSION})"
+        )
+
+
+def validate_positive_int_or_none(
+    value: object,
+    *,
+    field_label: str,
+    error_cls: type[Exception],
+) -> None:
+    """Enforce 'positive int OR None' on a config value.
+
+    Used for ``duration_seconds`` and ``idle_timeout_seconds`` in both the
+    profile loader and the preset loader so the two surfaces share one rule
+    (per F-A-01). ``bool`` is rejected because Python booleans are ints and
+    silently slip through naive isinstance checks. ``None`` means
+    "unlimited" / "no timeout" and is allowed.
+    """
+    if value is None:
+        return
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise error_cls(f"{field_label} must be an integer or null")
+    if value <= 0:
+        raise error_cls(f"{field_label} must be positive (got {value})")
+
+
 # Bundled defaults. Used when the user has no profiles.json or as the
 # template that ships in config/profiles.json.example.
 _DEFAULT_PROFILES: dict[str, Profile] = {
@@ -114,15 +158,11 @@ def _parse_profile(name: str, spec: dict) -> Profile:
             f"profile {name!r}: missing duration_seconds (use null for unlimited)"
         )
     duration_seconds = spec["duration_seconds"]
-    if duration_seconds is not None:
-        if not isinstance(duration_seconds, int) or isinstance(duration_seconds, bool):
-            raise ProfileConfigError(
-                f"profile {name!r}: duration_seconds must be an integer or null"
-            )
-        if duration_seconds <= 0:
-            raise ProfileConfigError(
-                f"profile {name!r}: duration_seconds must be positive (got {duration_seconds})"
-            )
+    validate_positive_int_or_none(
+        duration_seconds,
+        field_label=f"profile {name!r}: duration_seconds",
+        error_cls=ProfileConfigError,
+    )
 
     allow_broad_mount = spec.get("allow_broad_mount", False)
     if not isinstance(allow_broad_mount, bool):
@@ -138,16 +178,11 @@ def _parse_profile(name: str, spec: dict) -> Profile:
     # timeout. Positive integer → kill the session after that many seconds
     # with no agent activity.
     idle_timeout_seconds = spec.get("idle_timeout_seconds")
-    if idle_timeout_seconds is not None:
-        if not isinstance(idle_timeout_seconds, int) or isinstance(idle_timeout_seconds, bool):
-            raise ProfileConfigError(
-                f"profile {name!r}: idle_timeout_seconds must be an integer or null"
-            )
-        if idle_timeout_seconds <= 0:
-            raise ProfileConfigError(
-                f"profile {name!r}: idle_timeout_seconds must be positive "
-                f"(got {idle_timeout_seconds})"
-            )
+    validate_positive_int_or_none(
+        idle_timeout_seconds,
+        field_label=f"profile {name!r}: idle_timeout_seconds",
+        error_cls=ProfileConfigError,
+    )
 
     return Profile(
         name=name,
@@ -175,6 +210,7 @@ def load_profiles(path: Path | None = None) -> dict[str, Profile]:
 
     if not isinstance(data, dict):
         raise ProfileConfigError(f"{target}: top-level must be an object")
+    validate_schema_version(data, target, ProfileConfigError)
     profiles_data = data.get("profiles", {})
     if not isinstance(profiles_data, dict):
         raise ProfileConfigError(f"{target}: 'profiles' must be an object")

@@ -117,6 +117,44 @@ def test_load_rejects_non_int_duration(tmp_path: Path):
         load_presets(f)
 
 
+# F-A-01: preset overrides previously slipped past validation that the
+# profile loader enforced. These four tests cover the gap.
+
+
+def test_load_rejects_bool_duration(tmp_path: Path):
+    """bool is an int subclass; must be rejected (not silently coerced to 1)."""
+    f = _write_presets_json(tmp_path / "presets.json", {
+        "bad": {"profile": "default", "harness": "generic", "duration_seconds": True},
+    })
+    with pytest.raises(PresetConfigError, match="duration_seconds"):
+        load_presets(f)
+
+
+def test_load_rejects_zero_duration(tmp_path: Path):
+    """0 would mean 'immediate kill on launch' — clearly wrong."""
+    f = _write_presets_json(tmp_path / "presets.json", {
+        "bad": {"profile": "default", "harness": "generic", "duration_seconds": 0},
+    })
+    with pytest.raises(PresetConfigError, match="positive"):
+        load_presets(f)
+
+
+def test_load_rejects_negative_duration(tmp_path: Path):
+    f = _write_presets_json(tmp_path / "presets.json", {
+        "bad": {"profile": "default", "harness": "generic", "duration_seconds": -60},
+    })
+    with pytest.raises(PresetConfigError, match="positive"):
+        load_presets(f)
+
+
+def test_load_rejects_zero_idle_timeout(tmp_path: Path):
+    f = _write_presets_json(tmp_path / "presets.json", {
+        "bad": {"profile": "default", "harness": "generic", "idle_timeout_seconds": 0},
+    })
+    with pytest.raises(PresetConfigError, match="positive"):
+        load_presets(f)
+
+
 def test_load_rejects_non_bool_allow_broad_mount(tmp_path: Path):
     f = _write_presets_json(tmp_path / "presets.json", {
         "bad": {"profile": "default", "harness": "generic", "allow_broad_mount": "yes"},
@@ -130,6 +168,17 @@ def test_load_rejects_invalid_json(tmp_path: Path):
     bad.write_text("this is not json {{{")
     with pytest.raises(PresetConfigError):
         load_presets(bad)
+
+
+def test_load_rejects_unsupported_schema_version(tmp_path: Path):
+    """F-A-03: presets file with unsupported schema_version must raise."""
+    f = tmp_path / "presets.json"
+    f.write_text(json.dumps({
+        "schema_version": 2,
+        "presets": {"x": {"profile": "default", "harness": "generic"}},
+    }))
+    with pytest.raises(PresetConfigError, match="schema_version"):
+        load_presets(f)
 
 
 # --- omit-to-inherit semantics -------------------------------------------

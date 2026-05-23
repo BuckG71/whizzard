@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from whizzard.config import CONFIG_DIR
+from whizzard.config import CONFIG_DIR, validate_schema_version
 
 HARNESSES_FILE = CONFIG_DIR / "harnesses.json"
 
@@ -123,6 +123,7 @@ def load_harnesses(path: Path | None = None) -> dict[str, dict]:
 
     if not isinstance(data, dict):
         raise HarnessConfigError(f"{target}: top-level must be an object")
+    validate_schema_version(data, target, HarnessConfigError)
 
     harnesses = data.get("harnesses", {})
     if not isinstance(harnesses, dict):

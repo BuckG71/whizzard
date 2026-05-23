@@ -28,11 +28,18 @@ Schema for ~/.whizzard/config/presets.json::
 
 Field-override semantics: top-level preset fields shadow the profile when
 present. Omit the field entirely to inherit from the profile. Include it
-(even as ``null`` for ``duration_seconds``) to override.
+to override. ``null`` is a valid override for the two int-or-null fields
+(``duration_seconds`` → "unlimited", ``idle_timeout_seconds`` → "no idle
+timeout"); ``allow_broad_mount`` is bool-only and rejects ``null`` because
+its underlying domain has no third value.
 
-Validation timing: strict at load. ``load_presets`` errors if a preset
-references a missing profile / harness / mount, or declares a platform
-not in the harness's ceiling.
+Validation timing: ``load_presets`` does shape validation only — types,
+required fields, value ranges. Cross-reference validation (does this
+profile / harness / mount exist? is this platform in the harness's
+ceiling?) lives in :func:`validate_references` and must be called
+explicitly after ``load_presets`` by the CLI command. The split exists
+because shape validation needs only the preset file, but cross-reference
+validation needs profiles + harnesses + mounts to all be loadable too.
 
 Bundled defaults (``_DEFAULT_PRESETS``) reflect the MVP user's daily-driver
 setup per D-101. OSS-launch will revisit per the same pattern as D-157.
@@ -45,7 +52,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from whizzard.config import CONFIG_DIR
+from whizzard.config import (
+    CONFIG_DIR,
+    validate_positive_int_or_none,
+    validate_schema_version,
+)
 
 PRESETS_FILE = CONFIG_DIR / "presets.json"
 
@@ -128,16 +139,23 @@ def _parse_preset(name: str, spec: dict) -> Preset:
             f"preset {name!r}: 'platforms' must be a list of strings"
         )
 
-    duration = spec.get("duration_seconds", 0)
-    if "duration_seconds" in spec and duration is not None and not isinstance(duration, int):
-        raise PresetConfigError(
-            f"preset {name!r}: duration_seconds must be an integer or null"
+    # F-A-01: presets must enforce the same validation as profiles for the
+    # int-or-null fields. The two surfaces previously diverged — preset
+    # accepted bool (since bool is an int subclass) and non-positive values
+    # that profiles rejected, letting "duration_seconds: 0" or "true" reach
+    # enforcement.
+    if "duration_seconds" in spec:
+        validate_positive_int_or_none(
+            spec["duration_seconds"],
+            field_label=f"preset {name!r}: duration_seconds",
+            error_cls=PresetConfigError,
         )
 
-    idle = spec.get("idle_timeout_seconds", 0)
-    if "idle_timeout_seconds" in spec and idle is not None and not isinstance(idle, int):
-        raise PresetConfigError(
-            f"preset {name!r}: idle_timeout_seconds must be an integer or null"
+    if "idle_timeout_seconds" in spec:
+        validate_positive_int_or_none(
+            spec["idle_timeout_seconds"],
+            field_label=f"preset {name!r}: idle_timeout_seconds",
+            error_cls=PresetConfigError,
         )
 
     allow_broad = spec.get("allow_broad_mount")
@@ -179,6 +197,7 @@ def load_presets(path: Path | None = None) -> dict[str, Preset]:
 
     if not isinstance(data, dict):
         raise PresetConfigError(f"{target}: top-level must be an object")
+    validate_schema_version(data, target, PresetConfigError)
     presets_data = data.get("presets", {})
     if not isinstance(presets_data, dict):
         raise PresetConfigError(f"{target}: 'presets' must be an object")
