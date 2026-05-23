@@ -360,10 +360,14 @@ time-remaining. 49 new tests; 456 unit tests passing; 87% coverage.
 
 Builds on the duration tracking present from Stage 5.
 
-### Stage 15.5 — Hot-Restart of Idle-Ended Sessions
+### Stage 15.5 — Hot-Restart of Idle-Ended Sessions [SHIPPED 2026-05-22]
 
 Goal: an idle-ended session resumes on the next command instead of requiring
-a manual fresh launch. Follow-on to Stage 15 (conversation 2026-05-22).
+a manual fresh launch. Follow-on to Stage 15. Verb name is `whiz wake` (chosen
+over `resume` to avoid colliding with Stage 10's `whiz r` preset-launch alias;
+short and matches the wake-from-idle semantic). Implemented via `whizzard/wake.py`
+(library) + `whizzard/cli/wake.py` (CLI surface). Duration cap on wake resets
+to the profile's default rather than inheriting the elapsed remainder (D-170).
 
 When a session ends with `expiry_reason == "idle"` it becomes eligible for
 hot-restart: a `whiz resume <session-id>` verb (and bare `whiz r` resuming
