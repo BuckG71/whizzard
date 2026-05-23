@@ -30,6 +30,8 @@ Practical rules:
 
 ## When to reach for HTML — concrete cases
 
+Use for any chat response that is over 150 words to minimize the need for scrolling through small chat window on Claude mobile app. 
+
 Deliverables that land much better as a self-contained HTML file than as
 Markdown or a chat wall (examples from thariqs.github.io/html-effectiveness):
 
