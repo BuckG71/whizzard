@@ -20,6 +20,8 @@ from whizzard.adapters.base import (
 from whizzard.adapters.generic import GenericShellAdapter
 from whizzard.adapters.hermes import (
     HermesAdapter,
+    HermesAuthJsonPresentError,
+    HermesHomeRequiredError,
     HermesProfileCreated,
     HermesProfileExistsError,
     HermesProfileNameError,
@@ -37,6 +39,8 @@ __all__ = [
     "WrapUpStatus",
     "GenericShellAdapter",
     "HermesAdapter",
+    "HermesAuthJsonPresentError",
+    "HermesHomeRequiredError",
     "HermesProfileCreated",
     "HermesProfileExistsError",
     "HermesProfileNameError",

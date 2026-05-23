@@ -117,6 +117,15 @@ def run_cmd(
                  "registered mounts. Requires a profile that permits this.",
         ),
     ] = False,
+    allow_ephemeral: Annotated[
+        bool,
+        typer.Option(
+            "--allow-ephemeral",
+            help="Opt in to launching an agent harness without a persistent "
+                 "HERMES_HOME — memories, skills, and gateway state are "
+                 "ephemeral with the container. Almost never what you want.",
+        ),
+    ] = False,
     harness: Annotated[
         str,
         typer.Option(
@@ -133,6 +142,7 @@ def run_cmd(
         dry_run=dry_run,
         allow_broad_mount=allow_broad_mount,
         harness=harness,
+        allow_ephemeral=allow_ephemeral,
     )
 
 
@@ -250,6 +260,13 @@ def r_cmd(
             help="Run-flag path: opt in to broad mounts.",
         ),
     ] = False,
+    allow_ephemeral: Annotated[
+        bool,
+        typer.Option(
+            "--allow-ephemeral",
+            help="Run-flag path: opt in to ephemeral agent harness.",
+        ),
+    ] = False,
     harness: Annotated[
         str | None,
         typer.Option("--harness", help="Run-flag path: harness name."),
@@ -263,7 +280,9 @@ def r_cmd(
     - `whiz r --profile X ...` → equivalent to `whiz run --profile X ...`
     - Mixing a positional preset with run-style flags is an error.
     """
-    run_flag_present = bool(profile or mount or harness or allow_broad_mount)
+    run_flag_present = bool(
+        profile or mount or harness or allow_broad_mount or allow_ephemeral
+    )
 
     if preset_name is not None and run_flag_present:
         console.print(
@@ -281,6 +300,7 @@ def r_cmd(
             dry_run=dry_run,
             allow_broad_mount=allow_broad_mount,
             harness=harness or "generic",
+            allow_ephemeral=allow_ephemeral,
         )
         return
 

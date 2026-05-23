@@ -5,15 +5,18 @@ Stage 8 design decisions (D-86 through D-90). Per D-153, harness-specific
 identifiers — config.yaml, gateway.lock, HERMES_HOME, platform tokens — live
 inside this module and the `whiz hermes` subcommand surface. Core stays neutral.
 
-Build-plan status: Actions 1 (skeleton) and 2 (active_capabilities Protocol)
-are done. Action 3 (this commit) implements container_env() with OneCLI-mediated
-credential injection. The gateway.lock pre-check and wrap_up() via
-`docker exec /quit` arrive in subsequent build-plan milestones.
+The adapter owns:
+  - Profile creation (D-86) with the D-80 auth.json exclusion list.
+  - Credential delivery via the shared `_credentials` utility (D-91, D-134).
+  - HERMES_HOME mount (D-79, D-56 uid_parity).
+  - Mount-time auth.json check (D-80 enforcement at launch, not just at
+    profile creation — closes the Chunk C F-C-01 finding).
+  - `gateway.lock` preflight (D-87) and graceful `wrap_up` via `docker stop`
+    (D-29 / D-30 SIGTERM contract, D-88 supersedes the original `/quit`).
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import shlex
@@ -27,7 +30,6 @@ from whizzard.adapters._credentials import (
 )
 from whizzard.adapters.base import (
     ContainerMount,
-    HarnessAdapter,
     PreflightResult,
     WrapUpResult,
     WrapUpStatus,
@@ -69,12 +71,16 @@ _IN_CELL_HERMES_HOME = "/home/whizzard/.hermes"
 #   - .env: defense-in-depth, additional secret material
 #   - *.db, gateway.*, sessions/, logs/: per-instance runtime state
 #   - .git, hermes-agent: irrelevant install/repo metadata
+#
+# F-C-02: matched case-insensitively (lowercased at lookup) because macOS's
+# default APFS is case-insensitive — a source file named `Auth.json` would
+# slip past an exact-match check and get copied verbatim.
 _CLONE_EXCLUDE_NAMES: set[str] = {
     "auth.json",
     "auth.lock",
     ".env",
-    ".DS_Store",
-    "Thumbs.db",
+    ".ds_store",
+    "thumbs.db",
     "gateway.lock",
     "gateway.pid",
     "gateway_state.json",
@@ -87,6 +93,14 @@ _CLONE_EXCLUDE_NAMES: set[str] = {
     "channel_directory.json",
     "discord_threads.json",
 }
+
+# Substrings matched case-insensitively against any file name at any depth
+# inside a candidate HERMES_HOME directory. Any match → refuse to mount
+# (F-C-01). Distinct from `_CLONE_EXCLUDE_NAMES` because (a) it must catch
+# the file regardless of profile-creation lineage and (b) `auth.lock` is
+# included so a half-written auth.json (file briefly absent, lock present)
+# also fails closed.
+_MOUNT_REFUSE_NAMES: frozenset[str] = frozenset({"auth.json", "auth.lock"})
 _CLONE_EXCLUDE_SUFFIXES: tuple[str, ...] = (
     ".db",
     ".db-shm",
@@ -125,6 +139,27 @@ class HermesProfileNameError(Exception):
     """Invalid or reserved profile name."""
 
 
+class HermesAuthJsonPresentError(Exception):
+    """auth.json (or auth.lock) found inside the candidate HERMES_HOME.
+
+    Raised at mount time, not just profile-creation time, so that any path
+    leading to an auth-bearing profile (manual copy, cell write-back, user
+    pointing hermes_home at the real ~/.hermes) fails closed. D-80 — the
+    project's #1 security invariant — must never be bypassable (F-C-01).
+    """
+
+
+class HermesHomeRequiredError(Exception):
+    """hermes_home not configured for an agent-type harness, and the user
+    has not opted into ephemeral state via --allow-ephemeral.
+
+    F-C-04: agent harness without persistent state is almost never what
+    the user wants — memories, skills, gateway state all disappear on
+    container exit. Default is fail-loud; --allow-ephemeral is the
+    documented escape hatch for the rare opposite case.
+    """
+
+
 @dataclass(frozen=True)
 class HermesProfileCreated:
     path: Path
@@ -144,12 +179,57 @@ def _hermes_profile_path(name: str, parent: Path | None = None) -> Path:
 
 
 def _clone_ignore(src: str, names: list[str]) -> list[str]:
-    """shutil.copytree `ignore=` callable — names in `src` to skip."""
+    """shutil.copytree `ignore=` callable — names in `src` to skip.
+
+    F-C-02: name matches are case-insensitive so macOS APFS variants
+    (`Auth.json`, `AUTH.JSON`) are also excluded.
+    """
     skipped: list[str] = []
     for n in names:
-        if n in _CLONE_EXCLUDE_NAMES or n in _CLONE_EXCLUDE_DIRS or n.endswith(_CLONE_EXCLUDE_SUFFIXES):
+        lower = n.lower()
+        if (
+            lower in _CLONE_EXCLUDE_NAMES
+            or lower in _CLONE_EXCLUDE_DIRS
+            or lower.endswith(_CLONE_EXCLUDE_SUFFIXES)
+        ):
             skipped.append(n)
     return skipped
+
+
+def _check_no_auth_json(profile_dir: Path) -> None:
+    """Walk profile_dir; raise HermesAuthJsonPresentError on auth.json/lock.
+
+    Closes F-C-01. Called from `container_mounts` before declaring the
+    HERMES_HOME mount, so every launch path (manual copy, write-back from
+    cell, user pointing at real ~/.hermes, fresh dir seeded outside the
+    profile-create flow) fails closed if a credential file is present.
+
+    Matches case-insensitively and at any depth — Hermes nests its
+    configuration so the file could legitimately live under `default/` or
+    a numeric subdir. We refuse them all.
+    """
+    if not profile_dir.exists():
+        return
+    for entry in profile_dir.rglob("*"):
+        # rglob yields both files and dirs; skip dirs to avoid spurious
+        # matches on directories named like a credential file (none exist
+        # today, but cheap insurance).
+        try:
+            if not entry.is_file():
+                continue
+        except OSError:
+            # Broken symlinks etc. — treat as not-a-file, skip.
+            continue
+        if entry.name.lower() in _MOUNT_REFUSE_NAMES:
+            raise HermesAuthJsonPresentError(
+                f"Refusing to mount {profile_dir} into the cell: found "
+                f"{entry.relative_to(profile_dir)} (D-80 forbids mounting "
+                "auth.json / auth.lock — credentials must reach the cell "
+                "via env vars per D-134, never via the mounted profile). "
+                "Remove the file from the host profile, or point "
+                "hermes_home at a profile created via "
+                "`whiz hermes profile create`."
+            )
 
 
 def create_profile(
@@ -208,7 +288,12 @@ def create_profile(
                 f"(expected for --clone-from {clone_from!r})"
             )
 
-    shutil.copytree(source, target, ignore=_clone_ignore)
+    # F-C-03: symlinks=True preserves symlinks in the destination instead of
+    # following them. The destination then carries broken symlinks (the host
+    # paths they point at are not visible inside the cell), which surfaces
+    # as a visible launch failure — rather than silently copying credential
+    # content into the new profile under a non-excluded symlink name.
+    shutil.copytree(source, target, ignore=_clone_ignore, symlinks=True)
     return HermesProfileCreated(path=target, source=source)
 
 
@@ -275,6 +360,11 @@ class HermesAdapter:
     # so `active_capabilities` can surface which platforms came via OneCLI
     # vs the host-env fallback (Stage 12, D-134 visibility piece).
     _credential_sources: dict[str, str] = field(default_factory=dict)
+    # F-C-04 escape hatch. CLI sets this True when the user passed
+    # `--allow-ephemeral`, opting into running an agent harness without a
+    # persistent HERMES_HOME (memories/skills/gateway state ephemeral with
+    # the container). Default fails loud — almost never what the user wants.
+    allow_ephemeral: bool = False
 
     def start_command(self) -> list[str]:
         cmd = self.config.get("start_command")
@@ -284,33 +374,51 @@ class HermesAdapter:
             return list(cmd)
         return shlex.split(cmd)
 
-    def container_env(self) -> dict[str, str]:
-        # Platforms come from `harnesses.json["platforms"]` (D-89 amended).
-        # Each platform's credential is fetched via the shared utility
-        # (Stage 12): OneCLI first, host env as fallback per D-134's
-        # "OneCLI not installed" failure-mode note.
+    def _populate_credential_sources(self) -> dict[str, str]:
+        """Fetch all platform + secret credentials and record their source.
+
+        F-C-07: `_credential_sources` used to be a side effect of
+        `container_env`, making `active_capabilities()` order-dependent —
+        a pre-launch capability banner would silently drop the D-134
+        host-env-fallback warning. Now both methods call this helper, and
+        the first call populates the cache (idempotent within an adapter
+        instance because secret fetching is deterministic).
+        """
+        if self._credential_sources:
+            return self._credential_sources
         env: dict[str, str] = {}
-        self._credential_sources.clear()
         for platform in self.config.get("platforms", []) or []:
             var = _env_var_for_platform(platform)
             result = fetch_secret(var)
             env[var] = result.value
             self._credential_sources[platform] = result.source
-        # secrets (D-162): generic env-var-name list for LLM-provider keys,
-        # additional bot tokens, and any other long-lived credentials the
-        # harness needs inside the cell. Same delivery as platforms (OneCLI
-        # first, env-var fallback). Plaintext values never live in the
-        # harness config; only names. Auth.json mounting remains prohibited
-        # by D-80.
         for secret_name in self.config.get("secrets", []) or []:
             result = fetch_secret(secret_name)
             env[secret_name] = result.value
             self._credential_sources[secret_name] = result.source
+        # Stash the resolved env on the instance so container_env can read
+        # it without re-fetching. Not part of the public Protocol.
+        self._cached_credential_env = env
+        return self._credential_sources
+
+    def container_env(self) -> dict[str, str]:
+        hermes_home = _resolve_hermes_home(self.config)
+        # F-C-04: the hermes_home-required check lives in preflight(), so
+        # by the time we get here either hermes_home is set OR
+        # --allow-ephemeral was opted into. We don't re-check here because
+        # _perform_launch enforces preflight before any adapter env work.
+        # Platforms come from `harnesses.json["platforms"]` (D-89 amended).
+        # Each platform's credential is fetched via the shared utility
+        # (Stage 12): OneCLI first, host env as fallback per D-134's
+        # "OneCLI not installed" failure-mode note.
+        self._credential_sources.clear()
+        self._populate_credential_sources()
+        env = dict(getattr(self, "_cached_credential_env", {}))
         # HERMES_HOME points at the in-cell mount target where the host
         # profile is mounted (Stage 8 M6, D-79). Only set when hermes_home
-        # is configured; otherwise leave Hermes to discover its default
-        # (ephemeral tmpfs home) — a misconfiguration the user should fix.
-        if _resolve_hermes_home(self.config) is not None:
+        # is configured; --allow-ephemeral leaves Hermes to discover its
+        # default (ephemeral tmpfs home).
+        if hermes_home is not None:
             env["HERMES_HOME"] = _IN_CELL_HERMES_HOME
         extra = self.config.get("env", {}) or {}
         for k, v in extra.items():
@@ -358,6 +466,10 @@ class HermesAdapter:
 
         # docker stop returned 0; inspect the container's actual exit code
         # to distinguish a clean SIGTERM exit from a SIGKILL forced after grace.
+        # F-C-05: shorter timeout so the inspect probe doesn't materially
+        # extend the documented grace window (was 5s; now 2s — plenty for a
+        # local-daemon metadata read, much smaller tail when Docker Desktop
+        # is under load).
         try:
             inspect_result = subprocess.run(
                 [
@@ -367,7 +479,7 @@ class HermesAdapter:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=2,
                 check=False,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -407,10 +519,15 @@ class HermesAdapter:
 
     def active_capabilities(self) -> list[str]:
         # Surfaces what the cell is about to do: declared platforms,
-        # credential-source breakdown when `container_env` has run, and
-        # Whiz MCP server availability. Approval-mode warning per D-90 is
-        # added by a later build step (it requires reading `approvals.mode`
-        # from `config.yaml`).
+        # credential-source breakdown, and Whiz MCP server availability.
+        # Approval-mode warning per D-90 is added by a later build step
+        # (it requires reading `approvals.mode` from `config.yaml`).
+        #
+        # F-C-07: this method now populates `_credential_sources` itself
+        # if it hasn't been computed yet, so a pre-launch banner caller
+        # doesn't silently miss the D-134 host-env-fallback warning. The
+        # populate helper is idempotent — `container_env` reuses the same
+        # cache on its turn.
         caps: list[str] = []
         platforms = self.config.get("platforms", []) or []
         if platforms:
@@ -420,6 +537,7 @@ class HermesAdapter:
             "whiz_emit_event) + request tools (whiz_request_mount, "
             "whiz_request_extend) — requests need host approval per D-165"
         )
+        self._populate_credential_sources()
         if self._credential_sources:
             # Covers both platforms (D-89) and secrets (D-162) — same dict.
             host_env_creds = [
@@ -454,11 +572,18 @@ class HermesAdapter:
         # cell's Hermes process has no profile, so memories/skills/state
         # would be ephemeral with the container.
         #
-        # Auto-create the host dir if missing. The bundled `hermes-cell`
-        # harness declares `~/.hermes-whizzard-cell`; on the first launch
-        # that path won't exist. Requiring a separate `init` verb is
-        # friction the MVP doesn't need — the dir is empty until Hermes
-        # populates it.
+        # F-C-04: agent-type Hermes without hermes_home raises in
+        # container_env(); by the time we get here either hermes_home is
+        # set OR --allow-ephemeral was opted into. Empty list = ephemeral.
+        #
+        # F-C-01: before declaring the mount, walk the profile and refuse
+        # if auth.json / auth.lock is present anywhere. D-80 says these
+        # never enter the cell — and the only enforcement before this fix
+        # lived in `create_profile`'s clone-ignore filter, which doesn't
+        # cover (a) user pointing hermes_home at the real ~/.hermes,
+        # (b) manual copy into the cell profile, (c) the cell's Hermes
+        # writing an auth.json back via the rw mount, (d) seeding the dir
+        # outside `whiz hermes profile create`. The walk catches all four.
         #
         # uid_parity=True per D-56: gateway.lock and state writes need to
         # land with the host UID on raw Linux. On macOS Docker Desktop
@@ -468,6 +593,7 @@ class HermesAdapter:
         if hermes_home is None:
             return []
         hermes_home.mkdir(parents=True, exist_ok=True)
+        _check_no_auth_json(hermes_home)
         return [
             ContainerMount(
                 host_path=hermes_home,
@@ -480,11 +606,41 @@ class HermesAdapter:
     def preflight(self) -> PreflightResult:
         # D-87: refuse to launch when a live gateway already holds the lock
         # on this profile. Stale locks (pid not alive) are cleared and the
-        # launch proceeds. Missing HERMES_HOME → no lock to check; let
-        # downstream code surface that configuration gap if it matters.
+        # launch proceeds.
+        #
+        # F-C-04 / F-C-10: preflight is also where the hermes_home-required
+        # check lives (fail loud for agent harness with no persistence)
+        # and where the D-80 auth.json mount-time check (F-C-01) is
+        # surfaced — both bubble through PreflightResult.reason so the
+        # CLI can print a single clean refusal.
         hermes_home = _resolve_hermes_home(self.config)
         if hermes_home is None:
-            return PreflightResult(ok=True)
+            if self.allow_ephemeral:
+                return PreflightResult(ok=True)
+            return PreflightResult(
+                ok=False,
+                reason=(
+                    "Hermes harness has no hermes_home configured. Without "
+                    "it, memories, skills, and gateway state are ephemeral "
+                    "with the container — almost never what you want.\n\n"
+                    "Options:\n"
+                    "  • Add `--allow-ephemeral` to this launch (opt-in "
+                    "escape hatch for the rare opposite case).\n"
+                    "  • Run `whiz hermes profile create <name>` to make a "
+                    "Hermes profile, then set `hermes_home` to its path in "
+                    "`~/.whizzard/config/harnesses.json`.\n"
+                    "  • Edit `~/.whizzard/config/harnesses.json` and set "
+                    "`hermes_home` directly."
+                ),
+            )
+
+        # F-C-01: D-80 mount-time auth.json check. Walks the candidate
+        # HERMES_HOME for any case-variant of auth.json / auth.lock and
+        # refuses launch if any is found. Failure-closed by design.
+        try:
+            _check_no_auth_json(hermes_home)
+        except HermesAuthJsonPresentError as e:
+            return PreflightResult(ok=False, reason=str(e))
 
         lock = _read_gateway_lock(hermes_home)
         if lock is None:
@@ -506,13 +662,27 @@ class HermesAdapter:
             )
 
         # Stale lock — best-effort cleanup so we don't re-announce next launch.
-        with contextlib.suppress(OSError):
-            (hermes_home / _GATEWAY_LOCK_FILENAME).unlink()
-        return PreflightResult(
-            ok=True,
-            cleanup_note=f"Cleared stale gateway.lock (pid {pid} no longer alive).",
-        )
+        # F-C-08: if the unlink fails (read-only fs, owner mismatch on the
+        # lock file, etc.), the message must reflect reality — saying
+        # "cleared" when the lock is still there mis-leads the next launch
+        # into the same probe → same misleading message cycle.
+        lock_path = hermes_home / _GATEWAY_LOCK_FILENAME
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            # Race: lock disappeared between read and unlink. Fine.
+            cleanup_note = f"Cleared stale gateway.lock (pid {pid} no longer alive)."
+        except OSError as e:
+            cleanup_note = (
+                f"Stale gateway.lock (pid {pid} no longer alive) but could "
+                f"not unlink {lock_path}: {e}. The next launch will re-probe; "
+                f"resolve manually if this persists."
+            )
+        else:
+            cleanup_note = f"Cleared stale gateway.lock (pid {pid} no longer alive)."
+        return PreflightResult(ok=True, cleanup_note=cleanup_note)
 
 
-# Sanity check the Protocol contract at import time.
-_: HarnessAdapter = HermesAdapter()
+# Protocol-conformance check is enforced statically by mypy via the
+# HarnessAdapter signature declared on `build_adapter` and the registry —
+# no runtime allocation needed (F-C-09).

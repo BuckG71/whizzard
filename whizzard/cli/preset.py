@@ -195,6 +195,14 @@ def preset_launch_cmd(
         str,
         typer.Option("--image", help="Container image to use."),
     ] = WHIZZARD_IMAGE,
+    allow_ephemeral: Annotated[
+        bool,
+        typer.Option(
+            "--allow-ephemeral",
+            help="Opt in to launching an agent harness without HERMES_HOME "
+                 "(memories/skills ephemeral with the container).",
+        ),
+    ] = False,
 ) -> None:
     """Launch a session using the named preset."""
     try:
@@ -223,4 +231,5 @@ def preset_launch_cmd(
         harness=preset.harness,
         platform_restriction=list(preset.platforms) if preset.platforms else None,
         preset_name=preset.name,
+        allow_ephemeral=allow_ephemeral,
     )

@@ -18,6 +18,7 @@ from whizzard.adapters import (
     CredentialUnavailableError,
     HarnessAdapter,
     HermesAdapter,
+    HermesAuthJsonPresentError,
     HermesProfileExistsError,
     HermesProfileNameError,
     HermesProfileSourceMissingError,
@@ -151,9 +152,18 @@ def test_env_var_for_platform_uppercases_with_suffix():
 # --- preflight / gateway.lock concurrency guard (D-87, Milestone 4) ---
 
 
-def test_hermes_preflight_returns_ok_when_no_hermes_home_configured():
-    # Without hermes_home set, there's no profile to check — skip the lock check.
+def test_hermes_preflight_refuses_when_no_hermes_home_and_not_ephemeral():
+    # F-C-04: agent-type harness without hermes_home is fail-loud by default.
     result = HermesAdapter().preflight()
+    assert result.ok is False
+    assert "hermes_home" in result.reason
+    assert "--allow-ephemeral" in result.reason
+    assert "profile create" in result.reason  # remediation hint
+
+
+def test_hermes_preflight_returns_ok_when_no_hermes_home_with_allow_ephemeral():
+    # F-C-04: --allow-ephemeral is the documented escape hatch.
+    result = HermesAdapter(allow_ephemeral=True).preflight()
     assert result.ok is True
     assert result.reason == ""
     assert result.cleanup_note == ""
@@ -540,7 +550,15 @@ def test_hermes_active_capabilities_returns_list_of_strings():
     assert all(isinstance(c, str) for c in caps)
 
 
-def test_hermes_active_capabilities_surfaces_declared_platforms():
+def test_hermes_active_capabilities_surfaces_declared_platforms(monkeypatch):
+    # F-C-07: active_capabilities now eagerly populates credential sources,
+    # so the test must mock fetch_secret (otherwise it would shell out to
+    # a real OneCLI install during the test).
+    monkeypatch.setattr(
+        hermes_module,
+        "fetch_secret",
+        lambda name: SecretFetchResult(value="x", source="onecli"),
+    )
     adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
     caps = adapter.active_capabilities()
     assert any("discord" in c and "slack" in c for c in caps)
@@ -739,3 +757,154 @@ def test_hermes_no_secrets_when_field_omitted(monkeypatch):
 
     HermesAdapter().container_env()
     assert calls == []  # no platforms, no secrets → no fetches
+
+
+# --- F-C-01: mount-time auth.json check (D-80 enforcement) ----------------
+
+
+def test_preflight_refuses_when_auth_json_present_at_root(tmp_path):
+    """Path (a) — user pointed hermes_home at a profile containing auth.json
+    (e.g. the real ~/.hermes, or after a manual copy)."""
+    (tmp_path / "auth.json").write_text('{"token": "leak"}')
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is False
+    assert "auth.json" in result.reason
+    assert "D-80" in result.reason
+
+
+def test_preflight_refuses_when_auth_lock_present(tmp_path):
+    """Path (b/c) — auth.lock alone (vault unlocked but token cleared) also
+    blocks the mount. The lock file's presence is a strong signal that
+    auth.json was recently here and may reappear."""
+    (tmp_path / "auth.lock").write_text("")
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is False
+    assert "auth.lock" in result.reason
+
+
+def test_preflight_refuses_when_auth_json_nested_in_subdir(tmp_path):
+    """Hermes nests profile data (default/, numeric subdirs, etc.); the
+    auth.json check walks at any depth."""
+    sub = tmp_path / "default"
+    sub.mkdir()
+    (sub / "auth.json").write_text('{"token": "leak"}')
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is False
+    assert "auth.json" in result.reason
+
+
+def test_preflight_refuses_when_auth_json_case_variant(tmp_path):
+    """macOS APFS is case-insensitive by default; the check must too."""
+    (tmp_path / "Auth.json").write_text('{"token": "leak"}')
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is False
+
+
+def test_container_mounts_also_refuses_at_mount_time(tmp_path):
+    """Defense in depth: even if a caller skips preflight, the mount-time
+    walk still raises. F-C-01 was specifically about closing this gap."""
+    (tmp_path / "auth.json").write_text('{"token": "leak"}')
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    with pytest.raises(HermesAuthJsonPresentError, match="D-80"):
+        adapter.container_mounts()
+
+
+def test_preflight_ok_when_profile_has_no_auth_json(tmp_path):
+    """The happy path — a profile created via the standard flow has no
+    auth.json (cloned with the exclusion filter) and preflight proceeds."""
+    (tmp_path / "config.yaml").write_text("approvals:\n  mode: manual\n")
+    (tmp_path / "memories").mkdir()
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+    assert result.ok is True
+
+
+# --- F-C-02: case-insensitive clone exclusion -----------------------------
+
+
+def test_clone_exclusion_matches_uppercase_variants(tmp_path):
+    """A source-profile file named Auth.json (which would slip through an
+    exact-match check on case-insensitive APFS) is still excluded."""
+    source = tmp_path / ".hermes"
+    source.mkdir()
+    (source / "Auth.json").write_text('{"token": "leak"}')
+    (source / "AUTH.JSON").write_text('{"token": "also-leak"}')
+    (source / "config.yaml").write_text("approvals:\n")
+
+    result = create_hermes_profile("test-case", parent_dir=tmp_path)
+
+    assert not (result.path / "Auth.json").exists()
+    assert not (result.path / "AUTH.JSON").exists()
+    assert (result.path / "config.yaml").exists()
+
+
+# --- F-C-03: symlinks preserved, not dereferenced -------------------------
+
+
+def test_clone_preserves_symlinks_instead_of_copying_target_content(tmp_path):
+    """A symlink in the source profile is preserved as a symlink in the
+    destination. The symlink's target is host-side and won't resolve
+    inside the cell — surfaces as a visible failure, not silent
+    credential exfiltration."""
+    # Real credential file outside the profile dir
+    real_secret = tmp_path / "outside-secret.txt"
+    real_secret.write_text("the-real-secret")
+
+    source = tmp_path / ".hermes"
+    source.mkdir()
+    (source / "config.yaml").write_text("ok\n")
+    # Symlink under a non-excluded name pointing at the secret
+    (source / "innocent_settings.json").symlink_to(real_secret)
+
+    result = create_hermes_profile("test-symlink", parent_dir=tmp_path)
+
+    copied = result.path / "innocent_settings.json"
+    # Symlink preserved (not dereferenced + content-copied)
+    assert copied.is_symlink()
+    # The copied symlink still points at the host path (broken inside any
+    # container that doesn't expose tmp_path)
+    assert copied.readlink() == real_secret
+
+
+# --- F-C-04: --allow-ephemeral escape hatch -------------------------------
+
+
+def test_active_capabilities_works_without_hermes_home_or_ephemeral():
+    """active_capabilities is informational — must not raise even when
+    preflight would refuse. The fail-loud lives in preflight, not the
+    capability banner."""
+    caps = HermesAdapter().active_capabilities()
+    # No platforms configured → just the MCP-availability line + request
+    # tools line; no exception.
+    assert any("MCP" in c for c in caps)
+
+
+# --- F-C-08: gateway.lock cleanup reports OSError honestly ---------------
+
+
+def test_preflight_reports_truthfully_when_unlink_fails(tmp_path, monkeypatch):
+    """A read-only filesystem or owner-mismatched lock can't be unlinked.
+    The cleanup_note must reflect that — not falsely claim 'cleared'."""
+    lock_path = tmp_path / "gateway.lock"
+    lock_path.write_text(json.dumps({"pid": 999999}))
+    monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: False)
+
+    real_unlink = Path.unlink
+
+    def failing_unlink(self, *args, **kwargs):
+        if self.name == "gateway.lock":
+            raise OSError("Read-only filesystem")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", failing_unlink)
+
+    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    result = adapter.preflight()
+
+    assert result.ok is True  # not blocking, just informational
+    assert "could not unlink" in result.cleanup_note.lower()
+    assert "Read-only filesystem" in result.cleanup_note

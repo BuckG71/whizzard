@@ -255,3 +255,71 @@ def test_custom_harness_via_user_config(tmp_path: Path):
     assert result.exit_code == 0
     assert "zsh-flavored" in result.output
     assert "/bin/zsh" in result.output
+
+
+# --- F-C-10: adapter preflight wired into _perform_launch -----------------
+
+
+def _write_hermes_harness_with_no_home(monkeypatch) -> None:
+    """Helper: write a harnesses.json with a Hermes harness missing hermes_home,
+    so preflight will refuse unless --allow-ephemeral."""
+    import os
+    home = Path(os.environ["WHIZZARD_HOME"])
+    config_dir = home / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "harnesses.json").write_text(json.dumps({
+        "schema_version": 1,
+        "harnesses": {
+            "generic": {"type": "shell", "start_command": "/bin/bash"},
+            "hermes-no-home": {
+                "type": "agent",
+                "start_command": "hermes gateway run",
+            },
+        },
+    }))
+
+
+def test_preflight_refuses_hermes_without_home(monkeypatch):
+    """F-C-04 + F-C-10: agent harness with no hermes_home fails launch
+    with a clear reason, before any docker work."""
+    _write_hermes_harness_with_no_home(monkeypatch)
+    # Mock credential fetch so the test doesn't shell out to OneCLI.
+    from whizzard.adapters import _credentials
+    from whizzard.adapters import hermes as hermes_module
+    from whizzard.adapters._credentials import SecretFetchResult
+
+    def fake_fetch(name):
+        return SecretFetchResult(value=f"v-{name}", source="onecli")
+    monkeypatch.setattr(_credentials, "fetch_secret", fake_fetch)
+    monkeypatch.setattr(hermes_module, "fetch_secret", fake_fetch)
+
+    result = runner.invoke(app, [
+        "run", "--profile", "default", "--harness", "hermes-no-home",
+    ])
+    assert result.exit_code == 2
+    assert "hermes_home" in result.output
+    assert "--allow-ephemeral" in result.output
+
+
+def test_preflight_passes_hermes_when_allow_ephemeral(monkeypatch):
+    """F-C-04: --allow-ephemeral is the escape hatch."""
+    _write_hermes_harness_with_no_home(monkeypatch)
+    from whizzard.adapters import _credentials
+    from whizzard.adapters import hermes as hermes_module
+    from whizzard.adapters._credentials import SecretFetchResult
+
+    monkeypatch.setattr(
+        _credentials, "fetch_secret",
+        lambda n: SecretFetchResult(value=f"v-{n}", source="onecli"),
+    )
+    monkeypatch.setattr(
+        hermes_module, "fetch_secret",
+        lambda n: SecretFetchResult(value=f"v-{n}", source="onecli"),
+    )
+
+    result = runner.invoke(app, [
+        "run", "--profile", "default", "--harness", "hermes-no-home",
+        "--allow-ephemeral", "--dry-run",
+    ])
+    # Dry-run gets past preflight; should succeed.
+    assert result.exit_code == 0, result.output

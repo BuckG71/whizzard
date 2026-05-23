@@ -148,6 +148,18 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### Hermes adapter `parent_dir` parameter has no input validation
+`create_hermes_profile` validates the `name` argument (no slashes, no
+leading dots, no reserved values) but accepts `parent_dir` as-is. Production
+callers (`whiz hermes profile create`) pass `parent_dir=None` so the live
+attack surface is zero; the gap only matters if a future `--profile-dir`
+CLI flag or programmatic caller wires user input through. Treat as a
+review requirement: any new caller that exposes `parent_dir` must
+validate it.
+*Source:* catch-up review 2026-05-23 finding F-C-06.
+*Disposition:* defer — defensive hardening with no current path; would
+add at the point a user-facing profile-dir option is introduced.
+
 ### Hermes image carries unused vestigial config
 `harnesses.json` schema and the bundled `_DEFAULT_HARNESSES['hermes']` retain
 `wrap_up_command: "/quit"` — the field is unused (per D-88 the adapter does

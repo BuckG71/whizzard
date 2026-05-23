@@ -68,6 +68,27 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             },
         },
     }))
+    # Rebind the bundled `hermes-cell` harness's `hermes_home` to an empty
+    # tmp dir so the F-C-01 mount-time auth.json check has nothing to
+    # refuse. Without this, the real user's `~/.hermes-whizzard-cell`
+    # (which may contain auth.lock from prior sessions) would block
+    # every dry-run that uses the bundled hermes preset.
+    hermes_home = tmp_path / "hermes-home"
+    hermes_home.mkdir()
+    (home / "config" / "harnesses.json").write_text(json.dumps({
+        "schema_version": 1,
+        "harnesses": {
+            "generic": {"type": "shell", "start_command": "/bin/bash"},
+            "hermes-cell": {
+                "type": "agent",
+                "start_command": "hermes gateway run",
+                "wrap_up_command": "/quit",
+                "wrap_up_grace_seconds": 30,
+                "hermes_home": str(hermes_home),
+                "platforms": ["discord"],
+            },
+        },
+    }))
     return home
 
 

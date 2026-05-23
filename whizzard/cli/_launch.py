@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import typer
 
-from whizzard.adapters import UnknownHarnessTypeError, build_adapter
+from whizzard.adapters import (
+    HermesAdapter,
+    UnknownHarnessTypeError,
+    build_adapter,
+)
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, get_profile
 from whizzard.docker_cmd import (
@@ -44,6 +48,7 @@ def _perform_launch(
     platform_restriction: list[str] | None = None,
     preset_name: str | None = None,
     duration_override_seconds: int | None = None,
+    allow_ephemeral: bool = False,
 ) -> None:
     """Shared launch core. Called by `run` (CLI flags) and `preset launch`
     (preset-resolved args). Handles profile / harness / mount resolution,
@@ -82,6 +87,24 @@ def _perform_launch(
     except UnknownHarnessTypeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2) from e
+
+    # F-C-04: propagate the --allow-ephemeral opt-in into the adapter so
+    # preflight knows whether the user is OK with no persistent HERMES_HOME.
+    if isinstance(adapter, HermesAdapter):
+        adapter.allow_ephemeral = allow_ephemeral
+
+    # F-C-10: run the adapter preflight before any docker work.
+    # `preflight()` is defined on the Protocol (gateway.lock concurrency
+    # guard, the D-80 auth.json mount-time check, the F-C-04 hermes_home
+    # policy) but used to be defined-and-never-called. Surface ok=False
+    # as a clean red error; pass cleanup_note through as an info line so
+    # the user sees what changed.
+    preflight = adapter.preflight()
+    if preflight.cleanup_note:
+        console.print(f"[dim]{preflight.cleanup_note}[/dim]")
+    if not preflight.ok:
+        console.print(f"[red]{preflight.reason or 'preflight failed'}[/red]")
+        raise typer.Exit(code=2)
 
     resolved: list[tuple[Mount, MountMode]] = []
     overrides_used: list[OverrideRecord] = []
