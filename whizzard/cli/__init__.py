@@ -41,6 +41,7 @@ from whizzard.cli.preset import preset_app, preset_launch_cmd, preset_list_cmd, 
 from whizzard.cli.profiles import profiles_app, profiles_list_cmd
 from whizzard.cli.requests import requests_app
 from whizzard.cli.sessions import sessions_app
+from whizzard.cli.wake import wake_cmd
 from whizzard.config import ensure_whizzard_home
 from whizzard.docker_cmd import (  # noqa: F401 -- re-export for `patch("whizzard.cli.run_shell")` tests
     WHIZZARD_IMAGE,
@@ -63,6 +64,7 @@ app.add_typer(preset_app, name="preset")
 app.add_typer(hermes_app, name="hermes")
 app.add_typer(requests_app, name="requests")
 app.command("adjust")(adjust_cmd)
+app.command("wake")(wake_cmd)
 
 
 @app.callback(invoke_without_command=True)

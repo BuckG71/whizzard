@@ -2679,6 +2679,22 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
+### D-170: Wake gives the woken session a fresh duration cap
+
+**Type:** scope
+
+**Tags:** mvp, safety
+
+**Door Type:** two-way (CLI behavior; could shift to inherit-elapsed later without breaking the schema).
+
+**Decision:** `whiz wake` does not pass a `duration_override_seconds` to the relaunched container — the session starts under the profile's default duration cap, just like a fresh `whiz launch`. Distinct from `adjust --extend`, which inherits the elapsed remainder so chained extends accumulate against the original cap.
+
+**Rationale:** Wake is conceptually a fresh launch with prior state restored, not a continuation of the same session-lifetime budget. A user could equivalently `whiz launch` for the same effect; wake just smooths the path. Inheriting the elapsed remainder would make a wake-after-2-hours-idle land in a sliver-of-time window — friction without obvious safety gain, since unlimited launches are already a thing the user can do. Per the security/usability balance principle (D-117/D-106).
+
+**Source:** conversation 2026-05-22 (Stage 15.5 implementation).
+
+**Status:** active
+
 ---
 
 ## Tag vocabulary
