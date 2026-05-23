@@ -148,6 +148,31 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### CLI flag parsing accepts empty strings for `--harness` / `--profile` / `--mount`
+Typer does not validate string-typed options as non-empty by default.
+Examples like `whiz run --harness ""` or `whiz run --mount ""` pass an
+empty string through to the registry lookup, which then errors with
+`unknown harness ''` or `mount spec '' not registered`. Errors are
+technically clear but the empty-string case would be cheaper to
+reject earlier with a flag-specific message ("--harness requires a
+non-empty name"). Shell-quoting accidents (`--harness ""` in a script)
+surface as registry errors instead of arg-parsing errors.
+*Source:* catch-up review 2026-05-23 finding F-H-04.
+*Disposition:* defer — UX polish, not a correctness bug; cheap to
+add when next touching the CLI flag layer.
+
+### `whiz status` reads the entire sessions.jsonl every invocation
+`_read_session_events` does `SESSIONS_LOG.read_text().splitlines()`
+and parses every entry. No rotation, no head/tail bound. `whiz`
+(bare) and `whiz status` invoke it on every CLI launch. After months
+of daily use the file grows linearly and status will perceptibly
+stall. Parallel to F-E-05 (in-cell `whiz_audit_self` slurps the
+whole log too). Both want the same eventual fix: audit-log rotation
++ streaming reads with optional `since=<ts>`.
+*Source:* catch-up review 2026-05-23 finding F-H-06.
+*Disposition:* defer — quality improvement when audit-log rotation
+lands OR Stage 20 hardening pass.
+
 ### Wake selection-rule doc and code use different phrasings
 D-169 describes the wake-eligibility rule as "most-recent session with
 `expiry_reason: idle` AND no subsequent `session_start` for that sid".

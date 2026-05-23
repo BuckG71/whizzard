@@ -312,6 +312,51 @@ def test_remaining_seconds_none_when_timestamp_unparseable():
     assert _remaining_seconds(ev) is None
 
 
+def test_remaining_seconds_handles_microsecond_iso_with_offset():
+    """F-H-01: post-F-D-08 the audit log uses microsecond ISO with
+    +00:00 offset, not the old Z suffix. The strptime pattern in
+    `_remaining_seconds` silently failed against the new format,
+    leaving `whiz status` unable to display time-remaining for real
+    sessions. Now uses `datetime.fromisoformat`."""
+    from datetime import UTC, datetime, timedelta
+
+    from whizzard.cli._session import _remaining_seconds
+
+    # Simulate a session_start written 10 minutes ago by the real producer.
+    ten_min_ago = datetime.now(UTC) - timedelta(minutes=10)
+    ev = {
+        "duration_limit_seconds": 3600,
+        "start_time": ten_min_ago.isoformat(),  # microsecond + +00:00
+    }
+    remaining = _remaining_seconds(ev)
+    # Should be ~3000s ± slop (10 min elapsed of a 1h cap).
+    assert remaining is not None
+    assert 2990 <= remaining <= 3010
+
+
+# --- F-H-02: `whiz image build` preflights docker availability ------------
+
+
+def test_image_build_exits_127_when_docker_missing(monkeypatch):
+    """Previously raised a raw FileNotFoundError traceback at
+    subprocess.run; now uses the same docker-not-found path as every
+    other docker-touching CLI verb."""
+    from whizzard.cli import image as cli_image
+    monkeypatch.setattr(cli_image, "docker_available", lambda: False)
+    # If we got past the preflight, subprocess.run would be reached;
+    # patch it to a sentinel that would fail the test if invoked.
+    monkeypatch.setattr(
+        cli_image.subprocess, "run",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("subprocess.run should not be reached")
+        ),
+    )
+    runner = CliRunner()
+    result = runner.invoke(app, ["image", "build"])
+    assert result.exit_code == 127
+    assert "docker not found" in result.output
+
+
 def test_fmt_remaining_renders_units():
     from whizzard.cli import _fmt_remaining
     assert _fmt_remaining(None) == "—"

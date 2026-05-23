@@ -6,9 +6,9 @@ read-only and side-effect-free.
 
 from __future__ import annotations
 
-import calendar
 import json
 import time
+from datetime import UTC, datetime
 
 from whizzard.session_log import SESSIONS_LOG
 
@@ -76,6 +76,13 @@ def _remaining_seconds(start_event: dict, now: float | None = None) -> float | N
     Returns None if the session has no cap (`duration_limit_seconds` null)
     or its start timestamp can't be parsed. May be negative if the logged
     session has already run past its cap.
+
+    F-H-01: previously used `time.strptime(..., "%Y-%m-%dT%H:%M:%SZ")`,
+    which silently failed against the post-F-D-08 microsecond-ISO format
+    (e.g. `2026-05-23T21:01:15.882346+00:00`). Result: `whiz status`
+    never rendered the time-remaining number for real sessions —
+    same class of bug F-G-01 fixed in `adjust.py`. Now uses
+    `datetime.fromisoformat` which handles both formats.
     """
     limit = start_event.get("duration_limit_seconds")
     if not isinstance(limit, int):
@@ -83,9 +90,12 @@ def _remaining_seconds(start_event: dict, now: float | None = None) -> float | N
     raw = start_event.get("start_time") or start_event.get("ts")
     if not isinstance(raw, str):
         return None
+    candidate = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
     try:
-        struct = time.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+        parsed = datetime.fromisoformat(candidate)
     except ValueError:
         return None
-    started = calendar.timegm(struct)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    started = parsed.timestamp()
     return limit - ((now if now is not None else time.time()) - started)

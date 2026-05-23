@@ -50,6 +50,15 @@ def image_build_cmd(
     ] = WHIZZARD_IMAGE,
 ) -> None:
     """Build the Whizzard execution image from docker/Dockerfile."""
+    # F-H-02: preflight docker availability before invoking the subprocess.
+    # Without this, `whiz image build` on a host with no docker CLI raises
+    # a raw `FileNotFoundError` traceback at `subprocess.run` instead of
+    # the clean exit-127 red-error path every other docker-touching verb
+    # uses (image status, run, preset launch, ...).
+    if not docker_available():
+        console.print("[red]error: docker not found on PATH[/red]")
+        raise typer.Exit(code=127)
+
     dockerfile = Path(__file__).resolve().parent.parent.parent / "docker" / "Dockerfile"
     if not dockerfile.exists():
         console.print(f"[red]Dockerfile not found at {dockerfile}[/red]")
