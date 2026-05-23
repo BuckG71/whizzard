@@ -266,13 +266,18 @@ def main() -> None:
     from mcp.server.fastmcp import FastMCP  # local import: SDK only needed here
 
     server = FastMCP("whiz-mcp")
-    server.tool()(tool_whiz_status)
-    server.tool()(tool_whiz_audit_self)
-    server.tool()(tool_whiz_emit_event)
-    server.tool()(tool_whiz_list_presets)
-    server.tool()(tool_whiz_request_mount)
-    server.tool()(tool_whiz_request_extend)
-    server.tool()(tool_whiz_check_request)
+    # Register each tool under its agent-facing name (without the `tool_`
+    # Python-function prefix). FastMCP defaults to the function's __name__,
+    # which would publish them as `tool_whiz_status` etc. — contrary to the
+    # documented surface in architecture.md / decisions / the module
+    # docstring. The MCP stdio smoke test catches this drift.
+    server.tool(name="whiz_status")(tool_whiz_status)
+    server.tool(name="whiz_audit_self")(tool_whiz_audit_self)
+    server.tool(name="whiz_emit_event")(tool_whiz_emit_event)
+    server.tool(name="whiz_list_presets")(tool_whiz_list_presets)
+    server.tool(name="whiz_request_mount")(tool_whiz_request_mount)
+    server.tool(name="whiz_request_extend")(tool_whiz_request_extend)
+    server.tool(name="whiz_check_request")(tool_whiz_check_request)
     server.run()
 
 
