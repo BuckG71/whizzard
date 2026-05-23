@@ -349,7 +349,13 @@ def run_shell(
         else profile.duration_seconds
     )
     idle_limit = profile.idle_timeout_seconds
-    start_time = time.time()
+    # F-F-01: split wall-clock from monotonic clock. The audit log needs
+    # wall-clock timestamps (humans + log consumers expect real dates);
+    # the enforcement loop needs monotonic time (immune to laptop
+    # sleep/wake jumps and NTP adjustments — those would fire spurious
+    # duration/idle expiry on the next poll).
+    wall_start_time = time.time()
+    mono_start_time = time.monotonic()
     log_session_start(
         session_id=session_id,
         profile_name=profile.name,
@@ -360,7 +366,7 @@ def run_shell(
         image_id=image_id,
         mounts=_mounts_for_log(resolved_mounts),
         argv=argv,
-        start_time=start_time,
+        start_time=wall_start_time,
         overrides_used=overrides_used or [],
         preset_name=preset_name,
     )
@@ -380,7 +386,7 @@ def run_shell(
         container_id_reader=_read_container_id,
         adapter=adapter,
         session_id=session_id,
-        start_time=start_time,
+        start_time=mono_start_time,
         duration_limit=duration_limit,
         idle_limit=idle_limit,
     )
@@ -404,7 +410,7 @@ def run_shell(
         container_id=container_id,
         exit_status=exit_code,
         end_time=end_time,
-        duration_seconds=end_time - start_time,
+        duration_seconds=end_time - wall_start_time,
         expiry_reason=expiry_reason,
     )
 

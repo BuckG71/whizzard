@@ -148,6 +148,19 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### Unlimited-profile enforcer can hang forever if `docker run` client wedges
+When both `duration_seconds` and `idle_timeout_seconds` are `None`,
+`monitor_and_enforce` calls `proc.wait()` with no timeout — pre-Stage-15
+behavior, not a regression. If the docker-run client process wedges
+while the container stays alive (rare; bad-virtio-state class of bug),
+the enforcer hangs the host indefinitely. With duration/idle now
+first-class capabilities, the unlimited-profile case is precisely the
+one that wants a watchdog the most. Fix is a periodic liveness probe
+on the unlimited path — bigger than a one-line patch, overlaps with
+the Stage 20 hardening pass.
+*Source:* catch-up review 2026-05-23 finding F-F-05.
+*Disposition:* defer — enforcement-watchdog design pass or Stage 20.
+
 ### Sub-agent permission scoping — none today
 Whizzard's containment boundary is the docker container. Every process
 inside the cell — the parent agent, Hermes-spawned workers, tool

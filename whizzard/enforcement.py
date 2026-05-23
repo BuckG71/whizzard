@@ -23,15 +23,17 @@ traffic, so that case is covered twice over).
 from __future__ import annotations
 
 import contextlib
+import math
 import re
 import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from whizzard.adapters.base import HarnessAdapter, WrapUpStatus
-from whizzard.session_log import log_expiry_warning
+from whizzard.session_log import append_event, log_expiry_warning
 from whizzard.snapshot import event_log_path, request_dir
 
 # How often the monitor wakes to check limits. The clean-exit path is not
@@ -63,12 +65,18 @@ ExpiryReason = str  # "clean" | "duration" | "idle"
 
 @dataclass(frozen=True)
 class ActivitySample:
-    """One observation of a session's activity at a point in time."""
-    cpu_percent: float
-    net_bytes: int        # cumulative container network I/O (in + out)
-    block_bytes: int      # cumulative container block I/O (read + write)
-    event_mtime: float    # mtime of the agent event file (0.0 if absent)
-    request_mtime: float  # newest mtime in the request channel (0.0 if absent)
+    """One observation of a session's activity at a point in time.
+
+    F-F-04: stats-derived fields are ``None`` when ``docker stats`` was
+    unavailable for this tick. File-mtime fields are always populated —
+    they don't depend on docker stats, so a stats outage never starves
+    the tracker (closes the "false-idle on stats outage" finding).
+    """
+    cpu_percent: float | None
+    net_bytes: int | None    # cumulative container network I/O (in + out)
+    block_bytes: int | None  # cumulative container block I/O (read + write)
+    event_mtime: float       # mtime of the agent event file (0.0 if absent)
+    request_mtime: float     # newest mtime in the request channel (0.0 if absent)
 
 
 _SIZE_UNITS: dict[str, float] = {
@@ -142,13 +150,21 @@ def _newest_mtime(directory: Path) -> float:
         return 0.0
 
 
-def sample_activity(container_id: str, session_id: str) -> ActivitySample | None:
-    """Sample a running session's activity. None if `docker stats` is
-    unavailable — the caller leaves the idle clock untouched on a None."""
+def sample_activity(container_id: str, session_id: str) -> ActivitySample:
+    """Sample a running session's activity.
+
+    F-F-04: always returns a sample. Stats-derived fields are ``None``
+    when ``docker stats`` is unavailable for this tick (Docker Desktop
+    paused, overloaded, transient failure); file-mtime fields are still
+    populated, so the tracker keeps seeing agent activity even when
+    container-level resource stats are blind.
+    """
     stats = _docker_stats(container_id)
-    if stats is None:
-        return None
-    cpu, net, block = stats
+    cpu: float | None = None
+    net: int | None = None
+    block: int | None = None
+    if stats is not None:
+        cpu, net, block = stats
     return ActivitySample(
         cpu_percent=cpu,
         net_bytes=net,
@@ -174,23 +190,48 @@ class ActivityTracker:
         self._prev: ActivitySample | None = None
 
     def observe(self, sample: ActivitySample | None, now: float) -> None:
-        """Fold one sample into the idle clock. A None sample carries no
-        information and is ignored (clock neither advances nor resets)."""
+        """Fold one sample into the idle clock.
+
+        A ``None`` sample is kept for backward compatibility (some tests
+        pass None directly) and ignored — the clock neither advances nor
+        resets. The production sampler now never returns None (F-F-04);
+        a stats outage produces a sample with stats fields=None and
+        file-mtime fields populated, which still resets the idle clock
+        when the agent emits events or requests.
+        """
         if sample is None:
             return
         if self._prev is None:
             # First sample — no baseline to diff against; treat as active so
             # a session is never declared idle on its very first observation.
             active = True
-        elif sample.cpu_percent > _CPU_ACTIVE_THRESHOLD:
-            active = True
         else:
-            active = (
-                sample.net_bytes != self._prev.net_bytes
-                or sample.block_bytes != self._prev.block_bytes
-                or sample.event_mtime > self._prev.event_mtime
+            # Three signal families, any one fires = active:
+            #  - CPU above threshold (stats required this tick).
+            #  - Cumulative net/block I/O moved (stats required this tick
+            #    AND the prior tick, since the signal is a delta).
+            #  - Event-log or request-channel mtime advanced — file-mtime
+            #    signals are independent of docker stats, so they keep
+            #    the tracker alive during a stats outage (F-F-04).
+            stats_cpu_active = (
+                sample.cpu_percent is not None
+                and sample.cpu_percent > _CPU_ACTIVE_THRESHOLD
+            )
+            stats_io_active = (
+                sample.net_bytes is not None
+                and self._prev.net_bytes is not None
+                and sample.block_bytes is not None
+                and self._prev.block_bytes is not None
+                and (
+                    sample.net_bytes != self._prev.net_bytes
+                    or sample.block_bytes != self._prev.block_bytes
+                )
+            )
+            file_mtime_active = (
+                sample.event_mtime > self._prev.event_mtime
                 or sample.request_mtime > self._prev.request_mtime
             )
+            active = stats_cpu_active or stats_io_active or file_mtime_active
         if active:
             self._last_active = now
         self._prev = sample
@@ -218,21 +259,57 @@ def _enforce_stop(
 ) -> None:
     """Stop a container that hit a limit. Prefer the adapter's native
     graceful wrap-up; if the adapter has none (NO_OP), `docker stop` it
-    directly so the container actually terminates."""
-    result = adapter.wrap_up(container_id, grace_seconds)
-    if result.status == WrapUpStatus.NO_OP:
+    directly so the container actually terminates.
+
+    F-F-03: any exception from ``adapter.wrap_up`` is caught and treated
+    as ``NO_OP``, so the container still gets stopped. Enforcement is
+    the last line of defense for D-29/D-30; a buggy or unexpected
+    adapter must not be able to leak a running container.
+    """
+    try:
+        result = adapter.wrap_up(container_id, grace_seconds)
+        status = result.status
+    except Exception as exc:
+        append_event({
+            "ts": datetime.now(UTC).isoformat(),
+            "event": "session_wrap_up_failed",
+            "origin": "whizzard",
+            "container_id": container_id,
+            "detail": f"adapter.wrap_up raised: {type(exc).__name__}: {exc}",
+        })
+        status = WrapUpStatus.NO_OP
+    if status == WrapUpStatus.NO_OP:
         _docker_stop(container_id, grace_seconds)
 
 
-def _reap(proc: subprocess.Popen, grace_seconds: int) -> None:
+def _reap(
+    proc: subprocess.Popen,
+    grace_seconds: int,
+    session_id: str | None = None,
+) -> None:
     """Ensure the `docker run` client process exits after its container has
-    been stopped. If it lingers past the grace window, kill it."""
+    been stopped. If it lingers past the grace window, kill it.
+
+    F-F-07: if the post-kill wait times out (truly wedged kernel state),
+    emit an audit event so the leak is observable instead of silent.
+    """
     try:
         proc.wait(timeout=grace_seconds + 15)
     except subprocess.TimeoutExpired:
         proc.kill()
-        with contextlib.suppress(subprocess.TimeoutExpired):
+        try:
             proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            append_event({
+                "ts": datetime.now(UTC).isoformat(),
+                "event": "session_reap_timeout",
+                "origin": "whizzard",
+                "session_id": session_id or "",
+                "detail": (
+                    "docker-run client did not exit within 5s of SIGKILL; "
+                    "may be a zombie process"
+                ),
+            })
 
 
 # --- Monitor loop -----------------------------------------------------------
@@ -249,7 +326,7 @@ def monitor_and_enforce(
     idle_limit: int | None,
     grace_seconds: int = _STOP_GRACE_SECONDS,
     poll_interval: float | None = None,
-    now: Callable[[], float] = time.time,
+    now: Callable[[], float] = time.monotonic,
     sampler: Callable[[str, str], ActivitySample | None] = sample_activity,
     warner: Callable[[str, int], None] = log_expiry_warning,
 ) -> ExpiryReason:
@@ -258,6 +335,11 @@ def monitor_and_enforce(
     On a limit hit, gracefully stop the container and reap the `docker run`
     client. Returns the expiry reason: ``clean`` (container exited on its
     own), ``duration`` (hard cap), or ``idle`` (idle timeout).
+
+    F-F-01: ``start_time`` is a monotonic clock reading (caller passes
+    ``time.monotonic()``), and ``now`` defaults to ``time.monotonic`` too.
+    Wall-clock readings (``time.time()``) jump on laptop sleep/wake or
+    NTP adjustment and would fire spurious expiry on the next poll.
 
     `container_id_reader` is called lazily — the container id isn't known
     until docker writes the cidfile, a moment after launch.
@@ -275,6 +357,9 @@ def monitor_and_enforce(
 
     if duration_limit is None and idle_limit is None:
         # Nothing to enforce — just wait for the container, as pre-Stage-15.
+        # F-F-05 (deferred): a wedged docker-run client with no limits can
+        # hang the enforcer forever; addressed during the enforcement-
+        # watchdog hardening pass.
         proc.wait()
         return "clean"
 
@@ -297,15 +382,37 @@ def monitor_and_enforce(
         if duration_limit is not None:
             elapsed = t - start_time
             if elapsed >= duration_limit:
+                # F-F-06: if the container just self-exited this tick, the
+                # next proc.wait would have caught it as "clean" — attribute
+                # accurately by re-checking before flagging duration expiry.
+                if proc.poll() is not None:
+                    break
                 reason = "duration"
                 break
             if not warned and elapsed >= duration_limit - _warning_lead(duration_limit):
-                warner(session_id, int(duration_limit - elapsed))
+                # F-F-08: use ceil so a fractional remainder doesn't truncate
+                # to 0 and confuse the warning ("0 seconds remaining").
+                remaining = max(1, math.ceil(duration_limit - elapsed))
+                # F-F-02: warner is non-essential audit; its failure must not
+                # break enforcement and leak the container.
+                try:
+                    warner(session_id, remaining)
+                except Exception as exc:
+                    append_event({
+                        "ts": datetime.now(UTC).isoformat(),
+                        "event": "session_warner_failed",
+                        "origin": "whizzard",
+                        "session_id": session_id,
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    })
                 warned = True
 
         if tracker is not None and container_id is not None:
             tracker.observe(sampler(container_id, session_id), t)
             if idle_limit is not None and tracker.idle_seconds(t) >= idle_limit:
+                # F-F-06: same self-exit race check on the idle path.
+                if proc.poll() is not None:
+                    break
                 reason = "idle"
                 break
 
@@ -314,6 +421,6 @@ def monitor_and_enforce(
             container_id = container_id_reader()
         if container_id is not None:
             _enforce_stop(adapter, container_id, grace_seconds)
-        _reap(proc, grace_seconds)
+        _reap(proc, grace_seconds, session_id=session_id)
 
     return reason
