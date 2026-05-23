@@ -2,13 +2,13 @@
 
 > **This section is mutable** — updated when state meaningfully changes (a stage ships, a major decision lands, a constraint relaxes). Everything below the `# Session Handoff Log` heading is append-only per D-150 and must never be edited. Update this section by replacing it in place; prior versions live in git history.
 >
-> **Last updated:** 2026-05-22T23:45Z (UTC)
+> **Last updated:** 2026-05-23T05:00Z (UTC)
 
 ## Where we are right now
 
 - **MVP user:** Bryan, single-user threshold per D-101. Build choices favor "Bryan's daily-driver setup" over generalized OSS-day-one defaults; OSS-launch revisits these explicitly.
-- **Stage status:** **Stages 1–15 SHIPPED.** Stage 14 (agent-initiated capability requests — `whiz_request_*` MCP tools + the `whiz requests` review command, D-165) and Stage 15 (duration + idle-timeout enforcement, D-166) shipped 2026-05-22. **456 unit tests + 3 integration tests passing; 87% coverage.** All work committed and pushed to `origin/main`.
-- **Build-plan additions:** Stage 15.5 (hot-restart of idle-ended sessions) added as a planned follow-on. MVP+ Stages 19–20 (Packaging & Install; Security Review & Hardening Audit) added via the merged `similar-tools-research` branch — first concrete OSS-launch-milestone work.
+- **Stage status:** **Stages 1–15.5 SHIPPED.** Stage 14 (D-165) and Stage 15 (D-166) shipped 2026-05-22; Stage 15.5 (hot-restart of idle-ended sessions — `whiz wake`, D-168/169/170) shipped 2026-05-23. **497 unit tests + 25 integration tests passing.** All work committed and pushed to `origin/main`.
+- **Build-plan additions:** MVP+ Stages 19–20 (Packaging & Install; Security Review & Hardening Audit) — first concrete OSS-launch-milestone work.
 - **OneCLI caveat** (D-162): `fetch_secret` calls a non-existent `onecli secrets get`; all invocations fall through to the env-var fallback. Follow-up, not blocking.
 - **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`.
 - **Key docs reconciled** (2026-05-22, commit `17fba77`): `architecture.md` and `mvp_build_plan.md` cross-checked against the codebase and `decisions.md` and brought into alignment — the three key docs now agree; `decisions.md` is the live source of truth. `docs/internal/` added as a gitignored local-only docs area.
@@ -26,6 +26,9 @@
 - **D-164** OIQ owns docker-run flags, not images.
 - **D-165** Stage 14 agent requests: file-mailbox channel + operator-invoked `whiz requests`; host-side MCP server is the v1.0 revisit.
 - **D-166** Stage 15 enforcement: Popen poll loop, hybrid idle detection, extend = remaining + N.
+- **D-168** user-initiated wake preserves the prior permission set; stripping reserved for non-user-initiated triggers (none exist today).
+- **D-169** Stage 15.5 UX details — selection rule, missing-mount policy, error-with-launch-pointer shape, refuse-active-sid.
+- **D-170** wake gives a fresh duration cap on relaunch (distinct from adjust's inherit-elapsed).
 
 ## Process discipline in force
 
@@ -34,13 +37,14 @@
 - **Commit + push when a stage ships or a major session lands** — standard procedure, no longer waits to be asked (`feedback_commit_per_stage`).
 - **Surface the full build-plan stage scope up front** when scoping a stage — present every requirement before the design conversation (`feedback_full_stage_scope`).
 - Handoff / decision review drafts render as **inline HTML surfaced in chat**, never `.draft.md` files in the repo (`feedback_review_drafts_html`; the `session-handoff` and `decision-capture` skills were updated to match).
+- **HARD rule: any chat response over ~100 words is delivered as an inline HTML doc, not text in chat** (`feedback_html_threshold`). Mobile chat scrollback is unworkable for long text blocks; long responses don't get read.
 - Brevity in collaboration; single clean follow-up questions; don't push to close items; verify load-bearing claims before asserting.
 - Design-paused stages (16, 17) require an explicit conversation per D-148 before code.
 
 ## What's next
 
-- **Launch-cut design questions** (deferred by Bryan; carried in by the merged `similar-tools-research` log entry) — whether to launch on a reduced stage subset, Stage 20 lean-vs-full scope, the still-open D-131/D-133. The strategic fork.
-- **Stage 15.5** — hot-restart of idle-ended sessions. Autonomous-able; spec in the build plan.
+- **Whole-codebase `/ultrareview` baseline** — Bryan committed 2026-05-23 to burning one of his free `/ultrareview` runs against `<first-commit>..HEAD` overnight. Findings get triaged together in the morning per the standard pattern (real bug → fix; false positive → note; deferred → `known_issues.md`; architectural → decision). This is the closest thing to second-pair-of-eyes review since project start.
+- **Launch-cut design questions** (deferred; carried from prior log entries) — whether to launch on a reduced stage subset, Stage 20 lean-vs-full scope, the still-open D-131/D-133. The strategic fork.
 - **Stage 18** — image management. Autonomous-able.
 - **Stages 16, 17** — Discord control plane; require D-148 design pauses.
 - **MVP+ Stages 19–20** — packaging/install + security review; pre-OSS-launch.
@@ -51,6 +55,29 @@
 ---
 
 # Session Handoff Log
+
+## 2026-05-23T05:00Z — Stage 15.5 shipped; baseline-review decision pending
+
+### Goal
+Continue the MVP build per `docs/mvp_build_plan.md` — operational personal daily-driver, then OSS-launch.
+
+### Active task
+None in flight at handoff. Bryan paused at end-of-day after Stage 15.5 shipped. The committed-to next move is a whole-codebase `/ultrareview` run (diff vs first commit `c2faf92`) intended to fire overnight; results triaged together in the morning. After that, the next-stage selection (Stage 16 — D-148 design pause first; tactical `known_issues.md` items; or another direction) is open.
+
+### Tried & rejected (this session)
+- Bare `whiz r` for wake — collided with the Stage 10 preset-launch alias.
+- `resume` as the verb — conventional but overloaded in docker/debuggers, and longer than `wake`.
+- Inherit elapsed remainder for the wake duration cap — usability papercut. D-170 picked fresh-cap instead.
+- Stripping perms on Discord-triggered restart — the user-initiated-vs-not distinction is what matters, not host-CLI-vs-Discord. Captured in D-168.
+- A central CLI verb-constants registry — premature abstraction at this scale; documented but not built.
+
+### Resume protocol
+1. Read the refreshed `# Current State` block above first.
+2. The morning's first thing is triaging the `/ultrareview` findings (run `/tasks` in Claude Code to find the completed review). Apply the standard pattern: real bug → fix; false positive → note; real-but-deferred → `known_issues.md`; architectural → decision.
+3. After triage, pick the next move from the "What's next" list. Stage 16 needs a D-148 design pause; don't start Discord code cold.
+4. Process now in force: HARD ~100-word HTML threshold for chat responses; commit + push on stage completion; surface full stage scope up front; verify load-bearing claims before asserting; one topic at a time.
+
+---
 
 ## 2026-05-22T23:45Z — Post-handoff doc reconciliation + housekeeping
 
