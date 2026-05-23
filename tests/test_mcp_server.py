@@ -16,7 +16,6 @@ from whizzard.mcp_server import (
     tool_whiz_audit_self,
     tool_whiz_check_request,
     tool_whiz_emit_event,
-    tool_whiz_list_presets,
     tool_whiz_request_extend,
     tool_whiz_request_mount,
     tool_whiz_status,
@@ -163,12 +162,10 @@ def test_emit_event_creates_parent_dir_if_missing(tmp_path, monkeypatch):
     assert event_log.exists()
 
 
-# --- whiz_list_presets ---------------------------------------------------
-
-
-def test_list_presets_stub_returns_empty():
-    # Stage 10 dependency — currently a stub.
-    assert tool_whiz_list_presets() == []
+# F-E-01: `tool_whiz_list_presets` was removed in the catch-up review
+# (was a shipped stub returning [], which misled agents into thinking the
+# preset registry was empty when it wasn't). Test removed alongside the
+# tool. Add a regression test here if/when the tool is re-implemented.
 
 
 # --- Stage 14: whiz_request_mount ----------------------------------------
@@ -214,7 +211,10 @@ def test_request_mount_writes_pending_request_file(tmp_path, monkeypatch):
     assert record["params"] == {"name": "documents", "mode": "ro"}
     assert record["reason"] == "need docs"
     assert record["status"] == "pending"
-    assert record["session_id"] == "sess-xyz"
+    # F-E-03: session_id is no longer written into the cell-side record;
+    # the host derives the canonical session_id from the directory path
+    # (F-D-02) and ignores any JSON-supplied value.
+    assert "session_id" not in record
 
 
 def test_request_mount_omitted_mode_stored_as_none(tmp_path, monkeypatch):

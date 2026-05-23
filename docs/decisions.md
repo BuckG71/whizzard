@@ -2695,6 +2695,22 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
+### D-171: Sub-agent permission scoping — deferred past MVP
+
+**Type:** architecture
+
+**Tags:** safety, mvp, post-mvp, adapter
+
+**Door Type:** two-way (a scoping mechanism can be added later without breaking existing single-cell contracts).
+
+**Decision:** Whizzard does not provide per-sub-agent permission scoping. The containment boundary is the docker container; every process inside (parent agent, Hermes-spawned workers, tool subprocesses) shares the parent's full mount set, network, time budget, credentials, and request-channel access. Status: **open** as a pre-OSS-launch question; revisit alongside D-131.
+
+**Rationale:** For Bryan's MVP threshold (D-101: single trusted user) the single-boundary model is adequate — a buggy sub-agent's blast radius is the cell, which the parent's mount set already bounds. For OSS launch, sub-agent scoping is a defense-in-depth story relevant mainly to users running third-party agent code; the marginal value over container-level scoping is modest for the majority audience. The cleanest implementation path is sub-cells via host request (one Whizzard cell per scoped sub-agent, IPC over a pipe) — this matches Anthropic's `sandbox-runtime` shape and is consistent with D-9 (one-way capability flow) and D-164 (no docker-in-docker). In-container namespace isolation is ruled out: it requires `CAP_SYS_ADMIN`, which D-3 explicitly drops.
+
+**Source:** conversation 2026-05-23 (catch-up code review Chunk E).
+
+**Status:** open
+
 ---
 
 ## Tag vocabulary
@@ -2772,3 +2788,4 @@ The following decisions are currently **open**. Any work that depends on them sh
 - **D-133** — Framework-level failure-mode policy vs. per-feature
 - **D-135** — Read-only project-root mounting pattern adoption
 - **D-136** — NanoClaw upstream collaboration
+- **D-171** — Sub-agent permission scoping (revisit alongside D-131)

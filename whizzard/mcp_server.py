@@ -18,10 +18,9 @@ Stage 9 read tools (``whiz_emit_event`` writes to a per-session ephemeral
 file, *not* directly to the host audit log — Whizzard merges agent-emitted
 events into the host log at session_end per D-156):
 
-- ``whiz_status``       — current profile, mounts, network, expiry, harness, session_id
+- ``whiz_status``       — current profile, mounts, network, expires_at, harness, session_id
 - ``whiz_audit_self``   — this session's audit log entries (filtered by session_id)
 - ``whiz_emit_event``   — agent-authored entry appended to the per-session event file
-- ``whiz_list_presets`` — enumerable presets (stub until Stage 10)
 
 Stage 14 request tools (D-156 event-file pattern / D-165). These do NOT grant
 anything — they drop a request file into ``WHIZ_REQUEST_DIR``; the host
@@ -139,9 +138,14 @@ def tool_whiz_emit_event(event_type: str, detail: str = "") -> dict[str, Any]:
     return {"ok": True, "logged": entry}
 
 
-def tool_whiz_list_presets() -> list[dict[str, Any]]:
-    """Enumerable presets. Stage 10 dependency; returns empty for now."""
-    return []
+# F-E-01: `tool_whiz_list_presets` removed. It was a stub returning [] but
+# remained registered as a production MCP tool, telling agents the preset
+# registry was empty when it wasn't (D-156 cooperation-layer drift). Its
+# use cases were thin — the cell already sees its own preset via
+# whiz_status, and listing other presets is informational, not
+# action-enabling. Removed in the catch-up review rather than implemented
+# to avoid publishing a marginally-useful surface; re-add later if a clear
+# need surfaces.
 
 
 # --- Stage 14: request-side tools ----------------------------------------
@@ -165,9 +169,14 @@ def _submit_request(kind: str, params: dict[str, Any], reason: str) -> dict[str,
     if not request_dir or not session_id:
         return {"ok": False, "error": "request channel not configured"}
     request_id = uuid.uuid4().hex[:12]
+    # F-E-03: drop the cell-written `session_id` field — the host derives
+    # the canonical session_id from the directory path (F-D-02) and ignores
+    # any JSON-supplied value. Keeping it in the record would imply a
+    # contract that no longer exists. (The `session_id` env-var lookup
+    # above still gates whether the request channel is configured at all.)
+    _ = session_id  # gates write attempt; not embedded in the record
     record = {
         "request_id": request_id,
-        "session_id": session_id,
         "kind": kind,
         "params": params,
         "reason": reason,
@@ -274,7 +283,6 @@ def main() -> None:
     server.tool(name="whiz_status")(tool_whiz_status)
     server.tool(name="whiz_audit_self")(tool_whiz_audit_self)
     server.tool(name="whiz_emit_event")(tool_whiz_emit_event)
-    server.tool(name="whiz_list_presets")(tool_whiz_list_presets)
     server.tool(name="whiz_request_mount")(tool_whiz_request_mount)
     server.tool(name="whiz_request_extend")(tool_whiz_request_extend)
     server.tool(name="whiz_check_request")(tool_whiz_check_request)

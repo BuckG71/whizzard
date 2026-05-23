@@ -25,7 +25,7 @@ permission boundary — only descriptive fields (what is, not what could be).
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +94,17 @@ def write_snapshot(
         else profile.duration_seconds
     )
 
+    # F-E-04: compute an absolute expires_at instead of making the agent
+    # do wall-clock math against `snapshot_written_at + duration_seconds`.
+    # `None` when the session is unlimited (duration_seconds=None). Uses a
+    # single `now` reading so snapshot_written_at and the expires_at base
+    # don't drift relative to each other.
+    now = datetime.now(UTC)
+    snapshot_written_at = now.isoformat()
+    expires_at: str | None = None
+    if effective_duration is not None:
+        expires_at = (now + timedelta(seconds=effective_duration)).isoformat()
+
     payload: dict[str, Any] = {
         "session_id": session_id,
         "profile": {
@@ -114,7 +125,8 @@ def write_snapshot(
             for m, mode in resolved_mounts
         ],
         "harness": harness_name,
-        "snapshot_written_at": datetime.now(UTC).isoformat(),
+        "snapshot_written_at": snapshot_written_at,
+        "expires_at": expires_at,
     }
     # Record the override explicitly so the cell can tell "extended via
     # adjust" from "profile says X" — useful in the capability banner.

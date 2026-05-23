@@ -211,3 +211,71 @@ def test_snapshot_uses_profile_duration_when_no_override(tmp_path: Path):
     data = json.loads(path.read_text())
     assert data["profile"]["duration_seconds"] == 3600
     assert "duration_override_active" not in data["profile"]
+
+
+# --- F-E-04: absolute expires_at in the snapshot ---------------------------
+
+
+def test_snapshot_includes_absolute_expires_at_for_bounded_session(tmp_path: Path):
+    """The agent shouldn't have to do wall-clock math to compute expiry —
+    the snapshot carries an absolute ISO timestamp."""
+    from datetime import UTC, datetime
+
+    from whizzard.config import Profile
+
+    profile = Profile(
+        name="default",
+        network_enabled=True,
+        duration_seconds=3600,
+    )
+    before = datetime.now(UTC)
+    path = write_snapshot("sess-1", profile, [], "hermes", whizzard_home=tmp_path)
+    after = datetime.now(UTC)
+
+    data = json.loads(path.read_text())
+    expires_at = datetime.fromisoformat(data["expires_at"])
+    # Should be within [before + 3600s, after + 3600s].
+    assert (expires_at - before).total_seconds() >= 3599
+    assert (expires_at - after).total_seconds() <= 3601
+
+
+def test_snapshot_expires_at_is_none_for_unlimited_session(tmp_path: Path):
+    """duration_seconds=None means unlimited; expires_at should reflect that."""
+    from whizzard.config import Profile
+
+    profile = Profile(
+        name="default",
+        network_enabled=True,
+        duration_seconds=None,  # unlimited
+    )
+    path = write_snapshot("sess-1", profile, [], "hermes", whizzard_home=tmp_path)
+
+    data = json.loads(path.read_text())
+    assert data["expires_at"] is None
+
+
+def test_snapshot_expires_at_uses_override_when_set(tmp_path: Path):
+    """F-D-06 + F-E-04: expires_at base is the effective duration, not the
+    underlying profile value."""
+    from datetime import UTC, datetime
+
+    from whizzard.config import Profile
+
+    profile = Profile(
+        name="default",
+        network_enabled=True,
+        duration_seconds=3600,  # profile says 1h
+    )
+    before = datetime.now(UTC)
+    path = write_snapshot(
+        "sess-1", profile, [], "hermes",
+        whizzard_home=tmp_path,
+        duration_override_seconds=7200,  # but the relaunch said 2h
+    )
+    after = datetime.now(UTC)
+
+    data = json.loads(path.read_text())
+    expires_at = datetime.fromisoformat(data["expires_at"])
+    # Should land ~2h from now, NOT ~1h.
+    assert (expires_at - before).total_seconds() >= 7199
+    assert (expires_at - after).total_seconds() <= 7201

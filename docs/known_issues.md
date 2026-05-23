@@ -148,6 +148,34 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### Sub-agent permission scoping — none today
+Whizzard's containment boundary is the docker container. Every process
+inside the cell — the parent agent, Hermes-spawned workers, tool
+subprocesses — shares the parent's full permission set: mount list,
+network, time budget, credentials, request-channel access. A buggy or
+compromised sub-agent has the same blast radius as the parent. Adequate
+for the MVP threshold (D-101: single trusted user); becomes a real
+defense-in-depth question for OSS launch when users may run third-party
+agent code. The path forward is sub-cells via host request (one
+Whizzard cell per scoped sub-agent), which keeps D-9 and D-164 intact.
+*Source:* D-171 (open); catch-up review 2026-05-23 Chunk E discussion.
+*Disposition:* defer to OSS-launch milestone planning (D-131).
+
+### `whiz_audit_self` reads the entire host audit log per call
+The in-cell MCP tool `tool_whiz_audit_self` loads the full audit log
+with `read_text().splitlines()`, then filters in Python. The log is
+append-only and accumulates entries across every session for the
+lifetime of the install — no rotation. An agent polling
+`whiz_audit_self` on a long-lived install pays O(total-log-bytes) RAM
+per call. The Chunk D F-D-04 fix applied streaming to
+`merge_agent_events` on the host side for the same reason; the
+cell-side read deserves the same treatment plus an optional
+`since=<ts>` argument so the agent can ask for incremental tail.
+*Source:* catch-up review 2026-05-23 finding F-E-05.
+*Disposition:* defer — quality improvement when audit-log rotation
+lands OR Stage 20 hardening pass; no current install long-lived enough
+for it to bite.
+
 ### Safety policy two-way intersection check applies only to deep hard-blocks
 `safety.py`'s module docstring promises a "two-way intersection check" for
 all blocked-path tiers, but only `_DEEP_HARD_BLOCKS` actually uses

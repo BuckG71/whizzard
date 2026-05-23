@@ -521,3 +521,70 @@ def test_mark_resolved_writes_to_host_only_resolutions_store(sessions_dir):
     data = json.loads(res_path.read_text())
     assert data["status"] == "denied"
     assert data["resolution_detail"] == "policy"
+
+
+# --- F-E-02: cell cannot repaint kind/params after resolution -------------
+
+
+def test_resolved_request_kind_and_params_come_from_host_store_not_cell_file(
+    sessions_dir,
+):
+    """After a request is resolved, the cell can overwrite its request
+    file with a different kind/params payload. The host-side view must
+    show the *original* kind/params snapshotted at resolution time, not
+    the cell-controlled current content of the file. Closes the
+    repaint-on-resolved attack F-E-02."""
+    # 1. Cell writes a benign request and the host approves it.
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "repaint.json"
+    benign = {
+        "request_id": "repaint",
+        "kind": "extend",
+        "params": {"duration": "30m"},
+        "reason": "small bump",
+        "status": "pending",
+        "created_at": "2026-05-23T00:00:00+00:00",
+    }
+    path.write_text(json.dumps(benign))
+
+    benign_req = _load(path)
+    reqs.mark_resolved(benign_req, "applied", "approved 30m extension")
+
+    # 2. Cell repaints the file with a much larger ask, same request_id.
+    repainted = dict(benign)
+    repainted["kind"] = "extend"
+    repainted["params"] = {"duration": "999h"}  # the forgery
+    repainted["reason"] = "see, this is what was approved"
+    path.write_text(json.dumps(repainted))
+
+    # 3. Host-side listing must see the original kind/params, not the
+    # cell's repaint.
+    listed = _load(path)
+    assert listed.status == "applied"  # resolution is preserved
+    assert listed.params == {"duration": "30m"}  # NOT 999h
+    assert listed.reason == "small bump"  # NOT the cell's revised reason
+    assert listed.kind == "extend"
+
+
+def test_pending_request_reads_kind_and_params_from_cell_file(sessions_dir):
+    """The host-store override only applies to resolved requests; pending
+    requests still use the cell-supplied fields (there's nothing yet
+    snapshotted to override against)."""
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "freshreq.json"
+    path.write_text(json.dumps({
+        "request_id": "freshreq",
+        "kind": "mount",
+        "params": {"name": "documents", "mode": "ro"},
+        "reason": "need to read docs",
+        "status": "pending",
+        "created_at": "2026-05-23T00:00:00+00:00",
+    }))
+
+    req = _load(path)
+    assert req.status == "pending"
+    assert req.kind == "mount"
+    assert req.params == {"name": "documents", "mode": "ro"}
+    assert req.reason == "need to read docs"

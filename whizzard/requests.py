@@ -63,24 +63,26 @@ def _resolutions_path(session_id: str, request_id: str) -> Path:
     return _config.STATE_DIR / "request-resolutions" / session_id / f"{request_id}.json"
 
 
-def _read_resolution(session_id: str, request_id: str) -> tuple[str, str]:
-    """Return (status, resolution_detail) for a request from the host-only
-    authoritative store. Default ("pending", "") if no host resolution
-    recorded yet — the cell-supplied status is intentionally ignored.
+def _read_resolution_record(session_id: str, request_id: str) -> dict | None:
+    """Return the host-only resolution record for a request, or None if
+    no host resolution has been recorded yet.
+
+    F-E-02: extends the F-D-05 store from "status only" to "the full
+    canonical record". For resolved requests this is the source of truth
+    for kind, params, reason, and created_at too — the cell-writable
+    request file is no longer trusted for any field of a resolved
+    request, closing the repaint-on-resolved attack.
     """
     p = _resolutions_path(session_id, request_id)
     if not p.exists():
-        return ("pending", "")
+        return None
     try:
         data = json.loads(p.read_text())
     except (OSError, json.JSONDecodeError):
-        return ("pending", "")
+        return None
     if not isinstance(data, dict):
-        return ("pending", "")
-    return (
-        str(data.get("status") or "pending"),
-        str(data.get("resolution_detail") or ""),
-    )
+        return None
+    return data
 
 # Request kinds the agent may submit. Mirrors the `whiz_request_*` MCP tools.
 VALID_KINDS = frozenset({"mount", "extend"})
@@ -167,20 +169,43 @@ def _load_request(path: Path) -> AgentRequest | None:
     if not request_id or kind not in VALID_KINDS:
         return None
 
-    # F-D-05: authoritative status from host-only store.
-    canonical_status, canonical_detail = _read_resolution(
-        canonical_session_id, str(request_id)
-    )
+    # F-D-05 / F-E-02: for resolved requests, the entire record (kind,
+    # params, reason, created_at, status, resolution_detail) comes from
+    # the host-only store. Cell can repaint its own file with new
+    # kind/params after resolution, but listing reads from the immutable
+    # host snapshot. For pending requests, cell-supplied fields are
+    # used — there's nothing to forge against yet.
+    resolution = _read_resolution_record(canonical_session_id, str(request_id))
+    if resolution is not None:
+        cell_params = data.get("params")
+        res_params = resolution.get("params")
+        canonical_kind = str(resolution.get("kind") or kind)
+        canonical_params = res_params if isinstance(res_params, dict) else (
+            cell_params if isinstance(cell_params, dict) else {}
+        )
+        canonical_reason = str(resolution.get("reason") or data.get("reason") or "")
+        canonical_created_at = str(
+            resolution.get("created_at") or data.get("created_at") or ""
+        )
+        canonical_status = str(resolution.get("status") or "pending")
+        canonical_detail = str(resolution.get("resolution_detail") or "")
+    else:
+        cell_params = data.get("params")
+        canonical_kind = str(kind)
+        canonical_params = cell_params if isinstance(cell_params, dict) else {}
+        canonical_reason = str(data.get("reason") or "")
+        canonical_created_at = str(data.get("created_at") or "")
+        canonical_status = "pending"
+        canonical_detail = ""
 
-    params = data.get("params")
     return AgentRequest(
         request_id=str(request_id),
         session_id=canonical_session_id,
-        kind=str(kind),
-        params=params if isinstance(params, dict) else {},
-        reason=str(data.get("reason") or ""),
+        kind=canonical_kind,
+        params=canonical_params,
+        reason=canonical_reason,
         status=canonical_status,
-        created_at=str(data.get("created_at") or ""),
+        created_at=canonical_created_at,
         path=path,
         resolution_detail=canonical_detail,
     )
@@ -250,13 +275,20 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
     """
     resolved_at = _dt.datetime.now(_dt.UTC).isoformat()
 
-    # Authoritative record in the host-only store.
+    # Authoritative record in the host-only store. F-E-02: snapshot the
+    # full request shape (kind / params / reason / created_at) here so
+    # `_load_request` can source those fields from this store for
+    # resolved requests — the cell-writable file can no longer be used
+    # to retroactively repaint a resolved request's apparent semantics.
     res_path = _resolutions_path(req.session_id, req.request_id)
     res_path.parent.mkdir(parents=True, exist_ok=True)
     res_path.write_text(json.dumps({
         "request_id": req.request_id,
         "session_id": req.session_id,
         "kind": req.kind,
+        "params": req.params,
+        "reason": req.reason,
+        "created_at": req.created_at,
         "status": status,
         "resolution_detail": detail,
         "resolved_at": resolved_at,
