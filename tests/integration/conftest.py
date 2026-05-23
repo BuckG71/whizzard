@@ -150,8 +150,29 @@ def run_in_cell(whizzard_base_image: str):
     from whizzard.config import get_profile
     from whizzard.docker_cmd import build_run_argv
 
-    def _run(cmd: list[str], *, profile: str = "default", timeout: int = 60):
-        argv = build_run_argv(get_profile(profile), image=whizzard_base_image)
+    def _run(cmd: list[str], *, profile: str = "default",
+             mounts: list[tuple[str, str]] | None = None, timeout: int = 60):
+        """`mounts` is an optional list of (host_path, mode) tuples — passed
+        through `build_run_argv` so the real OIQ mount semantics apply.
+        Adversarial mount-boundary tests use this to set up the attacker's
+        host-side layout (a mounted subdir + a sibling that must stay
+        invisible, a hostile symlink, etc.). Each mount appears in the cell
+        at `/mounts/test-mount-<idx>`."""
+        from whizzard.mounts import Mount
+
+        resolved: list[tuple[Mount, str]] = []
+        for i, (host_path, mode) in enumerate(mounts or []):
+            m = Mount(
+                name=f"test-mount-{i}", host_path=Path(host_path),
+                default_mode=mode,  # type: ignore[arg-type]
+                description=f"smoke test mount {i}",
+            )
+            resolved.append((m, mode))
+
+        argv = build_run_argv(
+            get_profile(profile), image=whizzard_base_image,
+            resolved_mounts=resolved or None,
+        )
         # build_run_argv's argv tail is [image, *start_command]. Find the
         # image, drop `-it`, and replace the start-command tail with `cmd`.
         image_idx = next(
