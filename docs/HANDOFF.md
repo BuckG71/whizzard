@@ -56,6 +56,28 @@
 
 # Session Handoff Log
 
+## 2026-05-23T14:30Z — Stage 15.5 CI fully green; post-mortem audit complete
+
+### Goal
+Ship Stage 15.5 (`whiz wake`) with all CI jobs green so the work is durable across sessions. Stages 1–15.5 are now SHIPPED with no red CI; next is Stage 16 design (slash-commands UX).
+
+### Active task
+None mid-flight. Last commit `25e172e` is fully green on CI (lint + typecheck + 3.11 + 3.12 + coverage + integration + decisions-validate). Next session begins Stage 16 design conversation, paused per UX-pause-at-design-stages feedback rule.
+
+### Tried & rejected
+- **Bypass --help renderer entirely** (param-introspection, `0fc2696`): test became too weak — verified declared params, not user-visible output. User flagged the loss of intent.
+- **Pin `typer.rich_utils.MAX_WIDTH` via monkeypatch** (`28c6da2`): passed locally, failed on CI — the knob wasn't being honored by whatever typer version CI installed.
+- **Whitespace-strip workaround in test_dry_run_includes_mount_in_argv** (kept after `7eca214`): worked but permissive about layout. Replaced in `6a84a94` with the factory-replacement approach for stricter contiguous matching.
+- **Inline imports inside test functions** (`6a84a94`): ruff `I001` failed CI. Lifted to module-level in `25e172e`.
+
+### Resume protocol
+1. Verify CI green on `main` at `25e172e` via `gh run list --branch main --limit 1`.
+2. Open the Stage 16 design conversation per `feedback_ux_pause_at_design_stages`: read `docs/mvp_build_plan.md` Stage 16 entry, surface the full scope upfront (per `feedback_full_stage_scope`), then ask one design question at a time (per `feedback_one_at_a_time`).
+3. The Stage 15.5 ultrareview retry decision is still pending — user deferred from prior session. Don't push on it; surface it once if Stage 16 work pauses.
+4. If user mentions the wake/CI saga: the established pattern for Rich-rendered help/output tests is to monkeypatch `typer.rich_utils._get_rich_console` (factory replacement) — see `tests/test_wake_cli.py::_wide_rich_console`. Other tests with similar fragility should adopt the same pattern.
+
+**Don't:** jump into Stage 16 implementation without the design conversation. Don't re-litigate the wake CLI tests — they're settled.
+
 ## 2026-05-23T05:00Z — Stage 15.5 shipped; baseline-review decision pending
 
 ### Goal
