@@ -11,7 +11,8 @@ Whizzard is a local capability-governance layer for AI agents — wraps an agent
 1. **Read [`docs/README.md`](docs/README.md)** — the doc nav index. Specifically the first-time orientation order: vision → architecture → mvp_build_plan → control_surface → post_mvp_spec.
 2. **Read [`docs/decisions.md`](docs/decisions.md)** for any decision IDs your change interacts with. Decisions are append-only (D-129); they capture the *why* behind the code. Use `python3 scripts/dx.py D-NN` to look up a specific decision or `python3 scripts/dx.py find <text>` to search.
 3. **Check [`docs/HANDOFF.md`](docs/HANDOFF.md)** for the latest session entry (newest at top of the log) and the Current State header — tells you what's in flight and what's just-shipped.
-4. **For UX-shaped changes** (CLI surfaces, presets, slash commands, Discord control plane), expect a design conversation before code per D-148. Stages 11, 16, 17 have explicit design-pause requirements.
+4. **Skim [`docs/known_issues.md`](docs/known_issues.md)** if your change touches an area with deferred work, a known functional gap, or recorded tech debt — saves you rediscovering it.
+5. **For UX-shaped changes** (CLI surfaces, presets, slash commands, Discord control plane), expect a design conversation before code per D-148. Stages 11, 16, 17 have explicit design-pause requirements.
 
 ## Local setup
 
@@ -29,7 +30,7 @@ pre-commit install          # optional but recommended
 One command runs everything CI runs:
 
 ```sh
-make check                  # lint + typecheck + 311 tests
+make check                  # lint + typecheck + unit tests (~460 tests, <2s)
 ```
 
 Individual targets:
@@ -56,8 +57,8 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR
 
 ## Tests
 
-- Unit tests live under `tests/`, one test file per source module (`test_<module>.py`). They use `monkeypatch` + `tmp_path`; **no real Docker, no real Hermes, no real OneCLI** required for the suite to pass. Default `make test` runs this tier (311 tests, <1s).
-- **Integration tests** live under `tests/integration/`, marked `@pytest.mark.integration`. They exercise real Docker against the built `whizzard-base:latest` image to verify containment (read-only rootfs, non-root user, tmpfs writable, etc.). Excluded from default runs via the `addopts = "-m 'not integration'"` setting in `pyproject.toml`; run explicitly with `make integration` or `pytest -m integration`. Gated on Docker daemon availability — skipped cleanly when Docker isn't reachable.
+- Unit tests live under `tests/`, one test file per source module (`test_<module>.py`). They use `monkeypatch` + `tmp_path`; **no real Docker, no real Hermes, no real OneCLI** required for the suite to pass. Default `make test` runs this tier (~460 tests, ~1s).
+- **Integration tests** live under `tests/integration/`, marked `@pytest.mark.integration`. They exercise real Docker against the built `whizzard-base:latest` and `whizzard-hermes:latest` images, covering: containment invariants (read-only rootfs, non-root user, capability drops, network-off egress, Docker-socket absence, bind-mount isolation, hostile-symlink containment, read-only mount writes blocked), Stage 15 enforcement (duration cap and idle timeout actually stop containers), the full `run_shell` launch path end-to-end, Stage 13 `adjust` real-Docker primitives, in-cell MCP deployment (D-167 invariant: the `whizzard` package is *not* importable in the cell), MCP stdio protocol round-trip, and Stage 8 Hermes binary + Ollama reachability. Excluded from default runs via the `addopts = "-m 'not integration'"` setting in `pyproject.toml`; run explicitly with `make integration` or `pytest -m integration`. Gated on Docker daemon availability — skipped cleanly when Docker isn't reachable.
 - Adding a new test file? Follow the existing per-module pattern (unit) or add to `tests/integration/` with the marker (integration).
 - Manual smoke tests (real Hermes + real harness) live in `docs/stage_validation.md` and `docs/STAGE_8_BUILD_PLAN.md` (M7 runbook). These require user-specific config and aren't part of either automated tier.
 
