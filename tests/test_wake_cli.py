@@ -52,12 +52,15 @@ def _end(sid: str, reason: str = "idle",
 
 
 def test_wake_help_renders():
+    # Rich-rendered help adjusts (and can outright truncate) flag names at
+    # very narrow terminal widths. The CI runner's default width hides the
+    # full option set; force a wide terminal so the assertion sees the
+    # complete help output regardless of where the test runs.
     runner = CliRunner()
-    res = runner.invoke(app, ["wake", "--help"])
+    res = runner.invoke(app, ["wake", "--help"], env={"COLUMNS": "200"})
     assert res.exit_code == 0
-    # Help rendering is terminal-width sensitive — narrow CI terminals can
-    # line-wrap option names and inject whitespace mid-token. Strip both
-    # newlines and spaces so the flag-name check is wrap-robust.
+    # Whitespace-strip still defensive — even at 200 cols Rich may wrap
+    # at panel boundaries.
     flat = res.stdout.replace("\n", "").replace(" ", "")
     assert "Wake(hot-restart)" in flat
     assert "allow-missing-mounts" in flat
