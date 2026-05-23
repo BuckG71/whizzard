@@ -50,24 +50,66 @@ def _docker_env() -> dict[str, str]:
     return env
 
 
+class DockerDaemonError(Exception):
+    """The Docker CLI is installed but couldn't talk to the daemon.
+
+    Distinct from "image missing" so callers can show "is Docker Desktop
+    running?" instead of "did you build the image?" (F-B-01).
+    """
+
+
+# Substrings docker emits when the daemon is unreachable. Stable across
+# Docker for Mac, Docker Desktop on Windows, and Linux daemons. Matched
+# case-sensitively because docker emits these verbatim.
+_DAEMON_DOWN_INDICATORS = (
+    "Cannot connect to the Docker daemon",
+    "Is the docker daemon running",
+    "error during connect",  # Windows named-pipe variant
+)
+
+
+def _looks_like_daemon_error(stderr: str) -> bool:
+    return any(token in stderr for token in _DAEMON_DOWN_INDICATORS)
+
+
 def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
 def image_exists(image: str = WHIZZARD_IMAGE) -> bool:
+    """True if the local daemon has the image, False if it doesn't.
+
+    Raises ``DockerDaemonError`` if the CLI is present but the daemon is
+    unreachable — previously this silently returned False, sending the
+    user to ``docker pull`` when the real problem was Docker Desktop not
+    running (F-B-01).
+    """
     if not docker_available():
         return False
     result = subprocess.run(
         ["docker", "image", "inspect", image],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
         env=_docker_env(),
     )
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+    if _looks_like_daemon_error(result.stderr):
+        raise DockerDaemonError(
+            f"Docker CLI is installed but the daemon is not reachable.\n"
+            f"On macOS / Windows, start Docker Desktop. On Linux, check "
+            f"`systemctl status docker`.\n"
+            f"docker said: {result.stderr.strip()}"
+        )
+    return False
 
 
 def get_image_id(image: str = WHIZZARD_IMAGE) -> str | None:
-    """Return the sha256 image ID for traceability, or None if not found."""
+    """Return the sha256 image ID for traceability, or None if not found.
+
+    Raises ``DockerDaemonError`` if the daemon is unreachable, matching
+    ``image_exists`` (F-B-01). None still means "image not registered."
+    """
     if not docker_available():
         return None
     result = subprocess.run(
@@ -77,6 +119,11 @@ def get_image_id(image: str = WHIZZARD_IMAGE) -> str | None:
         env=_docker_env(),
     )
     if result.returncode != 0:
+        if _looks_like_daemon_error(result.stderr):
+            raise DockerDaemonError(
+                f"Docker daemon unreachable while resolving image ID.\n"
+                f"docker said: {result.stderr.strip()}"
+            )
         return None
     return result.stdout.strip() or None
 
@@ -259,10 +306,16 @@ def run_shell(
     # Defensive: callers (cli.py) should pre-flight these and surface red
     # errors. If we land here without docker or the image, return an error
     # exit code silently — no stderr writes — so we don't double-report.
+    # F-B-01: image_exists now raises DockerDaemonError on a missing daemon.
+    # The CLI preflight catches and prints; here we treat it identically to
+    # "no docker" (exit 127) so a defensive direct caller still exits cleanly.
     if not docker_available():
         return RunResult(container_id=None, exit_code=127)
-    if not image_exists(image):
-        return RunResult(container_id=None, exit_code=125)
+    try:
+        if not image_exists(image):
+            return RunResult(container_id=None, exit_code=125)
+    except DockerDaemonError:
+        return RunResult(container_id=None, exit_code=127)
 
     if session_id is None:
         session_id = new_session_id()

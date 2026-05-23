@@ -420,3 +420,58 @@ def test_argv_omits_it_when_not_interactive():
     assert "--cap-drop=ALL" in argv
     assert "--read-only" in argv
     assert "--security-opt" in argv
+
+
+# --- F-B-01: image_exists distinguishes daemon-down from image-missing ----
+
+
+def test_image_exists_raises_when_daemon_unreachable(monkeypatch):
+    """Daemon-down used to look identical to image-missing — silent UX bug."""
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "Cannot connect to the Docker daemon at "
+                      "unix:///var/run/docker.sock. Is the docker daemon running?",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    import pytest
+    with pytest.raises(dc.DockerDaemonError, match="daemon is not reachable"):
+        dc.image_exists("any:tag")
+
+
+def test_image_exists_returns_false_for_missing_image(monkeypatch):
+    """Image-missing case still returns False — caller knows to suggest build."""
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "Error: No such image: whizzard:latest",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    assert dc.image_exists("whizzard:latest") is False
+
+
+def test_get_image_id_raises_when_daemon_unreachable(monkeypatch):
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "Cannot connect to the Docker daemon",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    import pytest
+    with pytest.raises(dc.DockerDaemonError):
+        dc.get_image_id("any:tag")

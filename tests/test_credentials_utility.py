@@ -14,6 +14,7 @@ from whizzard.adapters import (
     CredentialUnavailableError,
     OneCLINotInstalledError,
     OneCLISecretMissingError,
+    OneCLITimeoutError,
     SecretFetchResult,
     fetch_secret,
 )
@@ -132,3 +133,33 @@ def test_secret_fetch_result_is_frozen():
     r = SecretFetchResult(value="x", source="onecli")
     with pytest.raises(dataclasses.FrozenInstanceError):
         r.value = "tampered"  # type: ignore[misc]
+
+
+# --- F-B-03: OneCLI timeout is its own exception type, no fallback --------
+
+
+def test_fetch_via_onecli_raises_timeout_error_on_subprocess_timeout(monkeypatch):
+    """Previously the bare TimeoutExpired propagated as an undocumented
+    exception. Now it surfaces as OneCLITimeoutError with a helpful
+    message about checking vault status."""
+    def fake_run(argv, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs.get("timeout", 30))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(OneCLITimeoutError, match="timed out"):
+        creds_module._fetch_via_onecli("DISCORD_BOT_TOKEN")
+
+
+def test_fetch_secret_does_not_fall_back_to_host_env_on_timeout(monkeypatch):
+    """Timeout means we don't know what OneCLI would have said. Falling
+    back to host env could mask a real problem — D-134 "fail loud" applies."""
+    def raises_timeout(name):
+        raise OneCLITimeoutError("OneCLI timed out after 30s")
+
+    monkeypatch.setattr(creds_module, "_fetch_via_onecli", raises_timeout)
+    # Even with host env set, the fetch should still raise — no silent fallback.
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "this-should-not-be-returned")
+
+    with pytest.raises(OneCLITimeoutError):
+        fetch_secret("DISCORD_BOT_TOKEN")

@@ -70,6 +70,14 @@ def _validate_spec(name: str, spec: dict) -> None:
         )
     if "start_command" not in spec:
         raise HarnessConfigError(f"harness {name!r}: missing required field 'start_command'")
+    # F-B-06: empty/whitespace-only start_command would shlex-split to []
+    # and silently fall through to the image's CMD inside the container,
+    # which is not behavior we want from a harness config.
+    start_command = spec["start_command"]
+    if not isinstance(start_command, str) or not start_command.strip():
+        raise HarnessConfigError(
+            f"harness {name!r}: start_command must be a non-empty string"
+        )
 
     # Optional integer fields
     for int_field in ("wrap_up_grace_seconds", "startup_timeout_seconds"):

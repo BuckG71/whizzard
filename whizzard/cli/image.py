@@ -9,7 +9,13 @@ from typing import Annotated
 import typer
 
 from whizzard.cli._shared import console
-from whizzard.docker_cmd import WHIZZARD_IMAGE, _docker_env, docker_available, image_exists
+from whizzard.docker_cmd import (
+    WHIZZARD_IMAGE,
+    DockerDaemonError,
+    _docker_env,
+    docker_available,
+    image_exists,
+)
 
 image_app = typer.Typer(help="Manage the execution image.")
 
@@ -25,7 +31,12 @@ def image_status_cmd(
         console.print("[red]docker not found on PATH[/red]")
         raise typer.Exit(code=127)
 
-    if image_exists(image):
+    try:
+        present = image_exists(image)
+    except DockerDaemonError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=125) from e
+    if present:
         console.print(f"[green]image[/green] {image} is present")
     else:
         console.print(f"[yellow]image[/yellow] {image} is NOT present")

@@ -14,6 +14,7 @@ from whizzard.adapters import UnknownHarnessTypeError, build_adapter
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, get_profile
 from whizzard.docker_cmd import (
+    DockerDaemonError,
     build_run_argv,
     docker_available,
     image_exists,
@@ -158,7 +159,12 @@ def _perform_launch(
     if not docker_available():
         console.print("[red]error: docker not found on PATH[/red]")
         raise typer.Exit(code=127)
-    if not image_exists(image):
+    try:
+        image_present = image_exists(image)
+    except DockerDaemonError as e:
+        console.print(f"[red]error: {e}[/red]")
+        raise typer.Exit(code=125) from e
+    if not image_present:
         console.print(
             f"[red]error: image {image!r} not found.[/red]\n"
             f"build it with: [bold]whizzard image build[/bold]"

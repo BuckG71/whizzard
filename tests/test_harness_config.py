@@ -249,3 +249,32 @@ def test_load_rejects_unsupported_schema_version(tmp_path: Path):
     }))
     with pytest.raises(HarnessConfigError, match="schema_version"):
         load_harnesses(f)
+
+
+# --- F-B-06: empty/whitespace start_command rejected ---------------------
+
+
+def test_load_rejects_empty_start_command(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "broken": {"type": "shell", "start_command": ""},
+    })
+    with pytest.raises(HarnessConfigError, match="non-empty string"):
+        load_harnesses(f)
+
+
+def test_load_rejects_whitespace_start_command(tmp_path: Path):
+    """A start_command of only spaces would shlex-split to [], silently
+    falling through to the image's CMD inside the container."""
+    f = _write(tmp_path / "harnesses.json", {
+        "broken": {"type": "shell", "start_command": "   "},
+    })
+    with pytest.raises(HarnessConfigError, match="non-empty string"):
+        load_harnesses(f)
+
+
+def test_load_rejects_non_string_start_command(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "broken": {"type": "shell", "start_command": ["bash"]},
+    })
+    with pytest.raises(HarnessConfigError, match="non-empty string"):
+        load_harnesses(f)

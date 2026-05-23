@@ -6,6 +6,7 @@ from whizzard.adapters._credentials import (
     CredentialUnavailableError,
     OneCLINotInstalledError,
     OneCLISecretMissingError,
+    OneCLITimeoutError,
     SecretFetchResult,
     fetch_secret,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "CredentialUnavailableError",
     "OneCLINotInstalledError",
     "OneCLISecretMissingError",
+    "OneCLITimeoutError",
     "SecretFetchResult",
     "build_adapter",
     "create_hermes_profile",

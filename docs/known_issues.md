@@ -100,6 +100,54 @@ Contributor-facing adapter Protocol artifact. Decided but not authored.
 A stage-specific build plan that's fully shipped. Lives as cruft in `docs/`.
 *Disposition:* archive to `docs/archive/` when next touching that area.
 
+### In-cell `snapshot.json` is writable by the agent
+The per-session `/run/whiz` mount is `:rw` because the cell legitimately writes
+`events.jsonl` and `requests/*.json` there. `snapshot.json` (the agent's
+launch-time capability view, per D-156) lives in the same dir, so the cell
+can overwrite it. The host-side audit log (mounted `:ro`) is still the source
+of truth — containment is intact — but the cooperation-layer "honest
+self-reflection" guarantee leaks: a compromised harness could lie to itself
+about its own permissions via `whiz_status`.
+*Source:* catch-up review 2026-05-23 finding F-B-05.
+*Fix shape:* split `/run/whiz` into a `:ro` snapshot mount and a `:rw`
+events/requests mount, OR expose the snapshot through the in-cell MCP server
+instead of as a file. Either is a D-156 amendment.
+*Disposition:* Stage 20 security review, or a decision-needed item earlier
+if it bothers us.
+
+### No env-name denylist on adapter-supplied `container_env`
+`docker_cmd.build_run_argv` passes the adapter's `container_env()` and
+`mcp_env()` into `-e K=V` flags without filtering names. A user-edited
+`harnesses.json` could include `LD_PRELOAD`, `PATH`, `HOME`, etc. and the
+values would land verbatim in the cell. Not a containment escape (the cell
+is the cell), but a footgun for misconfig. Adapter code is core-trusted (D-10)
+and `harnesses.json` is a Whizzard-owned surface (D-153) so no current path
+exercises this; the denylist is defensive hardening.
+*Source:* catch-up review 2026-05-23 finding F-B-07.
+*Disposition:* Stage 20 hardening audit.
+
+### `cidfile` orphans in STATE_DIR on a mid-launch crash
+`run_shell` clears `cidfile` before `Popen`, populates it during the run,
+and unlinks it at the end. If an unhandled exception fires between the
+Popen and the final unlink (KeyboardInterrupt during `monitor_and_enforce`,
+etc.), the cidfile is left behind. Each orphan is a few bytes; impact is
+slow STATE_DIR growth. Fix is a `try/finally` wrap of a sizable block;
+natural home is the Stage 18 (image management) work that already touches
+this area.
+*Source:* catch-up review 2026-05-23 finding F-B-09.
+*Disposition:* Stage 18.
+
+### No test for agent-event merge ordering vs `session_end`
+`run_shell` documents in code that agent events MUST be merged into the
+audit log before the `session_end` event so the log is temporally
+ordered. No unit test populates `event_log_path(session_id)` then asserts
+the merged events appear between `session_start` and `session_end`.
+Integration smokes would catch a real ordering bug, but fast unit coverage
+is missing.
+*Source:* catch-up review 2026-05-23 finding F-B-10.
+*Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
+that chunk's review already touches the audit-log assertion machinery.
+
 ### Hermes image carries unused vestigial config
 `harnesses.json` schema and the bundled `_DEFAULT_HARNESSES['hermes']` retain
 `wrap_up_command: "/quit"` — the field is unused (per D-88 the adapter does

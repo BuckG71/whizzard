@@ -34,6 +34,15 @@ class OneCLISecretMissingError(Exception):
     """OneCLI returned non-zero — usually a not-registered secret."""
 
 
+class OneCLITimeoutError(Exception):
+    """OneCLI exceeded the fetch timeout — vault locked or daemon stuck.
+
+    Distinct from ``OneCLISecretMissingError`` because the host-env fallback
+    is unsafe on timeout (we don't know what OneCLI would have said). D-134
+    "fail loud, do not launch" applies (F-B-03).
+    """
+
+
 class CredentialUnavailableError(Exception):
     """Neither OneCLI nor host env has the requested secret."""
 
@@ -64,6 +73,13 @@ def _fetch_via_onecli(name: str) -> str:
         raise OneCLINotInstalledError(
             "`onecli` not found on PATH; falling back to host env."
         ) from e
+    except subprocess.TimeoutExpired as e:
+        raise OneCLITimeoutError(
+            f"OneCLI timed out after {_ONECLI_TIMEOUT_SECONDS}s fetching "
+            f"secret {name!r}. Your vault may be locked, or the OneCLI "
+            f"daemon may be stuck. Try `onecli auth status` and unlock "
+            f"the vault before relaunching."
+        ) from e
 
     if result.returncode != 0:
         raise OneCLISecretMissingError(
@@ -79,6 +95,10 @@ def fetch_secret(name: str) -> SecretFetchResult:
     """Fetch a credential by name. Tries OneCLI first, falls back to host env.
 
     Raises `CredentialUnavailableError` if neither source has the value.
+
+    Raises `OneCLITimeoutError` if OneCLI hung — there is no fallback in
+    that case because we don't know whether the vault has the secret or
+    not (F-B-03, D-134 "fail loud" intent).
 
     The fallback is silent at this layer — the caller surfaces "came from
     host env" via its own capability-banner mechanism (e.g.,
