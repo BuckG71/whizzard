@@ -51,17 +51,28 @@ def _end(sid: str, reason: str = "idle",
     }
 
 
+def _wide_rich_console(stderr: bool = False):
+    """Replacement for typer's internal help-console factory that pins width.
+
+    Typer's `rich_format_help` builds its output via `_get_rich_console()`,
+    whose default lets Rich auto-detect terminal width. On CI runners and
+    in pytest's captured-stdout context, auto-detection collapses to
+    something narrow enough to elide option names from the rendered
+    output. The cleanest cross-version fix is to swap the factory itself
+    for one that always returns a wide, force-terminal Console.
+    """
+    import sys
+
+    from rich.console import Console
+    return Console(width=200, force_terminal=True, file=sys.stderr if stderr else None)
+
+
 def test_wake_help_renders(monkeypatch):
     # End-to-end help-render check: invoke `whiz wake --help` and assert
     # the user-visible output contains the key flag and the command
-    # description. Typer builds its help via a Rich Console whose width
-    # defaults to terminal auto-detect; on CI that's narrow enough to
-    # collapse the options panel and elide flag names. Pin the renderer
-    # to a wide width via the documented `typer.rich_utils.MAX_WIDTH`
-    # module knob so what gets rendered here matches what a user with a
-    # normal terminal would see.
+    # description. See _wide_rich_console for why we replace the factory.
     import typer.rich_utils
-    monkeypatch.setattr(typer.rich_utils, "MAX_WIDTH", 200)
+    monkeypatch.setattr(typer.rich_utils, "_get_rich_console", _wide_rich_console)
 
     runner = CliRunner()
     res = runner.invoke(app, ["wake", "--help"])

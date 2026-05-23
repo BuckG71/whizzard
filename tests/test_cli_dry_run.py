@@ -64,7 +64,7 @@ def test_dry_run_output_contains_docker_argv():
     assert "/bin/bash" in out
 
 
-def test_dry_run_includes_mount_in_argv(tmp_path: Path):
+def test_dry_run_includes_mount_in_argv(tmp_path: Path, monkeypatch):
     """Dry-run with a mount should show the -v line in the argv."""
     target = tmp_path / "alpha"
     target.mkdir()
@@ -82,16 +82,28 @@ def test_dry_run_includes_mount_in_argv(tmp_path: Path):
         },
     }))
 
+    # Pin the dry-run console to a wide width so Rich doesn't line-wrap
+    # the docker invocation preview at CI's narrow auto-detected terminal
+    # width. `_launch` imports `console` at module load (a bound name),
+    # so patching the source module wouldn't reach it — patch the
+    # already-bound reference inside `_launch` itself.
+    # `highlight=False` keeps Rich from injecting ANSI colour codes inside
+    # token text (it would otherwise paint "alpha" yellow inside
+    # `test-alpha`, breaking substring matches with embedded escapes).
+    from rich.console import Console
+    from whizzard.cli import _launch
+    monkeypatch.setattr(
+        _launch, "console",
+        Console(width=200, force_terminal=True, highlight=False),
+    )
+
     result = runner.invoke(
         app,
         ["run", "--profile", "build", "--mount", "test-alpha", "--dry-run"],
     )
     assert result.exit_code == 0
     assert "-v" in result.output
-    # Output is wrap-robustness: rich-rendered docker invocation may line-wrap
-    # at narrow terminal widths (CI). Strip whitespace before checking.
-    flat = result.output.replace("\n", "").replace(" ", "")
-    assert "/mounts/test-alpha:rw" in flat
+    assert "/mounts/test-alpha:rw" in result.output
 
 
 def test_dry_run_with_unknown_profile_errors():
