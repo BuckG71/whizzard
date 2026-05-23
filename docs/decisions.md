@@ -2703,17 +2703,17 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Door Type:** one-way (positioning vs. external products; reversing means repositioning against them, not a feature toggle).
 
-**Decision:** Microsoft's Rampart (pytest-style agent red-team tests on PyRIT) and Clarity (pre-implementation decision-support / failure analysis) occupy the *test* and *design* phases of the agent lifecycle, for enterprise audiences. Whizzard owns the *runtime* phase — capability containment of an executing agent — for solo / local / open-source agent operators. The three are complementary, not overlapping, and should be positioned that way externally at OSS launch.
+**Decision:** Microsoft's Rampart (pytest-style agent red-team tests on PyRIT) and Clarity (pre-implementation decision-support) sit at the *test* and *design* phases of the agent lifecycle, for enterprise audiences. Whizzard owns the *runtime* phase — capability containment of an executing agent — for solo / local / open-source operators. Position the three as complementary, not overlapping, at OSS launch.
 
-**Rationale:** The lifecycle and audience are both disjoint. Rampart and Clarity stop at the moment the agent ships; Whizzard begins there. Rampart's enterprise CI focus and Whizzard's solo / OSS-harness focus (D-17, D-18) target different buyers. Conflating the categories at launch would either drag Whizzard into a comparison it isn't trying to win (enterprise testing tooling), or invite confused users expecting prompt-injection regression coverage from a tool that does kernel-enforced capability scoping. The cleaner framing — "Rampart tests behavior; Whizzard bounds capability" — preserves the niche and clarifies the layering for would-be users of either tool.
+**Rationale:** The lifecycle and audience are both disjoint: Rampart and Clarity stop where Whizzard begins, and their enterprise CI focus targets a different buyer than Whizzard's solo/OSS focus (D-17, D-18). Conflating the categories at launch either drags Whizzard into a comparison it isn't trying to win, or invites users expecting prompt-injection regression coverage from a tool that does kernel-enforced capability scoping. "Rampart tests behavior; Whizzard bounds capability" is the one-line framing that preserves the niche.
 
 **Notes:**
-- Companion artifact: `rampart_clarity_vs_whizzard.html` at repo root (committed in fd571b4) — the side-by-side that drove this decision.
-- Two pattern-borrows surfaced and are worth queueing as separate work, not folded into this decision: (a) a Rampart-shaped pytest suite under `tests/policies/` that asserts Whizzard's own invariants (e.g. "profile `quarantine` denies network", "credential X never enters cell env unless declared"); (b) a Clarity-style multi-perspective failure-analysis template extension to `docs/decisions.md` entries for higher-risk decisions (new mount types, adapter trust assumptions). Both are post-MVP candidates.
-- OSS-launch implication: the README and landing copy should carry an explicit one-line differentiator vs. Rampart/Clarity to prevent conflation. Concrete copy is downstream of D-131 (OSS-launch scope) and not decided here.
-- Naming-shortlist implication (D-144 successor work): "Rampart" is conceptually adjacent (boundaries, defense). Final-name candidates should not read as Microsoft-Rampart-adjacent — Whizzard's differentiator is *capability scoping*, not *perimeter*.
+- Companion artifact: `rampart_clarity_vs_whizzard.html` (committed fd571b4) — the side-by-side that drove this decision.
+- Pattern-borrows queued separately (post-MVP candidates, not folded in here): Rampart-shaped pytest suite for Whizzard's own policy invariants; Clarity-style failure-analysis template for higher-risk decisions.
+- OSS-launch implication: README copy needs an explicit one-line differentiator vs. Rampart/Clarity. Concrete wording is downstream of D-131.
+- D-144 successor naming: avoid Rampart-adjacent connotations (perimeter, defense). Whizzard's differentiator is *capability scoping*.
 
-**Source:** conversation 2026-05-23 (positioning review after Microsoft 2026-05-20 announcement of Rampart and Clarity; companion HTML brief).
+**Source:** conversation 2026-05-23 (after Microsoft 2026-05-20 Rampart/Clarity announcement).
 
 **Status:** active
 
