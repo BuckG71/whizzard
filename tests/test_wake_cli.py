@@ -51,24 +51,24 @@ def _end(sid: str, reason: str = "idle",
     }
 
 
-def test_wake_help_renders():
-    # Introspect the Typer command's params directly rather than parsing
-    # Rich's rendered --help output. Rich aggressively wraps/elides option
-    # names at the narrow widths CI runners report, and forcing COLUMNS
-    # via CliRunner's env isn't honored by the in-process Console. The
-    # contract this test really cares about is "the wake command exposes
-    # these flags," which the param list answers without involving any
-    # renderer.
-    from typer.main import get_command
+def test_wake_help_renders(monkeypatch):
+    # End-to-end help-render check: invoke `whiz wake --help` and assert
+    # the user-visible output contains the key flag and the command
+    # description. Typer builds its help via a Rich Console whose width
+    # defaults to terminal auto-detect; on CI that's narrow enough to
+    # collapse the options panel and elide flag names. Pin the renderer
+    # to a wide width via the documented `typer.rich_utils.MAX_WIDTH`
+    # module knob so what gets rendered here matches what a user with a
+    # normal terminal would see.
+    import typer.rich_utils
+    monkeypatch.setattr(typer.rich_utils, "MAX_WIDTH", 200)
 
-    cmd = get_command(app)
-    wake = cmd.commands["wake"]  # type: ignore[attr-defined]
-    param_names = {p.name for p in wake.params}
-    assert "session_id" in param_names
-    assert "allow_missing_mounts" in param_names
-    assert "dry_run" in param_names
-    # Short-form help summary lives in the command docstring.
-    assert "hot-restart" in (wake.help or "").lower()
+    runner = CliRunner()
+    res = runner.invoke(app, ["wake", "--help"])
+    assert res.exit_code == 0
+    flat = res.stdout.replace("\n", "").replace(" ", "")
+    assert "Wake(hot-restart)" in flat
+    assert "allow-missing-mounts" in flat
 
 
 def test_wake_bare_no_eligible_session_shows_launch_hint(tmp_path, monkeypatch):
