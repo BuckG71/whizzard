@@ -380,9 +380,26 @@ Scope boundaries:
 - Host-CLI-triggered only for MVP. Platform-message-triggered restart (a
   Discord DM auto-waking a killed bot) needs a host-side listener that
   outlives the cell — that belongs with the Discord control plane (Stages
-  16-17) and the D-165 host-side-MCP revisit.
-- Hot-restart drops one-time `--allow-broad-mount` overrides rather than
-  silently re-applying them on an unattended restart.
+  16-17) and the D-165 host-side-MCP revisit. The restart *behavior* itself
+  is the same in either case per D-168 (user-initiated, perms preserved); only
+  the trigger plumbing changes.
+- Hot-restart preserves the full prior permission set, including one-time
+  `--allow-broad-mount` overrides (D-168). The user-initiated-vs-not
+  distinction is what matters, not host-CLI-vs-Discord; both are attended
+  actions. Stripping policies are reserved for non-user-initiated wakes (cron,
+  scheduled tasks, agent-triggered) — none currently exist.
+
+UX details (D-169):
+- `whiz r` selects the most-recent session with `expiry_reason: idle` AND no
+  subsequent `session_start` for that sid (resumed sessions don't re-match on
+  the next `whiz r`).
+- Missing mounts at restart fail with a clear error naming the missing path;
+  `--allow-missing-mounts` is the one-keystroke override.
+- No-eligible / unknown / ineligible session: error states the reason
+  explicitly and points to `whiz launch` for starting fresh.
+- `whiz resume <sid>` for a currently-active sid errors ("Session X is already
+  running"). Restarting an active session is done via `whiz adjust`, not
+  `resume`.
 
 ### Stage 16 — Discord Control Plane (Read-Only)
 

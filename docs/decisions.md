@@ -2641,6 +2641,44 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
+### D-168: User-initiated restart preserves the full prior permission set
+
+**Type:** safety
+
+**Tags:** mvp
+
+**Door Type:** two-way (revisable if non-user-initiated restart triggers are added).
+
+**Decision:** Any user-initiated restart of an idle-ended session preserves the full prior permission set, including one-time `--allow-broad-mount` overrides. Covers host-CLI restart today (`whiz resume`, `whiz r`) and user-initiated future surfaces (Discord-message-triggered restart in Stages 16-17, other control planes). Stripping policies, if any, are reserved for non-user-initiated wakes (cron, scheduled tasks, agent-triggered) — none of which exist today.
+
+**Rationale:** The user-initiated vs. non-user-initiated distinction is the right frame, not host-CLI vs. Discord — the transport is incidental. A user typing `whiz r` and a user sending a Discord DM are equally attended actions. Re-requiring permission flags on every restart adds friction without protecting against anything, violating the precedent that low-friction safe paths are part of the safety architecture (D-117: "if governance is harder than the bypass, users bypass"; D-106 lists *low-friction* alongside *secure-enough* as MVP design discipline).
+
+**Source:** conversation 2026-05-22 (Stage 15.5 design).
+
+**Status:** active
+
+**Load-bearing because:** pre-decides Stage 16-17 restart behavior. If non-user-initiated triggers are ever added (cron, agent-initiated wake, scheduled task), this decision is the boundary where a stripping policy gets layered in — for those paths specifically, not as a general default. Supersedes the original Stage 15.5 build-plan bullet that called for dropping one-time overrides on restart.
+
+### D-169: Stage 15.5 — hot-restart UX details
+
+**Type:** scope
+
+**Tags:** mvp, safety
+
+**Door Type:** two-way (CLI verb behaviors are revisable).
+
+**Decision:**
+- `whiz r` selects the most-recent session with `expiry_reason: idle` AND no subsequent `session_start` for that sid (resumed sessions don't re-match on the next `whiz r`).
+- Missing mounts at restart fail with a clear error naming the missing path; `--allow-missing-mounts` flag is the one-keystroke override.
+- No-eligible / unknown / ineligible session: error states the reason explicitly ("not idle-ended," "not found," "ended via duration-cap") and points to `whiz launch` for starting fresh.
+- `whiz resume <sid>` for a currently-active sid: errors ("Session X is already running"). Restarting an active session is done via `whiz adjust`, not `resume`.
+
+**Rationale:** Each call lands on the cleaner side of the security/usability balance per D-117. Silent mount-stripping would violate explicit-permissions; auto-restart of an active session would be destructive; closest-match suggestions on missing sessions add ambiguity. Error messages point to the next verb so users have a path forward, not just a wall.
+
+**Source:** conversation 2026-05-22 (Stage 15.5 design batch).
+
+**Status:** active
+
 ---
 
 ## Tag vocabulary
