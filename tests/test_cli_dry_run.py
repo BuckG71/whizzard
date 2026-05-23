@@ -5,9 +5,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from rich.console import Console
 from typer.testing import CliRunner
 
-from whizzard.cli import app
+from whizzard.cli import _launch, app
 from whizzard.docker_cmd import RunResult
 
 runner = CliRunner()
@@ -90,8 +91,6 @@ def test_dry_run_includes_mount_in_argv(tmp_path: Path, monkeypatch):
     # `highlight=False` keeps Rich from injecting ANSI colour codes inside
     # token text (it would otherwise paint "alpha" yellow inside
     # `test-alpha`, breaking substring matches with embedded escapes).
-    from rich.console import Console
-    from whizzard.cli import _launch
     monkeypatch.setattr(
         _launch, "console",
         Console(width=200, force_terminal=True, highlight=False),
