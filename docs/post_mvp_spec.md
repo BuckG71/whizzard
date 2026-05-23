@@ -526,3 +526,25 @@ Visual review of:
 - network access
 - approvals
 - breaker events
+
+### Session Log Analytics Surface
+
+Queryable analytics over the existing `~/.whizzard/sessions.jsonl` log (Stage 5, `whizzard/session_log.py`). The storage shape — append-only JSONL with `session_start` / `session_end` / `agent_events` — is already in place; this entry is just the read-side query layer on top.
+
+Pattern reference: the `AuditLogger` in the public ["Control Layer" article](https://towardsdatascience.com/prompt-engineering-isnt-enough-i-built-a-control-layer-that-works-in-production/) pairs an append-only JSONL with an in-memory index that exposes `failure_distribution()`, `pass_rate()`, and P50/P90/P99 latency percentiles. Whizzard's metrics are different (its domain isn't LLM-call reliability), but the *shape* — in-memory index over the JSONL, rebuilt on startup, queryable via a small Python surface — transfers cleanly.
+
+Whizzard-domain metrics worth surfacing:
+- expiry-reason distribution (clean / duration / idle) across the last N sessions or last X days
+- denied-capability-request distribution by adapter, profile, and request type (D-165 request channel + D-163 adjust path)
+- mount-usage distribution — which named capabilities actually get used vs. granted-but-untouched
+- session duration percentiles (P50/P90/P99) per profile
+- idle-end rate per profile (input to Stage 15 idle-timeout tuning)
+
+Likely surfaces:
+- `whiz stats <metric>` CLI subcommands for the common views
+- a Python query module (`whizzard.session_log.analytics` or similar) for programmatic use
+- thread-safe read alongside the existing append-only write path
+
+Out of scope for this entry: visualization (covered by "Session Replay / Audit Visualization" above) and any change to the on-disk log format.
+
+Surfaced by: 2026-05-23 review of the "Control Layer" article (chat-only; no decision entry — per D-24 / D-26 the article's LLM-call middleware sits on the harness side of the boundary, but its audit/analytics shape is borrowable).
