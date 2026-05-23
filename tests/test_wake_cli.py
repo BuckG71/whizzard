@@ -55,8 +55,12 @@ def test_wake_help_renders():
     runner = CliRunner()
     res = runner.invoke(app, ["wake", "--help"])
     assert res.exit_code == 0
-    assert "Wake (hot-restart)" in res.stdout
-    assert "--allow-missing-mounts" in res.stdout
+    # Help rendering is terminal-width sensitive — narrow CI terminals can
+    # line-wrap option names and inject whitespace mid-token. Strip both
+    # newlines and spaces so the flag-name check is wrap-robust.
+    flat = res.stdout.replace("\n", "").replace(" ", "")
+    assert "Wake(hot-restart)" in flat
+    assert "allow-missing-mounts" in flat
 
 
 def test_wake_bare_no_eligible_session_shows_launch_hint(tmp_path, monkeypatch):

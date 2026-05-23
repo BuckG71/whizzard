@@ -88,7 +88,10 @@ def test_dry_run_includes_mount_in_argv(tmp_path: Path):
     )
     assert result.exit_code == 0
     assert "-v" in result.output
-    assert "/mounts/test-alpha:rw" in result.output
+    # Output is wrap-robustness: rich-rendered docker invocation may line-wrap
+    # at narrow terminal widths (CI). Strip whitespace before checking.
+    flat = result.output.replace("\n", "").replace(" ", "")
+    assert "/mounts/test-alpha:rw" in flat
 
 
 def test_dry_run_with_unknown_profile_errors():
@@ -107,8 +110,16 @@ def test_dry_run_with_unknown_mount_errors():
 
 
 def test_run_without_dry_run_calls_run_shell():
-    """Sanity check: omitting --dry-run still calls run_shell."""
-    with patch("whizzard.cli._launch.run_shell", return_value=RunResult(None, 0)) as mock_run:
+    """Sanity check: omitting --dry-run still calls run_shell.
+
+    Pre-flight gates (`docker_available`, `image_exists`) run before
+    `run_shell`; on CI without a docker daemon they'd short-circuit the
+    launch. Patch both so the test exercises the path the assertion is
+    actually checking.
+    """
+    with patch("whizzard.cli._launch.run_shell", return_value=RunResult(None, 0)) as mock_run, \
+         patch("whizzard.cli._launch.docker_available", return_value=True), \
+         patch("whizzard.cli._launch.image_exists", return_value=True):
         result = runner.invoke(app, ["run", "--profile", "default"])
     assert mock_run.call_count == 1
     assert result.exit_code == 0

@@ -14,7 +14,16 @@ runner = CliRunner()
 @pytest.fixture(autouse=True)
 def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Point WHIZZARD_HOME at a temp dir so tests use bundled defaults
-    and don't touch the user's actual ~/.whizzard."""
+    and don't touch the user's actual ~/.whizzard.
+
+    Also writes a `mounts.json` rebinding the bundled `claude-projects`
+    and `ai-sandbox` mount *names* to tmp_path subdirs that exist. The
+    bundled mount defaults' `~/Documents/Claude/projects` and `~/ai-sandbox`
+    paths exist on the maintainer's machine but not on CI runners
+    (`/home/runner/...`), and the safety policy rejects mounts whose
+    host_path is missing. Rebinding keeps the preset names valid while
+    pointing at directories the test guarantees exist.
+    """
     home = tmp_path / "whizzard-home"
     monkeypatch.setenv("WHIZZARD_HOME", str(home))
     from whizzard import config, harness_config, mounts, preset_config
@@ -37,6 +46,28 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(cli_mounts, "MOUNTS_FILE", home / "config" / "mounts.json")
     monkeypatch.setattr(cli_harnesses, "HARNESSES_FILE", home / "config" / "harnesses.json")
     monkeypatch.setattr(cli_preset, "PRESETS_FILE", home / "config" / "presets.json")
+
+    # Rebind bundled mount names to tmp paths that exist (see docstring).
+    claude_projects = tmp_path / "claude-projects"
+    ai_sandbox = tmp_path / "ai-sandbox"
+    claude_projects.mkdir()
+    ai_sandbox.mkdir()
+    (home / "config").mkdir(parents=True, exist_ok=True)
+    (home / "config" / "mounts.json").write_text(json.dumps({
+        "schema_version": 1,
+        "mounts": {
+            "claude-projects": {
+                "host_path": str(claude_projects),
+                "default_mode": "rw",
+                "description": "CI-test rebinding of the bundled claude-projects mount",
+            },
+            "ai-sandbox": {
+                "host_path": str(ai_sandbox),
+                "default_mode": "rw",
+                "description": "CI-test rebinding of the bundled ai-sandbox mount",
+            },
+        },
+    }))
     return home
 
 
