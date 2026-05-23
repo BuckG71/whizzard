@@ -33,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import whizzard.config as _config
 from whizzard.adjust import (
     AdjustResult,
     Approver,
@@ -44,8 +45,42 @@ from whizzard.adjust import (
 from whizzard.config import ProfileConfigError, get_profile
 from whizzard.mounts import MountRegistryError, load_mounts, resolve_mount_spec
 from whizzard.safety import SafetyViolation, check_mount_path
-from whizzard.session_log import SESSIONS_LOG
+from whizzard.session_log import SESSIONS_LOG, append_event
 from whizzard.snapshot import SESSIONS_DIR
+
+
+def _resolutions_path(session_id: str, request_id: str) -> Path:
+    """Host-only authoritative resolution store (F-D-05).
+
+    Lives under STATE_DIR — outside the cell-writable /run/whiz mount. The
+    cell can write anything to the request file in its own request_dir;
+    the host's view of a request's status comes from here instead, so a
+    cell-claimed status of ``"applied"`` can never bypass operator review.
+
+    Read STATE_DIR lazily through the config module so tests that
+    monkeypatch ``config.STATE_DIR`` see the redirected path.
+    """
+    return _config.STATE_DIR / "request-resolutions" / session_id / f"{request_id}.json"
+
+
+def _read_resolution(session_id: str, request_id: str) -> tuple[str, str]:
+    """Return (status, resolution_detail) for a request from the host-only
+    authoritative store. Default ("pending", "") if no host resolution
+    recorded yet — the cell-supplied status is intentionally ignored.
+    """
+    p = _resolutions_path(session_id, request_id)
+    if not p.exists():
+        return ("pending", "")
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return ("pending", "")
+    if not isinstance(data, dict):
+        return ("pending", "")
+    return (
+        str(data.get("status") or "pending"),
+        str(data.get("resolution_detail") or ""),
+    )
 
 # Request kinds the agent may submit. Mirrors the `whiz_request_*` MCP tools.
 VALID_KINDS = frozenset({"mount", "extend"})
@@ -99,7 +134,28 @@ def _session_request_dir(session_id: str) -> Path:
 def _load_request(path: Path) -> AgentRequest | None:
     """Parse one request JSON file. Returns None if it is unreadable or
     structurally invalid — a corrupt file in the channel must not break
-    listing the rest."""
+    listing the rest.
+
+    F-D-02: ``session_id`` is derived from the directory path
+    (``<SESSIONS_DIR>/<sid>/requests/<reqid>.json``) — the host owns the
+    directory layout, the cell does not. A request whose JSON
+    ``session_id`` field disagrees with its directory is tampering; we
+    use the directory's session_id and ignore the JSON's claim.
+
+    F-D-05: ``status`` and ``resolution_detail`` are read from the
+    host-only resolutions store, not from the cell-writable request
+    file. A cell-supplied ``"status": "applied"`` in a fresh request
+    cannot bypass operator review — until the host has recorded a
+    resolution, the request is "pending" regardless of what the cell
+    wrote.
+    """
+    try:
+        canonical_session_id = path.parent.parent.name
+    except (AttributeError, IndexError):
+        return None
+    if not canonical_session_id:
+        return None
+
     try:
         data = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
@@ -107,21 +163,26 @@ def _load_request(path: Path) -> AgentRequest | None:
     if not isinstance(data, dict):
         return None
     request_id = data.get("request_id")
-    session_id = data.get("session_id")
     kind = data.get("kind")
-    if not request_id or not session_id or kind not in VALID_KINDS:
+    if not request_id or kind not in VALID_KINDS:
         return None
+
+    # F-D-05: authoritative status from host-only store.
+    canonical_status, canonical_detail = _read_resolution(
+        canonical_session_id, str(request_id)
+    )
+
     params = data.get("params")
     return AgentRequest(
         request_id=str(request_id),
-        session_id=str(session_id),
+        session_id=canonical_session_id,
         kind=str(kind),
         params=params if isinstance(params, dict) else {},
         reason=str(data.get("reason") or ""),
-        status=str(data.get("status") or "pending"),
+        status=canonical_status,
         created_at=str(data.get("created_at") or ""),
         path=path,
-        resolution_detail=str(data.get("resolution_detail") or ""),
+        resolution_detail=canonical_detail,
     )
 
 
@@ -172,9 +233,37 @@ def find_request(request_id: str) -> AgentRequest | None:
 
 
 def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
-    """Rewrite the request file with a terminal status + detail. The file
-    stays in the channel as the audit record; subsequent `pending_only` reads
-    skip it. Written atomically so a concurrent cell-side read is consistent."""
+    """Record the operator's resolution authoritatively and mirror it to
+    the cell so ``whiz_check_request`` can see the outcome.
+
+    F-D-05: the authoritative record lives in the host-only resolutions
+    store (``STATE_DIR/request-resolutions/<sid>/<reqid>.json``), outside
+    the cell-writable mount. The cell-visible request file is updated as
+    a mirror so the cell can read the outcome via its MCP server, but the
+    cell can tamper with that mirror without affecting host-side listing
+    — ``_load_request`` reads status from the authoritative store.
+
+    F-D-03: denied / error resolutions are also appended to the host
+    audit log as a ``session_request_resolved`` event. ``applied`` is
+    already logged by ``adjust._log_adjustment``, so we don't duplicate
+    it here.
+    """
+    resolved_at = _dt.datetime.now(_dt.UTC).isoformat()
+
+    # Authoritative record in the host-only store.
+    res_path = _resolutions_path(req.session_id, req.request_id)
+    res_path.parent.mkdir(parents=True, exist_ok=True)
+    res_path.write_text(json.dumps({
+        "request_id": req.request_id,
+        "session_id": req.session_id,
+        "kind": req.kind,
+        "status": status,
+        "resolution_detail": detail,
+        "resolved_at": resolved_at,
+    }, indent=2))
+
+    # Mirror to the cell-visible request file. The cell can stomp this
+    # afterward, but host listing reads from the authoritative store above.
     try:
         data = json.loads(req.path.read_text())
         if not isinstance(data, dict):
@@ -191,10 +280,26 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
         }
     data["status"] = status
     data["resolution_detail"] = detail
-    data["resolved_at"] = _dt.datetime.now(_dt.UTC).isoformat()
+    data["resolved_at"] = resolved_at
     tmp = req.path.with_name(f".{req.path.name}.tmp")
     tmp.write_text(json.dumps(data, indent=2))
     tmp.replace(req.path)
+
+    # F-D-03: log denials/errors to the host audit log. Applied resolutions
+    # are already logged by adjust._log_adjustment; we skip them here so the
+    # log doesn't carry duplicate events for the same outcome.
+    if status in ("denied", "error"):
+        append_event({
+            "ts": resolved_at,
+            "event": "session_request_resolved",
+            "session_id": req.session_id,
+            "request_id": req.request_id,
+            "kind": req.kind,
+            "params": req.params,
+            "status": status,
+            "resolution_detail": detail,
+            "origin": "whizzard",
+        })
 
 
 # --- Request → Changes mapping + validation ---------------------------------

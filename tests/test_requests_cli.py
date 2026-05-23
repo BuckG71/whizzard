@@ -50,6 +50,9 @@ def _put_request(
     reason: str = "",
     status: str = "pending",
 ) -> None:
+    """Seed a request file. F-D-05: if status != pending, also write the
+    host-only authoritative resolution — the cell-written status field
+    alone is ignored by `_load_request` after the fix."""
     if params is None:
         params = (
             {"duration": "30m"} if kind == "extend"
@@ -68,11 +71,28 @@ def _put_request(
         "resolved_at": None,
         "resolution_detail": "",
     }))
+    if status != "pending":
+        from whizzard import requests as _reqs_mod
+        res = _reqs_mod._resolutions_path(session_id, request_id)
+        res.parent.mkdir(parents=True, exist_ok=True)
+        res.write_text(json.dumps({
+            "request_id": request_id,
+            "session_id": session_id,
+            "kind": kind,
+            "status": status,
+            "resolution_detail": "",
+            "resolved_at": "2026-05-21T00:00:00+00:00",
+        }))
 
 
 def _status_of(sessions_dir: Path, session_id: str, request_id: str) -> str:
-    path = sessions_dir / session_id / "requests" / f"{request_id}.json"
-    return json.loads(path.read_text())["status"]
+    """Read the canonical status from the host-only resolutions store
+    (F-D-05). Falls back to "pending" if no host resolution exists yet."""
+    from whizzard import requests as _reqs_mod
+    res = _reqs_mod._resolutions_path(session_id, request_id)
+    if not res.exists():
+        return "pending"
+    return json.loads(res.read_text())["status"]
 
 
 # --- list -------------------------------------------------------------------

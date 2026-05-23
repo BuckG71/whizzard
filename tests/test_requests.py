@@ -33,10 +33,19 @@ from whizzard.safety import SafetyViolation
 
 @pytest.fixture
 def sessions_dir(tmp_path, monkeypatch):
-    """Redirect the module's SESSIONS_DIR at a tmp tree."""
+    """Redirect the module's SESSIONS_DIR and STATE_DIR at a tmp tree.
+
+    F-D-05: STATE_DIR is where the host-only authoritative resolutions
+    store lives. Tests that simulate a "resolved" request need to redirect
+    it too so `_resolutions_path` lands inside the tmp tree.
+    """
     d = tmp_path / "sessions"
     d.mkdir()
+    state = tmp_path / "state"
+    state.mkdir()
     monkeypatch.setattr(reqs, "SESSIONS_DIR", d)
+    from whizzard import config as _config
+    monkeypatch.setattr(_config, "STATE_DIR", state)
     return d
 
 
@@ -50,7 +59,12 @@ def _write_request(
     reason: str = "",
     status: str = "pending",
 ) -> Path:
-    """Write one request JSON file into <sessions_dir>/<sid>/requests/."""
+    """Write one request JSON file into <sessions_dir>/<sid>/requests/.
+
+    F-D-05: a non-pending ``status`` argument also seeds the host-only
+    authoritative resolutions store — the cell-written status field on
+    the request file alone is ignored by `_load_request` after the fix.
+    """
     if params is None:
         params = (
             {"duration": "30m"} if kind == "extend"
@@ -71,6 +85,19 @@ def _write_request(
     }
     path = rdir / f"{request_id}.json"
     path.write_text(json.dumps(record))
+    # If the test asks for a resolved status, also write the host-only
+    # authoritative record — that's what _load_request actually reads now.
+    if status != "pending":
+        res = reqs._resolutions_path(session_id, request_id)
+        res.parent.mkdir(parents=True, exist_ok=True)
+        res.write_text(json.dumps({
+            "request_id": request_id,
+            "session_id": session_id,
+            "kind": kind,
+            "status": status,
+            "resolution_detail": "",
+            "resolved_at": "2026-05-21T00:00:00+00:00",
+        }))
     return path
 
 
@@ -382,3 +409,115 @@ def test_process_request_passes_agent_initiated_to_adjust(sessions_dir, monkeypa
     monkeypatch.setattr(reqs, "adjust_session", _fake_adjust)
     process_request(req, lambda _diff: True)
     assert captured.get("agent_initiated") is True
+
+
+# --- F-D-02: session_id derived from directory, not JSON ------------------
+
+
+def test_load_request_uses_directory_session_id_not_json(sessions_dir):
+    """A cell-spoofed session_id in the JSON must not drive request
+    routing. The host owns the directory layout; that's the canonical
+    binding."""
+    # Real session is sess-victim; cell writes request claiming sess-attacker.
+    real_session = "sess-victim"
+    rdir = sessions_dir / real_session / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "spoofreq.json"
+    path.write_text(json.dumps({
+        "request_id": "spoofreq",
+        "session_id": "sess-attacker",  # forged — not what the dir says
+        "kind": "extend",
+        "params": {"duration": "30m"},
+        "reason": "spoof attempt",
+        "status": "pending",
+    }))
+
+    req = _load(path)
+    # Canonical session_id MUST come from the directory, not the JSON.
+    assert req.session_id == real_session
+
+
+# --- F-D-05: cell-supplied status field is ignored -------------------------
+
+
+def test_load_request_ignores_cell_supplied_applied_status(sessions_dir):
+    """A cell that pre-writes status: applied in the request file must NOT
+    cause the host to skip operator review. Without a host-side resolution,
+    the request is "pending" regardless."""
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "preclaimed.json"
+    path.write_text(json.dumps({
+        "request_id": "preclaimed",
+        "session_id": "sess-1",
+        "kind": "extend",
+        "params": {"duration": "30m"},
+        "reason": "trying to pre-claim applied",
+        "status": "applied",  # the forgery
+    }))
+
+    req = _load(path)
+    # Status must come from the host-only authoritative store, which has
+    # nothing for this request → pending.
+    assert req.status == "pending"
+
+
+# --- F-D-03: denials emit a session_request_resolved event ----------------
+
+
+def test_mark_resolved_denied_emits_audit_event(sessions_dir, monkeypatch):
+    """An operator denial must land in the host audit log — the cell can
+    edit the request file to reset status, but the audit log is host-only
+    and durable."""
+    path = _write_request(sessions_dir, request_id="denyme", kind="extend")
+    req = _load(path)
+
+    # Redirect the audit log to a tmp file.
+    audit_log = sessions_dir.parent / "audit.jsonl"
+    from whizzard import session_log
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", audit_log)
+
+    reqs.mark_resolved(req, "denied", "operator declined")
+
+    assert audit_log.exists()
+    entry = json.loads(audit_log.read_text().splitlines()[0])
+    assert entry["event"] == "session_request_resolved"
+    assert entry["status"] == "denied"
+    assert entry["request_id"] == "denyme"
+    assert entry["origin"] == "whizzard"
+
+
+def test_mark_resolved_applied_does_not_duplicate_audit(sessions_dir, monkeypatch):
+    """`adjust._log_adjustment` already logs applied changes; we must not
+    duplicate the event from mark_resolved."""
+    path = _write_request(sessions_dir, request_id="applyme", kind="extend")
+    req = _load(path)
+
+    audit_log = sessions_dir.parent / "audit.jsonl"
+    from whizzard import session_log
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", audit_log)
+
+    reqs.mark_resolved(req, "applied", "approved and applied")
+
+    # No session_request_resolved event for applied — adjust._log_adjustment
+    # is the canonical event source for that path.
+    if audit_log.exists():
+        for line in audit_log.read_text().splitlines():
+            entry = json.loads(line)
+            assert entry["event"] != "session_request_resolved"
+
+
+def test_mark_resolved_writes_to_host_only_resolutions_store(sessions_dir):
+    """The resolutions store is under STATE_DIR (host-only) — outside the
+    cell-writable /run/whiz mount. mark_resolved must put the authoritative
+    record there."""
+    path = _write_request(sessions_dir, request_id="storetest", kind="extend")
+    req = _load(path)
+
+    reqs.mark_resolved(req, "denied", "policy")
+
+    res_path = reqs._resolutions_path(req.session_id, "storetest")
+    assert res_path.exists()
+    data = json.loads(res_path.read_text())
+    assert data["status"] == "denied"
+    assert data["resolution_detail"] == "policy"

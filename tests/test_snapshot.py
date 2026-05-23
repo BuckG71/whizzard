@@ -165,3 +165,49 @@ def test_write_snapshot_overwrites_existing(tmp_path, profile, mounts):
     assert p1 == p2
     data = json.loads(p2.read_text())
     assert data["harness"] == "other-harness"
+
+
+# --- F-D-06: snapshot reflects duration override --------------------------
+
+
+def test_snapshot_records_duration_override_when_set(tmp_path: Path):
+    """After `oiq adjust --extend`, the relaunch passes an effective
+    duration cap. The snapshot must record that override so the agent's
+    whiz_status reports the actual remaining time."""
+    from whizzard.config import Profile
+
+    profile = Profile(
+        name="default",
+        network_enabled=True,
+        duration_seconds=3600,  # profile says 1 hour
+    )
+
+    path = write_snapshot(
+        "sess-1",
+        profile,
+        [],
+        "hermes",
+        whizzard_home=tmp_path,
+        duration_override_seconds=7200,  # adjust extended to 2 hours
+    )
+
+    data = json.loads(path.read_text())
+    # The override wins — snapshot shows 7200, not the profile's 3600.
+    assert data["profile"]["duration_seconds"] == 7200
+    assert data["profile"]["duration_override_active"] is True
+
+
+def test_snapshot_uses_profile_duration_when_no_override(tmp_path: Path):
+    from whizzard.config import Profile
+
+    profile = Profile(
+        name="default",
+        network_enabled=True,
+        duration_seconds=3600,
+    )
+
+    path = write_snapshot("sess-1", profile, [], "hermes", whizzard_home=tmp_path)
+
+    data = json.loads(path.read_text())
+    assert data["profile"]["duration_seconds"] == 3600
+    assert "duration_override_active" not in data["profile"]

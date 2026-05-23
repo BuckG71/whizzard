@@ -148,6 +148,30 @@ is missing.
 *Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
 that chunk's review already touches the audit-log assertion machinery.
 
+### Safety policy two-way intersection check applies only to deep hard-blocks
+`safety.py`'s module docstring promises a "two-way intersection check" for
+all blocked-path tiers, but only `_DEEP_HARD_BLOCKS` actually uses
+`_intersects`. `_BROAD_FOLDERS` and `_CLOUD_SYNC_ROOTS` are checked one-way
+(`p inside b`). Currently unreachable on macOS because the broader parents
+that would trigger two-way matching (`$HOME`, `/`) are already Tier-1a
+hard-blocked. Becomes relevant when Linux paths land — e.g., a deeper sync
+root like `/srv/cloud-sync/<user>/Dropbox` would not be caught if a user
+mounted `/srv/cloud-sync/<user>`.
+*Source:* catch-up review 2026-05-23 finding F-D-07.
+*Disposition:* defer — fix when adding the first Linux-specific path to
+`_BROAD_FOLDERS` or `_CLOUD_SYNC_ROOTS`.
+
+### Per-session directories under `~/.whizzard/sessions/` never cleaned up
+Each launch creates `~/.whizzard/sessions/<sid>/` with snapshot.json,
+events.jsonl, and request/resolution dirs. Nothing in the codebase ever
+removes them; long-running installs accumulate one dir per session. Each
+dir is small (KB) so urgency is low; the fix needs a retention policy
+(N days? referenced-by-audit-log? `whiz sessions clear`?) that's a design
+call, not a one-line change.
+*Source:* catch-up review 2026-05-23 finding F-D-09.
+*Disposition:* defer — natural home is Stage 18 (image management) or a
+dedicated retention-policy feature.
+
 ### Hermes adapter `parent_dir` parameter has no input validation
 `create_hermes_profile` validates the `name` argument (no slashes, no
 leading dots, no reserved values) but accepts `parent_dir` as-is. Production

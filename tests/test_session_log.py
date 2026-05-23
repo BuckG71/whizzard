@@ -38,8 +38,12 @@ def test_append_event_one_object_per_line(tmp_path: Path):
     append_event({"event": "b", "n": 2}, path=target)
     lines = target.read_text().splitlines()
     assert len(lines) == 2
-    assert json.loads(lines[0]) == {"event": "a", "n": 1}
-    assert json.loads(lines[1]) == {"event": "b", "n": 2}
+    # F-D-10: every line carries a schema-version stamp `v: 1` so a future
+    # format change has a robust detection handle.
+    p0 = json.loads(lines[0])
+    p1 = json.loads(lines[1])
+    assert p0["event"] == "a" and p0["n"] == 1 and p0["v"] == 1
+    assert p1["event"] == "b" and p1["n"] == 2 and p1["v"] == 1
 
 
 def test_log_session_start_writes_expected_fields(tmp_path: Path):
@@ -296,3 +300,126 @@ def test_log_expiry_warning_writes_event(tmp_path: Path):
     assert entry["event"] == "session_expiry_warning"
     assert entry["session_id"] == "sess-1"
     assert entry["seconds_remaining"] == 300
+
+
+# --- F-D-01: forged origin in cell-supplied event is overridden -----------
+
+
+def test_merge_agent_events_overrides_forged_whizzard_origin(tmp_path: Path):
+    """A cell-written events.jsonl line that claims origin: whizzard must
+    be force-rewritten to origin: agent. D-12 invariant: agent-authored
+    entries are clearly distinguished from Whizzard-authored entries."""
+    event_file = tmp_path / "events.jsonl"
+    event_file.write_text(
+        json.dumps({
+            "session_id": "sess-1",
+            "event_type": "forged",
+            "origin": "whizzard",  # attempt to claim system authorship
+        }) + "\n"
+    )
+    target = tmp_path / "audit.jsonl"
+
+    merge_agent_events("sess-1", event_file, target_log=target)
+
+    entry = json.loads(target.read_text().splitlines()[0])
+    # MUST be rewritten to "agent" — D-12 violation if not.
+    assert entry["origin"] == "agent"
+
+
+# --- F-D-04: size caps prevent cell from DoS-ing the host log ---------------
+
+
+def test_merge_agent_events_truncates_on_total_lines_overflow(tmp_path: Path):
+    """A cell writing many small events triggers the total-lines cap; the
+    merge stops and appends a truncation marker."""
+    from whizzard import session_log as _sl
+
+    # Drop the per-test caps to a manageable size.
+    monkeypatch_value = 5
+    saved = _sl._AGENT_EVENT_TOTAL_LINES_MAX
+    _sl._AGENT_EVENT_TOTAL_LINES_MAX = monkeypatch_value
+    try:
+        event_file = tmp_path / "events.jsonl"
+        lines = [
+            json.dumps({"session_id": "sess-1", "event_type": f"e{i}"})
+            for i in range(20)
+        ]
+        event_file.write_text("\n".join(lines) + "\n")
+        target = tmp_path / "audit.jsonl"
+
+        merged = merge_agent_events("sess-1", event_file, target_log=target)
+
+        assert merged == monkeypatch_value
+        out_lines = target.read_text().splitlines()
+        # First N are merged agent events, last is the truncation marker.
+        assert len(out_lines) == monkeypatch_value + 1
+        marker = json.loads(out_lines[-1])
+        assert marker["event"] == "session_agent_events_truncated"
+        assert marker["origin"] == "whizzard"  # legitimately Whizzard-authored
+        assert marker["merged_count"] == monkeypatch_value
+    finally:
+        _sl._AGENT_EVENT_TOTAL_LINES_MAX = saved
+
+
+def test_merge_agent_events_skips_oversize_lines_but_continues(tmp_path: Path):
+    """A single huge line is skipped; smaller lines after it still merge."""
+    from whizzard import session_log as _sl
+    saved = _sl._AGENT_EVENT_LINE_MAX_BYTES
+    _sl._AGENT_EVENT_LINE_MAX_BYTES = 200  # tiny cap for the test
+    try:
+        event_file = tmp_path / "events.jsonl"
+        huge = "x" * 500
+        event_file.write_text(
+            json.dumps({"session_id": "sess-1", "event_type": "small1"}) + "\n"
+            + json.dumps({"session_id": "sess-1", "event_type": "huge", "junk": huge}) + "\n"
+            + json.dumps({"session_id": "sess-1", "event_type": "small2"}) + "\n"
+        )
+        target = tmp_path / "audit.jsonl"
+
+        merged = merge_agent_events("sess-1", event_file, target_log=target)
+
+        # huge dropped; small1 + small2 merged.
+        assert merged == 2
+        events = [json.loads(line)["event_type"]
+                  for line in target.read_text().splitlines()]
+        assert events == ["small1", "small2"]
+    finally:
+        _sl._AGENT_EVENT_LINE_MAX_BYTES = saved
+
+
+# --- F-D-08: timestamps use microsecond precision -------------------------
+
+
+def test_session_end_timestamp_has_microsecond_precision(tmp_path: Path):
+    """Previously second-precision (`%Y-%m-%dT%H:%M:%SZ`); now ISO with
+    microsecond fields so audit sorting doesn't see ties within the same
+    second."""
+    target = tmp_path / "s.jsonl"
+    log_session_end("s", "cid", 0, 1_700_000_010.123456, 10.0, path=target)
+    entry = json.loads(target.read_text().splitlines()[0])
+    # ISO with microseconds includes a decimal point in the seconds field.
+    assert "." in entry["end_time"]
+
+
+# --- F-D-10: schema_version stamp on every line ---------------------------
+
+
+def test_session_start_carries_v_stamp(tmp_path: Path):
+    """Every audit-log line gets a `v: 1` schema-version stamp so future
+    schema changes have a robust detection handle."""
+    target = tmp_path / "s.jsonl"
+    log_session_start(
+        session_id="sess-1",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=["docker"],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    entry = json.loads(target.read_text().splitlines()[0])
+    assert entry["v"] == 1

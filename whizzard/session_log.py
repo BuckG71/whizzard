@@ -12,14 +12,30 @@ already reserves room for them by being open-ended JSON.
 from __future__ import annotations
 
 import json
-import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from whizzard.config import LOGS_DIR
 
 SESSIONS_LOG = LOGS_DIR / "sessions.jsonl"
+
+# F-D-10: every line of sessions.jsonl carries this version stamp so a
+# future schema change has a robust detection handle. Mirrors what
+# `validate_schema_version` does for the envelope-versioned JSON config
+# files (F-A-03). The host always force-writes this — cell-merged entries
+# get re-stamped to v=1 too, since the cell cannot claim a schema version.
+AUDIT_LOG_SCHEMA_VERSION = 1
+
+# F-D-04: bounds on cell-supplied agent events. A misbehaving (or
+# malicious) cell can write events.jsonl at arbitrary size; without these
+# caps `merge_agent_events` would balloon RAM on read and bloat the host
+# audit log. Per-line cap rejects huge individual entries; total caps
+# stop the merge after either limit is hit.
+_AGENT_EVENT_LINE_MAX_BYTES = 64 * 1024
+_AGENT_EVENT_TOTAL_LINES_MAX = 10_000
+_AGENT_EVENT_TOTAL_BYTES_MAX = 16 * 1024 * 1024
 
 
 def new_session_id() -> str:
@@ -28,16 +44,30 @@ def new_session_id() -> str:
 
 
 def _iso(ts: float | None = None) -> str:
-    """ISO 8601 UTC timestamp, suitable for log lines."""
+    """ISO 8601 UTC timestamp with microsecond precision (F-D-08).
+
+    Previously this used second-precision while the cell-side and adjust
+    paths used microsecond ISO — sorting by ts produced ties for events
+    that happened within the same second. Microsecond throughout removes
+    the tie and matches every other timestamp surface in the codebase.
+    """
     if ts is None:
-        ts = time.time()
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
+        return datetime.now(UTC).isoformat()
+    return datetime.fromtimestamp(ts, UTC).isoformat()
 
 
 def append_event(event: dict[str, Any], path: Path | None = None) -> None:
-    """Append a single JSON object as one line in the sessions log."""
+    """Append a single JSON object as one line in the sessions log.
+
+    F-D-10: force-stamps `v = AUDIT_LOG_SCHEMA_VERSION` on every entry so
+    a future schema change has a robust detection handle. Cell-supplied
+    entries (via `merge_agent_events`) flow through here too and get
+    re-stamped — the cell cannot claim a different schema version for
+    its log entries.
+    """
     target = path or SESSIONS_LOG
     target.parent.mkdir(parents=True, exist_ok=True)
+    event["v"] = AUDIT_LOG_SCHEMA_VERSION
     line = json.dumps(event, separators=(",", ":"))
     with target.open("a") as f:
         f.write(line + "\n")
@@ -144,38 +174,89 @@ def merge_agent_events(
     Stage 9 (D-156): the in-cell MCP server's `whiz_emit_event` writes
     agent-authored entries to a per-session ephemeral file. At session_end,
     Whizzard reads that file and merges entries into the main audit log.
-    Each entry already has `origin: agent` from the cell-side write (per
-    D-12: agent-authored entries are clearly distinguished from
-    Whizzard-authored entries so they're never confused for system events).
 
     Defensive behavior:
     - Missing event file → return 0 (the agent may simply not have emitted)
     - Malformed JSON lines → skipped quietly (the cell may have crashed
       mid-write)
-    - Entries with wrong session_id → skipped (defensive against any
-      cross-session leakage that shouldn't happen but might)
-    - origin marker enforced — entries without `origin` get `agent` added
+    - Entries with wrong session_id → skipped (defensive against cross-
+      session leakage that shouldn't happen but might).
+    - F-D-01: ``origin`` is force-set to ``"agent"`` regardless of what the
+      cell wrote. Previously `setdefault` left a cell-supplied
+      ``"origin": "whizzard"`` intact, letting an attacker-controlled agent
+      forge system-authored audit entries — defeating D-12.
+    - F-D-04: per-line and total-size caps prevent a cell from DoS-ing the
+      host log by writing gigabytes of valid JSON. On overflow we append a
+      Whizzard-origin marker event and stop reading.
 
-    Returns the count of entries merged.
+    Returns the count of entries merged (not including the truncation
+    marker, if any was emitted).
     """
     if not event_log_path.exists():
         return 0
     merged = 0
+    bytes_seen = 0
+    truncated_reason: str | None = None
     try:
-        content = event_log_path.read_text()
+        # F-D-04: stream line-by-line so a gigabyte file doesn't blow up
+        # memory. The whole-file slurp this replaces meant `read_text()`
+        # held the entire content before splitting.
+        fh = event_log_path.open()
     except OSError:
         return 0
-    for line in content.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if entry.get("session_id") != session_id:
-            continue
-        entry.setdefault("origin", "agent")
-        append_event(entry, path=target_log)
-        merged += 1
+    try:
+        for raw_line in fh:
+            line = raw_line.rstrip("\n").strip()
+            if not line:
+                continue
+            line_bytes = len(raw_line.encode("utf-8"))
+            if line_bytes > _AGENT_EVENT_LINE_MAX_BYTES:
+                # Skip the oversize line but keep reading — one big line
+                # isn't necessarily a DoS attempt, and dropping just the
+                # offender preserves whatever else the agent emitted.
+                continue
+            bytes_seen += line_bytes
+            if bytes_seen > _AGENT_EVENT_TOTAL_BYTES_MAX:
+                truncated_reason = (
+                    f"agent events truncated: cumulative size exceeded "
+                    f"{_AGENT_EVENT_TOTAL_BYTES_MAX} bytes"
+                )
+                break
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("session_id") != session_id:
+                continue
+            # F-D-01: force, don't setdefault. Cell-supplied origin field
+            # is overridden — only the host can claim "whizzard" origin.
+            entry["origin"] = "agent"
+            append_event(entry, path=target_log)
+            merged += 1
+            if merged >= _AGENT_EVENT_TOTAL_LINES_MAX:
+                truncated_reason = (
+                    f"agent events truncated: merged the first "
+                    f"{_AGENT_EVENT_TOTAL_LINES_MAX} entries; remainder dropped"
+                )
+                break
+    finally:
+        fh.close()
+
+    if truncated_reason is not None:
+        # Whizzard-origin marker so post-hoc audit consumers can see that
+        # a truncation happened. Stamped with origin="whizzard" by the
+        # explicit assignment — this is genuinely a host-authored event.
+        append_event(
+            {
+                "ts": _iso(),
+                "event": "session_agent_events_truncated",
+                "session_id": session_id,
+                "origin": "whizzard",
+                "detail": truncated_reason,
+                "merged_count": merged,
+            },
+            path=target_log,
+        )
     return merged

@@ -68,6 +68,7 @@ def write_snapshot(
     resolved_mounts: list[tuple[Mount, MountMode]],
     harness_name: str,
     whizzard_home: Path | None = None,
+    duration_override_seconds: int | None = None,
 ) -> Path:
     """Write the launch-time state snapshot for the cell's MCP server.
 
@@ -75,17 +76,30 @@ def write_snapshot(
     if it doesn't exist. Profile is typed `Any` to avoid a hard import of
     `whizzard.config.Profile` in this module's signature; the caller passes
     a `Profile` instance.
+
+    ``duration_override_seconds`` (F-D-06): when set, this is the effective
+    duration cap for the session — typically from an ``oiq adjust --extend``
+    relaunch. The snapshot records the effective limit, not the underlying
+    profile value, so the agent's ``whiz_status`` reports the same cap that
+    enforcement is using. Per D-156 the snapshot is "the agent's view of
+    its own constraints" — that view must reflect runtime overrides.
     """
     directory = session_dir(session_id, whizzard_home)
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / "snapshot.json"
+
+    effective_duration = (
+        duration_override_seconds
+        if duration_override_seconds is not None
+        else profile.duration_seconds
+    )
 
     payload: dict[str, Any] = {
         "session_id": session_id,
         "profile": {
             "name": profile.name,
             "network_enabled": profile.network_enabled,
-            "duration_seconds": profile.duration_seconds,
+            "duration_seconds": effective_duration,
             "idle_timeout_seconds": profile.idle_timeout_seconds,
             "allow_broad_mount": profile.allow_broad_mount,
             "description": profile.description,
@@ -102,6 +116,10 @@ def write_snapshot(
         "harness": harness_name,
         "snapshot_written_at": datetime.now(UTC).isoformat(),
     }
+    # Record the override explicitly so the cell can tell "extended via
+    # adjust" from "profile says X" — useful in the capability banner.
+    if duration_override_seconds is not None:
+        payload["profile"]["duration_override_active"] = True
 
     target.write_text(json.dumps(payload, indent=2))
     return target

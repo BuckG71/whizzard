@@ -204,6 +204,10 @@ def _perform_launch(
         profile=prof,
         resolved_mounts=resolved,
         harness_name=adapter.name,
+        # F-D-06: pass the effective duration cap (from adjust --extend, if
+        # any) so the cell's whiz_status reflects what enforcement is using,
+        # not the underlying profile value.
+        duration_override_seconds=duration_override_seconds,
     )
 
     result = run_shell(
