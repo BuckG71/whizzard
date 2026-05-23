@@ -84,6 +84,28 @@ def whizzard_base_image() -> str:
 
 
 @pytest.fixture(scope="session")
+def ollama_reachable(whizzard_hermes_image: str) -> bool:
+    """Skip the depending test cleanly when Ollama is unreachable from a
+    cell (no model backend → can't run the Hermes-with-model smoke).
+    Probes once per session via the host.docker.internal route the
+    Hermes adapter uses in production."""
+    result = subprocess.run(
+        ["docker", "run", "--rm",
+         "--add-host=host.docker.internal:host-gateway",
+         whizzard_hermes_image,
+         "curl", "-s", "--max-time", "5",
+         "http://host.docker.internal:11434/api/tags"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0 or not result.stdout.strip().startswith("{"):
+        pytest.skip(
+            "Ollama not reachable at host.docker.internal:11434 — "
+            "start it (Mac Studio in this setup) to run the Hermes smoke"
+        )
+    return True
+
+
+@pytest.fixture(scope="session")
 def whizzard_hermes_image() -> str:
     """Ensure `whizzard-hermes:latest` exists; build it from
     `docker/Dockerfile.hermes` with the project root as context if not.
