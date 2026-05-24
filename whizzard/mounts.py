@@ -99,9 +99,17 @@ def _validate_mount_name(name: str) -> None:
 
 
 def default_mounts() -> dict[str, Mount]:
-    """Return a fresh dict of bundled-default mounts."""
+    """Return a fresh dict of bundled-default mounts.
+
+    F-B5 (catch-up review pass 2): runs `_validate_mount_name` on every
+    bundled-default name so a future maintainer adding a malformed key
+    (`../etc`, etc.) to `_DEFAULT_MOUNTS` gets the same loud rejection
+    user-loaded mounts get at `load_mounts`. Without this, defaults
+    would silently slip past the F-A-02 invariant.
+    """
     registry: dict[str, Mount] = {}
     for name, spec in _DEFAULT_MOUNTS.items():
+        _validate_mount_name(name)
         registry[name] = Mount(
             name=name,
             # F-A-04: resolve() so default and user-loaded Mounts share the

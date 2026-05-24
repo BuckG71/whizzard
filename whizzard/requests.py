@@ -20,9 +20,9 @@ Request lifecycle — the `status` field in each request file:
     error    → approved, but the adjust failed partway
 
 `agent_initiated=True` is always passed to `adjust_session` here, so the
-`AGENT_DENIED_CHANGES` filter (D-163) applies — an agent cannot obtain a
-broad-mount override or a profile change through this channel even if a
-malformed request asks for one.
+`AGENT_ALLOWED_CHANGES` allowlist (D-163, F-G-06) applies — an agent
+cannot obtain a broad-mount override or any other non-allowlisted change
+through this channel even if a malformed request asks for one.
 """
 
 from __future__ import annotations
@@ -444,8 +444,8 @@ def process_request(
 ) -> AdjustResult:
     """Validate, then route an approved request through `adjust_session`.
 
-    Always runs with `agent_initiated=True`, so the `AGENT_DENIED_CHANGES`
-    filter applies. Pre-validation failures and the adjust outcome are both
+    Always runs with `agent_initiated=True`, so the `AGENT_ALLOWED_CHANGES`
+    allowlist applies (default-deny per F-G-06). Pre-validation failures and the adjust outcome are both
     written back into the request file via `mark_resolved`, so both
     `whiz_check_request` (cell side) and `whiz requests` (host side) see it.
 

@@ -233,6 +233,13 @@ def merge_agent_events(
             # F-D-01: force, don't setdefault. Cell-supplied origin field
             # is overridden — only the host can claim "whizzard" origin.
             entry["origin"] = "agent"
+            # F-A4 (catch-up review pass 2): backward-compat for cells
+            # whose mcp_server.py was built before the timestamp→ts
+            # rename. Promote `timestamp` to `ts` if `ts` is missing so
+            # the audit log's sort key is uniform across host and agent
+            # events, regardless of cell-image vintage.
+            if "ts" not in entry and "timestamp" in entry:
+                entry["ts"] = entry.pop("timestamp")
             append_event(entry, path=target_log)
             merged += 1
             if merged >= _AGENT_EVENT_TOTAL_LINES_MAX:

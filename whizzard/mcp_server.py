@@ -122,9 +122,17 @@ def tool_whiz_emit_event(event_type: str, detail: str = "") -> dict[str, Any]:
     session_id = os.environ.get(ENV_SESSION_ID)
     if not event_log_path or not session_id:
         return {"ok": False, "error": "event-logging not configured"}
+    # F-A4 (catch-up review pass 2): use `ts` (matches the rest of the
+    # audit log) not `timestamp`. The chunk-D F-D-08 fix unified host
+    # timestamps to ISO microsecond + `ts` key; agent events were still
+    # writing `timestamp` and the F-D-10 schema-version stamp didn't
+    # rename them. Any analytics query that sorts/filters by `ts` would
+    # silently miss every agent event. `merge_agent_events` on the host
+    # side also handles the legacy `timestamp` key for in-flight events
+    # written by a not-yet-rebuilt cell image.
     entry = {
         "session_id": session_id,
-        "timestamp": datetime.now(UTC).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "event_type": event_type,
         "detail": detail,
         "origin": "agent",

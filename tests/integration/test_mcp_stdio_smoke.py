@@ -24,9 +24,14 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 pytestmark = pytest.mark.integration
 
 _EXPECTED_TOOLS = {
-    "whiz_status", "whiz_audit_self", "whiz_emit_event", "whiz_list_presets",
+    "whiz_status", "whiz_audit_self", "whiz_emit_event",
     "whiz_request_mount", "whiz_request_extend", "whiz_check_request",
 }
+# F-B1/C1 (catch-up review pass 2): `whiz_list_presets` was removed in
+# F-E-01 (it was a shipped stub returning []). This smoke was passing
+# only because the running cell image hadn't been rebuilt to drop the
+# tool; the next `whiz image build` would have flipped this assertion to
+# failing. Same drift class as F-F-01 (integration not in `make check`).
 
 
 async def _exercise(image: str, snap_dir: str):

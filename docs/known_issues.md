@@ -42,6 +42,72 @@ the harness-side `config.yaml` MCP-client entry pointing at
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
+### `--allow-ephemeral` is not propagated through adjust + wake
+A Hermes session launched with `--allow-ephemeral` (per F-C-04) sets
+the flag on the adapter instance for that one launch. The session_start
+event does NOT record the flag, and neither `adjust._apply_changes` nor
+`wake.reconstruct_launch_params` reads it. Consequence: any `oiq adjust`
+on an ephemeral Hermes session stops the original container and then
+fails preflight on the relaunch (Hermes refuses without
+`hermes_home` unless `allow_ephemeral=True`); same for `whiz wake`. The
+session is gone and the user has no recovery path.
+*Source:* catch-up review pass 2 (2026-05-24) findings A1 + A2 + C2 + C3.
+*Disposition:* defer — needs schema call (persist `allow_ephemeral` in
+the session_start event?) plus a UX call (does `whiz wake` get its own
+`--allow-ephemeral` flag, or does it rely on persisted state?). Cleanest
+fix is probably: log_session_start records `allow_ephemeral`;
+_apply_changes + reconstruct_launch_params read it; wake_cmd adds the
+flag so the user can opt-in at wake time even if the original launch
+didn't. Multi-file but mechanical once the schema decision lands.
+
+### `whiz wake` mis-classifies non-zero-exit launches as wake-failed
+`cli/wake.py` treats any `_perform_launch` non-zero exit as
+`session_wake_failed` and leaves the original sid in the wakeable set
+(`woken` only updates on `session_woken`). A user who hits Ctrl-C
+during the wake (container exits with 130) sees "Wake relaunch returned
+exit 130" and a bare `whiz wake` next time picks the SAME idle session
+again, ignoring the wake that just ran. Same shape applies to
+`adjust_session` per Angle A's note.
+*Source:* catch-up review pass 2 finding A3.
+*Disposition:* defer — design call: is SIGINT a clean exit (mark
+woken, don't re-pick) or a wake failure (preserve eligibility)? Both
+have user-defensible interpretations. Operator-decision territory.
+
+### Cell can hide a resolved request from operator listing
+F-E-02 moved kind/params for resolved requests to the host-only store,
+but `_load_request`'s structural-validity gate (`kind not in
+VALID_KINDS` → return None) still uses the cell-claimed kind, which
+runs BEFORE consulting the resolutions store. A malicious cell can
+overwrite its own request file after resolution with `{"kind":"junk"}`,
+making the resolved request invisible to `whiz request list --all` and
+similar listings — even though the host-only resolutions store has
+the truth.
+*Source:* catch-up review pass 2 finding B3.
+*Disposition:* defer — security architecture call. The fix is to
+consult the resolutions store FIRST (does this request_id have a host
+resolution?) and only fall through to cell-side validity checks if
+not. Real but narrow: cell can hide its own resolved requests; cannot
+forge state or affect other sessions.
+
+### `mark_resolved` audit-log race — denial can vanish on cell-mirror write failure
+`mark_resolved` writes the authoritative resolution to the host-only
+store FIRST, then mirrors to the cell file, THEN emits the F-D-03
+`session_request_resolved` audit-log event for denied/error
+outcomes. If the cell-mirror write (`tmp.write_text` / `tmp.replace`)
+fails — disk-full, the cell removed its requests/ dir mid-flight,
+permission flake — the exception propagates and the `append_event`
+call never runs. The host store has the truth but `sessions.jsonl`
+shows no record of the denial.
+*Source:* catch-up review pass 2 finding B4.
+*Disposition:* defer — design call on write ordering. Cleanest fix:
+emit the audit-log event BEFORE the cell-mirror write, OR wrap the
+mirror write in try/except so the audit log still gets the entry on
+mirror failure. Either order has trade-offs (audit-before-mirror: log
+claims a resolution that may not be visible to the cell yet;
+mirror-before-audit-with-try: audit lands even if mirror fails but the
+operator's at-the-moment "denial confirmed" view diverges from
+durable state).
+
 ### D-157 user-config drift
 The maintainer's personal `~/.whizzard/config/profiles.json` predates several
 schema additions (`allow_broad_mount` default per D-157, now
@@ -299,6 +365,66 @@ workflow today; needs hardening for CI.
 ---
 
 ## Process risks
+
+### CHANGELOG format reframe pre-OSS-launch
+The current `CHANGELOG.md` is engineering-tone — long bullets with
+decision IDs (D-46 etc.), internal terminology, retrospective context.
+That's appropriate for the MVP-internal phase but not what an OSS
+audience expects from a CHANGELOG. Maintainer plan: at OSS launch,
+move the existing CHANGELOG.md to `docs/engineering_log.md` (still in
+the repo, signaled-as-internal via the filename) and start a fresh
+user-facing `CHANGELOG.md` with the typical one-line-per-entry shape.
+Stays a deferred decision until the OSS-launch milestone (D-131).
+*Source:* catch-up review 2026-05-23 conversation about CHANGELOG
+detail level matching the project's actual audience.
+*Disposition:* defer — execute alongside Stage 19/20 OSS-launch prep.
+
+### Pre-OSS-launch PII / history scrub — MUST run before going public
+Catch-up review of 2026-05-23 scanned tracked files for sensitive
+content. Concrete disclosures found in the live tree:
+
+1. **`docs/session_handoff.md:13`** — full PII paragraph: "**Bryan
+   Garrett** (`<redacted>`, `BuckG71` on GitHub)". Full
+   name + personal email + GitHub handle in one line.
+2. **`/Users/USER/...` paths in 15 places across 3 files** — mostly
+   in `docs/stage_validation.md` (12 occurrences, real `cd` commands
+   captured during testing), plus `docs/decisions.md` (2x) and
+   `docs/session_handoff.md` (1x). Reveals the maintainer's macOS
+   username + local directory layout.
+3. **Personal email `<redacted>`** in
+   `docs/session_handoff.md` — single occurrence; LICENSE +
+   `pyproject.toml` use the bare name (no email), which is fine.
+4. **`<host>.tailnet` hostname** in
+   `docs/home_lab_deployment.md:70-72` — reveals home-lab device
+   naming + that the maintainer runs a tailnet.
+
+**Why this needs explicit tracking:** editing the files only adds new
+state. Old commits remain reachable via `git log -p`, `git show
+<old-commit>`, or GitHub's file-history UI. The ONLY way to actually
+scrub history is `git filter-repo` (the modern replacement for
+`git filter-branch`), which rewrites every commit that touched the
+sensitive content and changes every commit SHA.
+
+**Window:** the repo is currently private — that's the only clean
+moment to rewrite history. Once public, forks/clones spread the old
+state, GitHub's reflog retains rewritten history for ~90 days, and
+search engines may have indexed file contents. Effectively impossible
+to fully recall post-launch.
+
+**Going forward (maintainer plan):** to prevent re-capture of the
+macOS username (`USER`) into future paths/output, move dev into a
+containerized environment (option (c) from the 2026-05-23 discussion).
+Mitigations (a) "manual sanitization before commit" and (b) "rename
+the macOS user" are inferior — (a) requires constant discipline,
+(b) is a large user-account migration.
+
+*Source:* catch-up review 2026-05-23; D-173 deliverable (f);
+`docs/mvp_build_plan.md` Stage 20 deliverable 8.
+*Disposition:* **OSS-launch blocker.** Schedule the `git filter-repo`
+pass + verification (`git log -p | grep` returns nothing for the four
+strings above) into Stage 20 (Security Review & Hardening Audit).
+Containerized-dev-environment setup is parallel work, separate from
+the history scrub itself.
 
 ### Pace + no formal review-gate combination
 The maintainer + AI-pair workflow can land a large volume of code in one

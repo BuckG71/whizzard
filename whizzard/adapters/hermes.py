@@ -207,29 +207,74 @@ def _check_no_auth_json(profile_dir: Path) -> None:
     Matches case-insensitively and at any depth — Hermes nests its
     configuration so the file could legitimately live under `default/` or
     a numeric subdir. We refuse them all.
+
+    F-A5 (catch-up review pass 2, 2026-05-24): the original implementation
+    used ``Path.rglob`` which does NOT descend into directory symlinks AND
+    yields symlinks-to-files by the symlink's own name (not the target's).
+    Both gaps could bypass the D-80 check:
+
+      (a) Symlink to a directory containing auth.json — rglob skips →
+          MISS. Docker bind-mounts follow the symlink at access time
+          inside the cell, exposing the target.
+      (b) Symlink named ``credentials`` that points at ``~/.hermes/auth.json``
+          — rglob yields it with ``entry.name`` == "credentials"; the
+          lowercase-name check is against the symlink name, not the
+          target. MISS.
+
+    Fix: refuse to launch if ANY symlink lives inside ``profile_dir``.
+    Profiles created via the standard ``whiz hermes profile create`` flow
+    have no symlinks (``shutil.copytree(symlinks=True)`` preserves source
+    symlinks but the F-C-02/F-C-03 fixes mean no auth-bearing symlinks
+    can survive the clone filter). A maintainer who needs a legitimate
+    symlink can be loud about it — the error is explicit and the
+    rationale here documents the trade.
     """
     if not profile_dir.exists():
         return
-    for entry in profile_dir.rglob("*"):
-        # rglob yields both files and dirs; skip dirs to avoid spurious
-        # matches on directories named like a credential file (none exist
-        # today, but cheap insurance).
+    # Manual walk so we can detect symlinks ourselves; rglob's default
+    # behavior (don't follow directory symlinks, skip them silently)
+    # is what created the bypass.
+    stack = [profile_dir]
+    while stack:
+        current = stack.pop()
         try:
-            if not entry.is_file():
-                continue
+            children = list(current.iterdir())
         except OSError:
-            # Broken symlinks etc. — treat as not-a-file, skip.
             continue
-        if entry.name.lower() in _MOUNT_REFUSE_NAMES:
-            raise HermesAuthJsonPresentError(
-                f"Refusing to mount {profile_dir} into the cell: found "
-                f"{entry.relative_to(profile_dir)} (D-80 forbids mounting "
-                "auth.json / auth.lock — credentials must reach the cell "
-                "via env vars per D-134, never via the mounted profile). "
-                "Remove the file from the host profile, or point "
-                "hermes_home at a profile created via "
-                "`whiz hermes profile create`."
-            )
+        for entry in children:
+            try:
+                is_symlink = entry.is_symlink()
+            except OSError:
+                # Broken inode; treat as suspect and refuse.
+                is_symlink = True
+            if is_symlink:
+                raise HermesAuthJsonPresentError(
+                    f"Refusing to mount {profile_dir} into the cell: found "
+                    f"symlink at {entry.relative_to(profile_dir)} (D-80 "
+                    "forbids mounting symlinks inside HERMES_HOME because a "
+                    "symlink may point at auth.json / auth.lock with a "
+                    "different name, or at a directory containing them — "
+                    "in either case the bind mount would expose the target "
+                    "to the cell. Replace the symlink with the real "
+                    "content, or remove it."
+                )
+            try:
+                if entry.is_file():
+                    if entry.name.lower() in _MOUNT_REFUSE_NAMES:
+                        raise HermesAuthJsonPresentError(
+                            f"Refusing to mount {profile_dir} into the "
+                            f"cell: found {entry.relative_to(profile_dir)} "
+                            "(D-80 forbids mounting auth.json / auth.lock "
+                            "— credentials must reach the cell via env "
+                            "vars per D-134, never via the mounted "
+                            "profile). Remove the file from the host "
+                            "profile, or point hermes_home at a profile "
+                            "created via `whiz hermes profile create`."
+                        )
+                elif entry.is_dir():
+                    stack.append(entry)
+            except OSError:
+                continue
 
 
 def create_profile(

@@ -11,7 +11,9 @@ from __future__ import annotations
 import typer
 
 from whizzard.adapters import (
+    CredentialUnavailableError,
     HermesAdapter,
+    OneCLITimeoutError,
     UnknownHarnessTypeError,
     build_adapter,
 )
@@ -210,14 +212,34 @@ def _perform_launch(
         duration_override_seconds=duration_override_seconds,
     )
 
-    result = run_shell(
-        prof,
-        image=image,
-        resolved_mounts=resolved,
-        session_id=session_id,
-        overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
-        adapter=adapter,
-        preset_name=preset_name,
-        duration_override_seconds=duration_override_seconds,
-    )
+    # F-A6 (catch-up review pass 2): wrap the launch in handlers for the
+    # credential-fetch exceptions the Hermes adapter's `container_env()`
+    # can raise. Without this, OneCLI timeouts / unavailable secrets
+    # surface as raw Python tracebacks to the user instead of the styled
+    # red-error path every other launch failure uses. No container has
+    # started yet at the raise point (container_env runs in
+    # build_run_argv), so no cleanup is needed.
+    try:
+        result = run_shell(
+            prof,
+            image=image,
+            resolved_mounts=resolved,
+            session_id=session_id,
+            overrides_used=[{"path": o.path, "reason": o.reason} for o in overrides_used],
+            adapter=adapter,
+            preset_name=preset_name,
+            duration_override_seconds=duration_override_seconds,
+        )
+    except OneCLITimeoutError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=125) from e
+    except CredentialUnavailableError as e:
+        console.print(f"[red]credential fetch failed: {e}[/red]")
+        raise typer.Exit(code=125) from e
+    except DockerDaemonError as e:
+        # F-B2 (catch-up review pass 2): `run_shell` calls `get_image_id`
+        # after the preflight `image_exists` check; a daemon flap between
+        # the two leaks a DockerDaemonError past run_shell to the user.
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=125) from e
     raise typer.Exit(code=result.exit_code)

@@ -823,6 +823,43 @@ def test_preflight_ok_when_profile_has_no_auth_json(tmp_path):
     assert result.ok is True
 
 
+# --- F-A5 (catch-up review pass 2): D-80 symlink-bypass closures ----------
+
+
+def test_preflight_refuses_symlink_to_directory_in_profile(tmp_path):
+    """A symlink to a directory bypassed the original rglob-based check
+    because rglob doesn't descend into directory symlinks. If the
+    symlinked directory contained auth.json, the docker bind mount would
+    follow it at runtime and expose the credentials."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "auth.json").write_text('{"token": "leaked"}')
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    (profile / "credentials_dir").symlink_to(outside)
+
+    adapter = HermesAdapter(config={"hermes_home": str(profile)})
+    result = adapter.preflight()
+    assert result.ok is False
+    assert "symlink" in result.reason.lower()
+
+
+def test_preflight_refuses_symlink_to_file_in_profile(tmp_path):
+    """A symlink whose own name doesn't match auth.json/lock but whose
+    target IS auth.json (or any sensitive file) bypassed the original
+    check because `entry.name` is the symlink's name, not the target's."""
+    outside_secret = tmp_path / "auth.json"
+    outside_secret.write_text('{"token": "leaked-via-symlink"}')
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    (profile / "innocent-looking-name").symlink_to(outside_secret)
+
+    adapter = HermesAdapter(config={"hermes_home": str(profile)})
+    result = adapter.preflight()
+    assert result.ok is False
+    assert "symlink" in result.reason.lower()
+
+
 # --- F-C-02: case-insensitive clone exclusion -----------------------------
 
 

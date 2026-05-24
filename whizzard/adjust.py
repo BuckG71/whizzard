@@ -8,8 +8,8 @@ This module is the CORE LOGIC layer:
 - `Changes` describes a requested mutation
 - `Approver` is a callable interface for human / agent approval surfaces
 - `adjust_session()` is the entry point both CLI and MCP eventually call
-- `AGENT_DENIED_CHANGES` is the Stage 14 filter — humans can request anything
-  in this list, agents cannot
+- `AGENT_ALLOWED_CHANGES` is the Stage 14 filter — humans can request anything,
+  agents only the fields in this allowlist (default-deny per F-G-06)
 
 The CLI command + TTY approver live in `whizzard/cli/adjust.py`. Tests in
 `tests/test_adjust.py`.
@@ -384,7 +384,7 @@ def render_diff(changes: Changes, session_id: str) -> str:
 
 @dataclass(frozen=True)
 class DeniedChange:
-    """Raised-as-value when an agent-initiated request hits AGENT_DENIED_CHANGES."""
+    """Raised-as-value when an agent-initiated request hits a field not in AGENT_ALLOWED_CHANGES."""
     field: str
     reason: str = "not permitted via agent-initiated request"
 
@@ -691,8 +691,9 @@ def adjust_session(
 ) -> AdjustResult:
     """End-to-end adjust: resolve session, validate, prompt, stop, relaunch.
 
-    `agent_initiated=True` enforces the AGENT_DENIED_CHANGES filter; default
-    False means human-initiated and all changes are permitted.
+    `agent_initiated=True` enforces the AGENT_ALLOWED_CHANGES allowlist
+    (default-deny per F-G-06); default False means human-initiated and
+    all changes are permitted.
 
     `relauncher` is a callable that takes the new-launch-params dict and
     returns the relaunch's exit code. Default `None` uses the CLI launch
