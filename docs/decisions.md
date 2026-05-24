@@ -2717,6 +2717,22 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
+### D-172: Repo security hardening is an OSS-launch blocker
+
+**Type:** scope
+
+**Tags:** oss-launch, safety
+
+**Door Type:** one-way for the *commitment* (retroactively closing a hardening gap post-launch is a costly catch-up); two-way for the specific control set, which can evolve as the threat landscape changes.
+
+**Decision:** Before OSS-launch (D-131), the repo must meet a baseline security posture across five control categories: (a) account hardening — FIDO2 hardware-key 2FA, scoped/expiring PATs, quarterly OAuth-app audit; (b) branch protection on `main` — required PR review, dismiss-stale-on-new-commits, no admin bypass, signed-commit enforcement; (c) workflow hardening — third-party actions pinned to commit SHA, explicit `permissions:` blocks per workflow, no `pull_request_target` without safe checkout, no self-hosted runners on public PRs; (d) supply chain — lockfile review, Dependabot on, signed releases; (e) public disclosure — `SECURITY.md` at repo root with reporting channel and SLO. Per-item status, priority, and verification commands live in `docs/internal/launch_readiness.md` (gitignored).
+
+**Rationale:** Whizzard's value proposition is *capability boundaries*; a trust-undermining incident on the repo itself would be disproportionately damaging — the project would be defending its own boundary failures with a tool that promises boundary enforcement. The 2026-05-18 Megalodon campaign (5,561 repos compromised in <6 h via infostealer-harvested maintainer credentials) is the concrete reference: every control above closes a vector that attack used or could have. Keeping per-item status off the public repo avoids handing an attacker a real-time view of "which boxes aren't yet checked" during the launch window.
+
+**Source:** conversation 2026-05-23 (security-hardening discussion prompted by the Megalodon disclosure).
+
+**Status:** active
+
 ---
 
 ## Tag vocabulary
