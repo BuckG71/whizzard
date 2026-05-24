@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Rampart & Clarity vs. Whizzard</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --ink:#e6e8ee; --muted:#9aa3b2;
+    --accent:#7cc4ff; --warn:#ffb86b; --good:#7ee0a8; --bad:#ff8a8a;
+    --line:#2a2f3a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--ink);padding:32px 20px;max-width:1040px;margin:auto}
+  h1{font-size:28px;margin:0 0 6px}
+  h2{margin:32px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  h3{margin:18px 0 6px;color:var(--accent)}
+  p,li{color:var(--ink)}
+  .sub{color:var(--muted);margin-bottom:24px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .card h3{margin-top:0}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--line);
+       color:var(--muted);margin-right:6px}
+  .tag.rt{color:var(--good);border-color:var(--good)}
+  .tag.test{color:var(--warn);border-color:var(--warn)}
+  .tag.design{color:var(--accent);border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{text-align:left;border-bottom:1px solid var(--line);padding:8px 10px;vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:13px}
+  .svgwrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+  .callout{background:#1a1f2b;border-left:3px solid var(--accent);padding:10px 14px;margin:18px 0;border-radius:4px}
+  .callout.warn{border-left-color:var(--warn)}
+  code{background:#0a0c11;padding:1px 5px;border-radius:3px;font-size:13px}
+  ul{margin:6px 0 6px 18px;padding:0}
+  details{margin:6px 0}
+  summary{cursor:pointer;color:var(--accent)}
+  .src{color:var(--muted);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+
+<h1>Rampart &amp; Clarity vs. Whizzard</h1>
+<p class="sub">Microsoft's 2026-05-20 announcement of <b>Rampart</b> (pytest-style agent safety tests on PyRIT) and <b>Clarity</b> (pre-implementation decision-support), framed against what Whizzard is actually building.</p>
+
+<div class="callout">
+<b>Bottom line:</b> Rampart and Clarity are <i>complementary</i> to Whizzard, not competitive. They sit at the
+<b>design</b> and <b>test</b> phases of the agent lifecycle. Whizzard sits at the <b>runtime</b> phase — the part neither Microsoft tool addresses.
+The announcement validates the broader thesis (agent safety needs dev-workflow-native tooling) without crowding Whizzard's niche.
+</div>
+
+<h2>Where each tool lives in the lifecycle</h2>
+<div class="svgwrap">
+<svg viewBox="0 0 920 200" width="100%" role="img" aria-label="Lifecycle diagram">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa3b2"/>
+    </marker>
+  </defs>
+  <g font-family="sans-serif" font-size="13" fill="#e6e8ee">
+    <rect x="20"  y="60" width="200" height="80" rx="6" fill="#1a1f2b" stroke="#7cc4ff"/>
+    <text x="120" y="90"  text-anchor="middle" font-weight="700">DESIGN</text>
+    <text x="120" y="110" text-anchor="middle" fill="#7cc4ff">Clarity</text>
+    <text x="120" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">pre-impl rationale, failure analysis</text>
+
+    <rect x="260" y="60" width="200" height="80" rx="6" fill="#1a1f2b" stroke="#ffb86b"/>
+    <text x="360" y="90"  text-anchor="middle" font-weight="700">TEST</text>
+    <text x="360" y="110" text-anchor="middle" fill="#ffb86b">Rampart</text>
+    <text x="360" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">pytest red-team, CI regressions</text>
+
+    <rect x="500" y="60" width="200" height="80" rx="6" fill="#1a1f2b" stroke="#7ee0a8"/>
+    <text x="600" y="90"  text-anchor="middle" font-weight="700">RUNTIME</text>
+    <text x="600" y="110" text-anchor="middle" fill="#7ee0a8">Whizzard</text>
+    <text x="600" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">capability cell, scoped grants</text>
+
+    <rect x="740" y="60" width="160" height="80" rx="6" fill="#1a1f2b" stroke="#2a2f3a"/>
+    <text x="820" y="90"  text-anchor="middle" font-weight="700" fill="#9aa3b2">POST-INCIDENT</text>
+    <text x="820" y="110" text-anchor="middle" fill="#9aa3b2" font-size="12">audit logs → Rampart</text>
+    <text x="820" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">regression test</text>
+
+    <line x1="220" y1="100" x2="260" y2="100" stroke="#9aa3b2" marker-end="url(#arr)"/>
+    <line x1="460" y1="100" x2="500" y2="100" stroke="#9aa3b2" marker-end="url(#arr)"/>
+    <line x1="700" y1="100" x2="740" y2="100" stroke="#9aa3b2" marker-end="url(#arr)"/>
+  </g>
+</svg>
+</div>
+
+<h2>What each tool actually is</h2>
+<div class="grid">
+  <div class="card">
+    <span class="tag design">design-time</span>
+    <h3>Clarity</h3>
+    <p>Structured decision-support. Walks engineers through problem clarification, solution exploration, and multi-perspective failure analysis (security / human factors / adversarial). Outputs <b>markdown committed to the repo</b>.</p>
+    <p><b>For:</b> enterprise eng + safety teams<br/><b>Surface:</b> markdown artifacts<br/><b>Open source:</b> yes (Microsoft GitHub)</p>
+  </div>
+  <div class="card">
+    <span class="tag test">test-time</span>
+    <h3>Rampart</h3>
+    <p>Built on PyRIT. <b>pytest-style integration tests</b> for agent safety: cross-prompt injection coverage, statistical (probabilistic) assertions, composable evaluators that inspect tool invocations &amp; side effects, CI/CD-friendly.</p>
+    <p><b>For:</b> engineers shipping agents<br/><b>Surface:</b> Python tests in CI<br/><b>Open source:</b> yes (Microsoft GitHub)</p>
+  </div>
+  <div class="card">
+    <span class="tag rt">runtime</span>
+    <h3>Whizzard</h3>
+    <p>Local capability-governance layer. Wraps an agent harness in a hardened, scoped, time-bounded execution cell (Docker today) with explicit, human-readable capability grants. Filesystem mounts, network, credentials, MCP surface all gated.</p>
+    <p><b>For:</b> solo devs, local agent operators<br/><b>Surface:</b> CLI + profiles, harness adapters (Hermes, generic shell)<br/><b>Status:</b> MVP in progress (stages 1–10, 12 shipped)</p>
+  </div>
+</div>
+
+<h2>Side-by-side</h2>
+<table>
+  <tr><th></th><th>Clarity</th><th>Rampart</th><th>Whizzard</th></tr>
+  <tr><td><b>Lifecycle phase</b></td><td>Design / pre-impl</td><td>Test (CI)</td><td>Runtime execution</td></tr>
+  <tr><td><b>Primary question</b></td><td>"Did we think this through?"</td><td>"Does it behave under attack?"</td><td>"What can it actually touch right now?"</td></tr>
+  <tr><td><b>Mechanism</b></td><td>Guided markdown workflow</td><td>pytest + PyRIT evaluators</td><td>Container + capability policy + adapters</td></tr>
+  <tr><td><b>Audience</b></td><td>Enterprise PMs/engineers/safety</td><td>Enterprise eng teams w/ CI</td><td>Solo devs, local OSS agent operators</td></tr>
+  <tr><td><b>Failure mode it catches</b></td><td>Unquestioned design assumptions</td><td>Prompt-injection regressions, side-effect bugs</td><td>Blast-radius / unauthorized capability use</td></tr>
+  <tr><td><b>Trust model</b></td><td>Trust the process</td><td>Trust the tests</td><td>Trust nothing; constrain the cell</td></tr>
+  <tr><td><b>Integration point</b></td><td>Repo docs</td><td>CI pipeline</td><td>Harness adapter (CLI shell-out)</td></tr>
+</table>
+
+<h2>Implications for Whizzard</h2>
+
+<h3>1. Niche is unchanged — and arguably reinforced</h3>
+<p>Neither tool addresses runtime capability containment. Rampart can tell you the agent <i>shouldn't</i> exfiltrate
+<code>~/.ssh/</code> when prompt-injected; Whizzard ensures the <code>~/.ssh/</code> mount was never in the cell to begin with.
+That's a <b>defense-in-depth pairing</b>, not overlap.</p>
+
+<h3>2. Audience gap is real</h3>
+<p>Microsoft explicitly aims at "software engineers, product managers, and safety engineers building agentic AI systems within enterprises."
+Whizzard's <code>docs/vision_and_strategy.md</code> explicitly carves out the opposite: solo devs, local agent enthusiasts,
+"not initially targeted at enterprise IAM / SOC2." Different buyer, different shape of tool.</p>
+
+<h3>3. Two ideas worth borrowing</h3>
+<ul>
+  <li><b>Rampart's pytest pattern for safety regressions</b> maps cleanly onto Whizzard's own policy: a future
+      <code>tests/policies/</code> suite asserting "profile <code>quarantine</code> denies network", "credential X
+      never appears in cell env unless declared" — same shape, applied to capability policy rather than model behavior.</li>
+  <li><b>Clarity's "markdown artifact per decision" pattern</b> already exists in this repo as <code>docs/decisions.md</code>
+      (append-only D-XXX index). The Microsoft framing — failure analysis from multiple perspectives — could be a useful
+      template addition for higher-risk decisions (e.g. new mount types, new adapter trust assumptions).</li>
+</ul>
+
+<h3>4. Positioning watch-out</h3>
+<div class="callout warn">
+The announcement uses the phrase "<i>bring safety into agent development workflow</i>." Whizzard's elevator pitch
+("local capability governance for AI agents") sits adjacent in language but not in function. When Whizzard hits OSS launch,
+the README and landing copy should explicitly differentiate: <b>runtime containment</b> ≠ <b>safety testing</b>. A one-line
+comparison ("Rampart tests behavior; Whizzard bounds capability") would prevent confused conflation.
+</div>
+
+<h3>5. Naming collision risk</h3>
+<p>"Rampart" is firmly in the same conceptual neighborhood as Whizzard (boundaries, containment, defense).
+Per D-144, "Whizzard" is a working name pending a final rename. The shortlist should avoid names that read as Microsoft-Rampart-adjacent —
+the differentiator is capability scoping, not perimeter.</p>
+
+<h2>Suggested follow-ups</h2>
+<ul>
+  <li>Open a decision in <code>docs/decisions.md</code> capturing positioning vs. Rampart/Clarity (1–2 paragraphs, reference this brief).</li>
+  <li>File an issue / backlog entry for <b>policy-assertion tests</b> in the Rampart-shaped style — independent of agent behavior, focused on Whizzard's own invariants.</li>
+  <li>Consider a short blog post / README section at launch: "Whizzard vs. Rampart vs. Clarity" — different layers, all three can ship together.</li>
+</ul>
+
+<p class="src">Sources: <i>Microsoft Security Blog, 2026-05-20</i> — Introducing Rampart and Clarity (open-source agent-safety tools); local repo <code>README.md</code>, <code>docs/vision_and_strategy.md</code>.</p>
+</body>
+</html>

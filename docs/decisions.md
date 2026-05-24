@@ -2713,6 +2713,48 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** open
 
+### D-172: Whizzard is complementary to Microsoft's Rampart and Clarity, not competitive
+
+**Type:** foundational
+
+**Tags:** oss-launch, safety
+
+**Door Type:** one-way (positioning vs. external products; reversing means repositioning against them, not a feature toggle).
+
+**Decision:** Microsoft's Rampart (pytest-style agent red-team tests on PyRIT) and Clarity (pre-implementation decision-support) sit at the *test* and *design* phases of the agent lifecycle, for enterprise audiences. Whizzard owns the *runtime* phase — capability containment of an executing agent — for solo / local / open-source operators. Position the three as complementary, not overlapping, at OSS launch.
+
+**Rationale:** The lifecycle and audience are both disjoint: Rampart and Clarity stop where Whizzard begins, and their enterprise CI focus targets a different buyer than Whizzard's solo/OSS focus (D-17, D-18). Conflating the categories at launch either drags Whizzard into a comparison it isn't trying to win, or invites users expecting prompt-injection regression coverage from a tool that does kernel-enforced capability scoping. "Rampart tests behavior; Whizzard bounds capability" is the one-line framing that preserves the niche.
+
+**Notes:**
+- Companion artifact: `rampart_clarity_vs_whizzard.html` (committed fd571b4) — the side-by-side that drove this decision.
+- Pattern-borrows queued separately (post-MVP candidates, not folded in here): Rampart-shaped pytest suite for Whizzard's own policy invariants; Clarity-style failure-analysis template for higher-risk decisions.
+- OSS-launch implication: README copy needs an explicit one-line differentiator vs. Rampart/Clarity. Concrete wording is downstream of D-131.
+- D-144 successor naming: avoid Rampart-adjacent connotations (perimeter, defense). Whizzard's differentiator is *capability scoping*.
+- Originally numbered D-171 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-172 at merge time (2026-05-24) because a parallel D-171 (sub-agent permission scoping, above) had already landed on `main`. Branch commits 7fcd1c4 / f354016 still reference the original D-171 in their messages.
+
+**Source:** conversation 2026-05-23 (after Microsoft 2026-05-20 Rampart/Clarity announcement).
+
+**Status:** active
+
+### D-173: Repo security hardening is an OSS-launch blocker
+
+**Type:** scope
+
+**Tags:** oss-launch, safety
+
+**Door Type:** one-way for the *commitment* (retroactively closing a hardening gap post-launch is a costly catch-up); two-way for the specific control set, which can evolve as the threat landscape changes.
+
+**Decision:** Before OSS-launch (D-131), the repo must meet a baseline security posture across five control categories: (a) account hardening — FIDO2 hardware-key 2FA, scoped/expiring PATs, quarterly OAuth-app audit; (b) branch protection on `main` — required PR review, dismiss-stale-on-new-commits, no admin bypass, signed-commit enforcement; (c) workflow hardening — third-party actions pinned to commit SHA, explicit `permissions:` blocks per workflow, no `pull_request_target` without safe checkout, no self-hosted runners on public PRs; (d) supply chain — lockfile review, Dependabot on, signed releases; (e) public disclosure — `SECURITY.md` at repo root with reporting channel and SLO. Per-item status, priority, and verification commands live in `docs/internal/launch_readiness.md` (gitignored).
+
+**Rationale:** Whizzard's value proposition is *capability boundaries*; a trust-undermining incident on the repo itself would be disproportionately damaging — the project would be defending its own boundary failures with a tool that promises boundary enforcement. The 2026-05-18 Megalodon campaign (5,561 repos compromised in <6 h via infostealer-harvested maintainer credentials) is the concrete reference: every control above closes a vector that attack used or could have. Keeping per-item status off the public repo avoids handing an attacker a real-time view of "which boxes aren't yet checked" during the launch window.
+
+**Notes:**
+- Originally numbered D-172 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-173 at merge time (2026-05-24) — see D-172 note for context. Branch commit 07167d6 still references the original D-172 in its message.
+
+**Source:** conversation 2026-05-23 (security-hardening discussion prompted by the Megalodon disclosure).
+
+**Status:** active
+
 ---
 
 ## Tag vocabulary
