@@ -2,59 +2,70 @@
 
 > **This section is mutable** — updated when state meaningfully changes (a stage ships, a major decision lands, a constraint relaxes). Everything below the `# Session Handoff Log` heading is append-only per D-150 and must never be edited. Update this section by replacing it in place; prior versions live in git history.
 >
-> **Last updated:** 2026-05-23T05:00Z (UTC)
+> **Last updated:** 2026-05-24T07:15Z (UTC)
 
 ## Where we are right now
 
 - **MVP user:** Bryan, single-user threshold per D-101. Build choices favor "Bryan's daily-driver setup" over generalized OSS-day-one defaults; OSS-launch revisits these explicitly.
-- **Stage status:** **Stages 1–15.5 SHIPPED.** Stage 14 (D-165) and Stage 15 (D-166) shipped 2026-05-22; Stage 15.5 (hot-restart of idle-ended sessions — `whiz wake`, D-168/169/170) shipped 2026-05-23. **497 unit tests + 25 integration tests passing.** All work committed and pushed to `origin/main`.
-- **Build-plan additions:** MVP+ Stages 19–20 (Packaging & Install; Security Review & Hardening Audit) — first concrete OSS-launch-milestone work.
+- **Stage status:** **Stages 1–15.5 SHIPPED.** First comprehensive code review (catch-up review) completed 2026-05-23/24 — 8 chunks across the codebase, ~81 findings, ~62 fixed in-place, ~14 deferred to `known_issues.md` with rationale, the rest dismissed with rationale. **581 unit tests + 25 integration tests passing.** 16 commits ahead of `origin/main` (Bryan to push when ready).
+- **New decisions from this session:** D-171 (sub-agent permission scoping, open), D-172 (Whizzard complementary to Rampart/Clarity, active), D-173 (repo security hardening as OSS-launch blocker — six control categories including (f) git filter-repo PII scrub, active). All cross-referenced.
+- **New process artifacts:** `docs/review_process.md` (per-stage + periodic-baseline review protocol); the `work-wrap-up` skill now has a step 6 that runs `code-review` on the stage diff with bias-toward-fix-now triage.
 - **OneCLI caveat** (D-162): `fetch_secret` calls a non-existent `onecli secrets get`; all invocations fall through to the env-var fallback. Follow-up, not blocking.
 - **Product rename Whizzard → Osmotiq** (D-158): triggered after MVP operational, before Hermes migration. CLI binary becomes `oiq`.
-- **Key docs reconciled** (2026-05-22, commit `17fba77`): `architecture.md` and `mvp_build_plan.md` cross-checked against the codebase and `decisions.md` and brought into alignment — the three key docs now agree; `decisions.md` is the live source of truth. `docs/internal/` added as a gitignored local-only docs area.
 
 ## Active design constraints (don't relitigate without cause)
 
-- **D-9** one-way capability flow (host → cell, never cell → host).
-- **D-10** harness-neutral core; adapter pattern for harness-specific behavior.
-- **D-11** the mount list IS the permission model.
-- **D-27** mid-session capability change = stop+restart, never in-place mutation.
-- **D-101** personal-use MVP threshold.
-- **D-129** decisions.md append-only. **D-150** HANDOFF.md append-only (this header excepted).
-- **D-153** harness-specific identifiers stay inside the adapter module.
-- **D-156** in-cell MCP server: launch-time snapshot + event-file write-back.
-- **D-164** OIQ owns docker-run flags, not images.
-- **D-165** Stage 14 agent requests: file-mailbox channel + operator-invoked `whiz requests`; host-side MCP server is the v1.0 revisit.
-- **D-166** Stage 15 enforcement: Popen poll loop, hybrid idle detection, extend = remaining + N.
-- **D-168** user-initiated wake preserves the prior permission set; stripping reserved for non-user-initiated triggers (none exist today).
-- **D-169** Stage 15.5 UX details — selection rule, missing-mount policy, error-with-launch-pointer shape, refuse-active-sid.
-- **D-170** wake gives a fresh duration cap on relaunch (distinct from adjust's inherit-elapsed).
+- D-9 one-way capability flow. D-10 harness-neutral core. D-11 mount-list-as-permission-model. D-27 mid-session = stop+restart. D-101 personal-use MVP threshold.
+- D-129 decisions.md append-only. D-150 HANDOFF.md append-only (header excepted).
+- D-153 harness-specific identifiers stay in the adapter module. D-156 in-cell MCP server pattern.
+- D-164 OIQ owns docker-run flags. D-165 Stage 14 agent-request channel.
+- D-166 Stage 15 enforcement. D-168/169/170 Stage 15.5 wake.
+- **D-171 (open)** sub-agent permission scoping — revisit alongside D-131.
 
 ## Process discipline in force
 
-- Decisions: flat+tags schema, Rationale required, canonical tags. `scripts/validate_decisions.py` runs pre-handoff + as a pre-commit hook.
-- `make check` (lint + typecheck + test) and `make coverage` are the gates; CI runs them.
-- **Commit + push when a stage ships or a major session lands** — standard procedure, no longer waits to be asked (`feedback_commit_per_stage`).
-- **Surface the full build-plan stage scope up front** when scoping a stage — present every requirement before the design conversation (`feedback_full_stage_scope`).
-- Handoff / decision review drafts render as **inline HTML surfaced in chat**, never `.draft.md` files in the repo (`feedback_review_drafts_html`; the `session-handoff` and `decision-capture` skills were updated to match).
-- **HARD rule: any chat response over ~100 words is delivered as an inline HTML doc, not text in chat** (`feedback_html_threshold`). Mobile chat scrollback is unworkable for long text blocks; long responses don't get read.
-- Brevity in collaboration; single clean follow-up questions; don't push to close items; verify load-bearing claims before asserting.
-- Design-paused stages (16, 17) require an explicit conversation per D-148 before code.
+- Decisions: flat+tags schema; `scripts/validate_decisions.py` runs pre-handoff + as pre-commit.
+- `make check` + `make coverage` are the gates; `make integration` is the stage-end gate (NOT in `make check`).
+- **Review triage rule** (`feedback_default_to_fix_now`): bias toward fix-now; per-finding rationale required for every defer or dismiss.
+- Commit + push when a stage ships. Surface full stage scope up front. Review drafts as inline HTML (never `.draft.md`). HARD rule: chat responses >100 words → HTML.
+- Brevity; clean single questions; don't push to close; verify load-bearing claims.
+- Design-paused stages (16, 17) require D-148 conversation before code.
 
 ## What's next
 
-- **Whole-codebase `/ultrareview` baseline** — Bryan committed 2026-05-23 to burning one of his free `/ultrareview` runs against `<first-commit>..HEAD` overnight. Findings get triaged together in the morning per the standard pattern (real bug → fix; false positive → note; deferred → `known_issues.md`; architectural → decision). This is the closest thing to second-pair-of-eyes review since project start.
-- **Launch-cut design questions** (deferred; carried from prior log entries) — whether to launch on a reduced stage subset, Stage 20 lean-vs-full scope, the still-open D-131/D-133. The strategic fork.
-- **Stage 18** — image management. Autonomous-able.
-- **Stages 16, 17** — Discord control plane; require D-148 design pauses.
-- **MVP+ Stages 19–20** — packaging/install + security review; pre-OSS-launch.
-- **Stage 9 manual smoke + auto-wiring** — exercise in-cell MCP end-to-end (blocked on the Stage 8-M6 / image infra).
-- **OneCLI follow-up** — align with the actual OneCLI surface or drop the value-retrieval integration.
-- **D-157 user-config drift** — Bryan's `~/.whizzard/config/profiles.json` predates several schema additions (`allow_broad_mount` default, now `idle_timeout_seconds`); sync when convenient.
+- **Push the 16 commits** (auto-mode blocks Claude from pushing to main; standard solo-on-main policy per D-122).
+- **Triage the 4 deferred pass-2 findings** in `docs/known_issues.md` (allow_ephemeral propagation, wake exit-code classification, hide-resolved-request, mark_resolved audit-log race) — each needs a design call.
+- **OSS-launch blockers tracked**: PII / sensitive-string history scrub (`docs/known_issues.md` "Pre-OSS-launch PII / history scrub"; CRITICAL; while-private window only); CHANGELOG format reframe (deferred, executes alongside Stage 19/20).
+- **Stage 16** Discord control plane — D-148 design pause required before code.
+- **Stage 18** image management — autonomous-able.
+- **D-157 user-config drift** — sync when convenient.
 
 ---
 
 # Session Handoff Log
+
+## 2026-05-24T07:15Z — Catch-up code review complete; pass-2 wrap-up caught cross-cutting bugs
+
+### Goal
+Continue MVP build per `docs/mvp_build_plan.md`. This session ran the first comprehensive code review of the codebase (no per-stage reviews had happened previously) and established the protocol for going-forward reviews.
+
+### Active task
+Catch-up review is complete and committed (15 commits ahead of `origin/main` + a wrap-up pass-2 commit = 16). Push waits for Bryan's morning go-ahead (auto-mode blocks Claude from pushing to main per D-122). 4 deferred pass-2 findings in `docs/known_issues.md` need design calls before they can be fixed.
+
+### Tried & rejected
+- **Catch-up review via `/ultrareview` against `<first-commit>..HEAD`** — prior session's plan; Bryan redirected to in-session chunked review for closer triage control.
+- **Strict fix-now default in triage** — softened to "bias-toward-fix-now with rationale required for defer/dismiss" after Bryan's pushback during Chunk B (`feedback_default_to_fix_now`).
+- **Skipping per-stage review in the new wrap-up protocol** — instead, added it as mandatory step 6 of `/wrap-up stage` so the same triage discipline applies going forward.
+- **Renumbering catch-up review's D-171 to D-173 at merge time** — kept ours as D-171 (less code/doc churn — 3 files of cross-refs), pushed rampart-clarity branch's two entries to D-172 / D-173.
+
+### Resume protocol
+1. Read the refreshed `# Current State` block above.
+2. Push the 16 commits: `git push origin main`.
+3. Triage the 4 deferred pass-2 findings in `docs/known_issues.md` — each entry names the design call required.
+4. Re-read `docs/known_issues.md` "Pre-OSS-launch PII / history scrub" (CRITICAL; while-private window only) and "CHANGELOG format reframe" — both tracked as OSS-launch blockers under D-173 + Stage 20.
+5. Next coding work options: Stage 16 (D-148 design pause first) or Stage 18 (autonomous-able).
+
+Don't push without a clean `make integration` run on any new code that touches docker / session lifecycle / audit log. Don't merge any new D-NN entries without the renumber-discipline used for D-172/D-173.
 
 ## 2026-05-23T14:30Z — Stage 15.5 CI fully green; post-mortem audit complete
 
