@@ -41,7 +41,13 @@ def _await_container_id(reader, deadline_seconds: float = 15.0) -> str:
 
 
 def test_duration_cap_stops_real_container(launch_real_cell) -> None:
-    """A duration cap actually terminates a live container."""
+    """A duration cap actually terminates a live container.
+
+    F-F-01: monitor_and_enforce now uses ``time.monotonic`` for elapsed-
+    time math (immune to laptop sleep / NTP jumps). Callers must pass a
+    monotonic ``start_time``; mixing wall-clock and monotonic produces
+    a huge negative ``elapsed`` and the cap never fires.
+    """
     proc, cid_reader, _ = launch_real_cell(["sleep", "3600"])
     cid = _await_container_id(cid_reader)
     assert _container_running(cid), "container should be up before enforcement"
@@ -51,7 +57,7 @@ def test_duration_cap_stops_real_container(launch_real_cell) -> None:
         container_id_reader=cid_reader,
         adapter=GenericShellAdapter(),
         session_id="smoke",
-        start_time=time.time(),
+        start_time=time.monotonic(),
         duration_limit=5,
         idle_limit=None,
         poll_interval=2,
@@ -65,7 +71,10 @@ def test_duration_cap_stops_real_container(launch_real_cell) -> None:
 def test_idle_timeout_stops_real_container(launch_real_cell) -> None:
     """An idle timeout terminates a container with no activity. Uses the
     `safe` profile (`--network none`) so there is no network jitter — the
-    `sleep` container is genuinely quiet across `docker stats` samples."""
+    `sleep` container is genuinely quiet across `docker stats` samples.
+
+    F-F-01: monotonic ``start_time`` required (see sibling test).
+    """
     proc, cid_reader, _ = launch_real_cell(["sleep", "3600"], profile="safe")
     cid = _await_container_id(cid_reader)
     assert _container_running(cid)
@@ -75,7 +84,7 @@ def test_idle_timeout_stops_real_container(launch_real_cell) -> None:
         container_id_reader=cid_reader,
         adapter=GenericShellAdapter(),
         session_id="smoke",
-        start_time=time.time(),
+        start_time=time.monotonic(),
         duration_limit=None,
         idle_limit=8,
         poll_interval=3,
