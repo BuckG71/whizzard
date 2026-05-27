@@ -2393,17 +2393,26 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 - Confirms the architectural intent of D-91 while accurately scoping where its literal "never enter container" guarantee applies.
 - Adds OneCLI as an MVP pre-condition for the Hermes adapter. Users installing `whizzard[hermes]` need OneCLI on their PATH; the adapter surfaces a clear error if it's missing.
 
-### D-135: Read-only project-root mounting as a Whizzard pattern
+### D-135: Writable mounts default to overlay-quarantine; `--direct-mount` opt-out preserves the low-friction path
 
 **Type:** architecture
 
-**Door Type:** two-way (the pattern is opt-in by design; can be added or removed as a recommendation without breaking existing setups).
+**Tags:** post-mvp, safety, mounts
 
-**Decision:** Whether Whizzard should support / recommend NanoClaw's read-only project-root + selective writable subdirs pattern for "containerize my own dev project" use cases is unresolved.
+**Door Type:** one-way for the *commitment* (once users build workflows around overlay-quarantine, removing it without replacement breaks the trust premise); two-way for the *specific mechanism* (overlayfs vs Docker volume vs APFS snapshot can swap as long as the diff-merge gate stays).
 
-**Source:** docs/archive/nanoclaw_research.md (Things to learn from NanoClaw)
+**Decision:** Shipping as v1.0 primary goal #10 (`docs/post_mvp_spec.md` §10). Writable mounts default to an overlay-quarantine pattern: agent writes land in a cell-private upper layer over a read-only bind-mount; host-side tools see the pre-session state until the user runs `whiz merge <sid>` to review the diff and apply changes. Two opt-out paths preserve the low-friction model — per-mount `--direct-mount <path>` and per-session `--all-direct`, both logged via `mount_mode: direct` on session_start. v1.0 implementation: cell-internal overlayfs (works on Linux/macOS/Windows because Docker Desktop runs Linux containers everywhere; the host kernel doesn't need overlayfs support). `whiz merge` Phase 1 surfaces risk-class flagging — HIGH paths (`.git/hooks/`, `.github/workflows/`, lockfiles, build configs, dotfiles) bubbled to the top; MEDIUM and LOW collapsed by default. Deeper diff tooling (gitleaks/semgrep/osv-scanner) is fast-follow, not v1.0-blocking.
 
-**Status:** open
+**Rationale:** Closes the deferred-execution gap surfaced in the 2026-05-25 threat-modeling discussion: an agent that plants `.git/hooks/pre-commit`, a poisoned build script, or a source backdoor cannot affect host-side tooling until the user reviews the change. The diff-merge step overlaps with hygiene devs already practice (`git diff` before commit), so the friction lands in a familiar place rather than adding a new ritual. Opt-out is first-class, not an afterthought — per D-15 / D-117 / D-106, the baseline framing is "meaningful improvement over root-mount-with-unrestricted-network at acceptable friction," not "lock everything down." Phase 1 risk-class flagging converts "wall of diff" into "look at these few first" — a focused gate, not a security wall.
+
+**Notes:**
+- Implementation alternatives considered: Docker named volume + `whiz export <sid>` (cleaner physical isolation, higher friction — kept as a future stricter-profile option), APFS snapshots (least mature, not chosen). Cell-internal overlayfs wins on portability and ergonomics for v1.0.
+- `mount_mode: direct` on session_start gives audit visibility into low-friction-path usage without gating the choice.
+- Three sub-questions surfaced as separate open decisions: D-174 (direct-mount + push-credentials interaction), D-175 (cache mount trust-shared surface), D-176 (constrained DNS resolver).
+
+**Source:** conversation 2026-05-25 (deferred-execution threat-modeling and v1.0 scope decision; resolves the prior open framing inherited from `docs/archive/nanoclaw_research.md`).
+
+**Status:** active
 
 ### D-136: NanoClaw upstream collaboration
 
@@ -2755,6 +2764,115 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
+### D-174: Direct-mount + push-credentials interaction
+
+**Type:** scope
+
+**Tags:** post-mvp, safety, mounts
+
+**Door Type:** two-way (CLI behavior; revisable based on user feedback after v1.0 ships).
+
+**Decision:** Open — sub-question surfaced from D-135. When `--direct-mount` (or `--all-direct`) is in effect AND push-capable git credentials are present in the cell, the diff-merge gate doesn't apply and an agent can push code to a remote with no human review. Three candidate behaviors:
+
+(a) **Warn-and-proceed.** Print a clear warning at session_start naming the combination and the risk ("`--direct-mount` is in effect and push credentials are available; agent-produced commits can be pushed without diff review"); log `direct_push_possible: true`; otherwise no gate. Lowest friction.
+
+(b) **Require an additional explicit flag.** Beyond `--direct-mount`, require `--allow-direct-push` to enable pushing. User opts into both. Adds one explicit consent step.
+
+(c) **Gate the push itself.** In-cell hook around `git push` (or vault-gateway-style intercept) requiring per-push user confirmation. Highest friction; most disruptive to common workflows.
+
+**Current lean:** (a). Per D-15 / D-117 / D-106, gating push after the user has already explicitly opted into direct-mount is a third layer of consent for the same workflow; the realistic effect is users disabling Whizzard rather than tolerating the friction. Warning + log preserves the "we surfaced the risk, you proceeded with clear knowledge" model. Push events are already in the session log, so post-hoc detection of a malicious push remains possible. (c) is defensible if push-to-shared-remote becomes a common attack vector observed in practice, but absent that evidence, the friction cost is hard to justify.
+
+**Notes:**
+- Originally numbered D-173 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-174 at merge time (2026-05-27) because a parallel D-173 (Repo security hardening as OSS-launch blocker, above) had already landed on `main`. Branch commit 2b1fb9f still references the original D-173 in its message.
+
+**Source:** conversation 2026-05-25 (D-135 design discussion; sub-question surfaced explicitly).
+
+**Status:** open
+
+### D-175: Cache mount trust-shared surface
+
+**Type:** scope
+
+**Tags:** post-mvp, safety, mounts
+
+**Door Type:** two-way (cache behavior is per-profile or per-session config; revisable).
+
+**Decision:** Open — sub-question surfaced from D-135. Whizzard sessions benefit ergonomically from shared caches (pip wheelhouse, npm cache, Docker BuildKit layer cache, language-server caches) — without them, every session re-downloads megabytes of dependencies. But shared caches sit outside the overlay-quarantine boundary by default: an agent that poisons a cached wheel infects every future session that consumes it. Three candidate behaviors:
+
+(a) **Shared caches by default, audit-only.** Caches mounted writable across sessions; session log records cache-touch events. Lowest friction; baseline trust grant.
+
+(b) **Per-session ephemeral caches.** Each session gets a fresh cache. Closes the poisoning vector but breaks the value of caches entirely — every session pays the cold-start cost.
+
+(c) **Shared by default with `--ephemeral-caches` opt-in.** Default is shared (matches user expectations for performance); per-session flag opts into ephemeral for high-risk work.
+
+**Current lean:** (c). Per D-15 / D-117 / D-106, (b) as default loses too much to be practical for daily-driver use — users will work around it. (a) is the realistic baseline. (c) gives the security-conscious user a one-flag escape hatch for cases where they're explicitly worried (evaluating a new agent harness, running an untrusted task) without imposing friction on routine work.
+
+**Open sub-question:** which caches specifically merit this treatment — pip and npm are clearly in scope; Docker BuildKit layer cache, language server caches, `.git/index`, and similar are less obvious and may justify per-cache decisions rather than a blanket policy.
+
+**Notes:**
+- Originally numbered D-174 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-175 at merge time (2026-05-27) — see D-174 note for context. Branch commit 2b1fb9f still references the original D-174 in its message.
+
+**Source:** conversation 2026-05-25 (D-135 design discussion; sub-question surfaced explicitly).
+
+**Status:** open
+
+### D-176: Constrained DNS resolver
+
+**Type:** scope
+
+**Tags:** post-mvp, safety
+
+**Door Type:** two-way (network-resolver behavior is per-profile; adopt or revert later).
+
+**Decision:** Open — surfaced from the 2026-05-25 network-exfil discussion. A profile allowlist of egress hosts doesn't close DNS-based exfil: an agent encodes data in subdomain labels (`evil-data-encoded.attacker.com`) and the DNS resolver leaks via the lookup itself even when "regular HTTPS to attacker.com" is blocked. A constrained DNS resolver (cell-side resolver with only the profile's allowlisted hostnames mapped; refuses anything else) closes this channel. Three candidate behaviors:
+
+(a) **Adopt as default.** Cell DNS resolution restricted to the profile's host allowlist. Closes DNS-based exfil; breaks any agent workflow that legitimately resolves a host the user didn't anticipate.
+
+(b) **Don't adopt.** Accept DNS-based exfil as a cost of allowing network at all. Users with strict requirements deny network entirely (`quarantine` profile or similar).
+
+(c) **Per-profile opt-in.** Default off; specific profiles (e.g. a new `strict-network` profile) enable it.
+
+**Current lean:** (b), possibly (c) for users who want strict posture. Per the explicit baseline framing reaffirmed on 2026-05-25 and rooted in D-15 / D-117 / D-106: Whizzard's value proposition is "meaningful improvement over the current standard (root mount + unrestricted network) at acceptable friction," not "close every channel." Making DNS a managed surface is real engineering effort and a real friction point — every legitimate hostname the agent looks up (a docs site, a package-index mirror, a model endpoint, a service the agent learned about mid-task) needs to be pre-declared. For daily-driver use this is an enormous tax for closing one channel of exfil among many — HTTP-on-allowed-host stays open regardless; stego-in-commits stays open regardless. (a) is hard to justify against the friction. (b) is the most likely real outcome — accept the DNS channel as the cost of having network at all, and document it accurately in the README "Scope and limitations" disclosure. (c) preserves the option for users who genuinely want stricter posture without imposing it on everyone.
+
+**Notes:**
+- Originally numbered D-175 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-176 at merge time (2026-05-27) — see D-174 note for context. Branch commit 2b1fb9f still references the original D-175 in its message.
+
+**Source:** conversation 2026-05-25 (network-exfil deep-dive; constrained-DNS option separated from the vault-gateway decision).
+
+**Status:** open
+
+### D-177: Persistent agent memory — scope, audit, and review semantics
+
+**Type:** architecture
+
+**Tags:** post-mvp, safety
+
+**Door Type:** two-way (integration depth can move incrementally — shallow scoping today, deeper backend tomorrow — without breaking earlier commitments).
+
+**Decision:** Open — surfaced by Anthropic's 2026-05 Memory tool announcement. The Memory tool defines a client-side protocol where agents call `view` / `create` / `str_replace` / `insert` / `delete` / `rename` against a `/memories` directory that persists across sessions. Anthropic's documented multi-session-development pattern has each new session read `/memories` *first* as a bootstrap step — making memory contents the highest-leverage cross-session influence surface in the agent's environment. Three candidate Whizzard postures:
+
+(a) **Ignore.** Treat memory files as ordinary cell writes under D-135. If mounted, quarantined. If unmounted, lost at session end (defeating memory's purpose). Zero new code; zero Whizzard value-add.
+
+(b) **Shallow integration.** Introduce a profile-scoped memory mount type with predictable semantics — scoped per agent / profile / project, audited via the session log, retention policy at the mount layer, path-traversal protections enforced. Don't implement a Memory-tool-protocol backend; provide a known-good path harnesses can choose to use.
+
+(c) **Deep integration.** Whizzard-owned Memory-tool backend exposed via the in-cell MCP server (extends Stage 9, D-156, D-167). Whizzard implements all six memory commands against a backend that integrates with the overlay-quarantine pattern (D-135) — agent writes go to a cell-private upper layer; user reviews at session end before the persistent store is updated for future sessions.
+
+**Current lean:** (b) as the post-MVP target, with (c) as a stretch goal contingent on community demand. (a) is the do-nothing baseline; if (b) or (c) aren't adopted, (a) is the de-facto outcome. (b) is the low-cost middle ground that establishes memory as a first-class scoped artifact without committing to a backend implementation — consistent with D-15 / D-117 / D-106 friction-aware framing.
+
+**Threat-model notes:**
+
+- **Prompt-injection-via-memory** is a distinct attack class from D-135's deferred-execution. Poisoned memory contents activate at the *start* of every subsequent session before the user has prompted anything. Anthropic's documented multi-session pattern (initializer → subsequent → end-of-session update) makes this more acute — a maliciously-modified progress log or feature checklist redirects the entire framing of the next session.
+- **Path-traversal protections are MUST-haves** if Whizzard implements (c): validate `/memories` prefix, resolve to canonical form, reject `../` and URL-encoded variants (`%2e%2e%2f`), use `pathlib.Path.resolve()` + `relative_to()`. Anthropic's own docs call these out explicitly.
+- **Scoping is non-trivial:** per-agent? per-profile? per-project? per-session-chain? Cross-scope memory access is the natural escalation vector — an agent compromised under a low-trust scope writes to a shared memory namespace that higher-trust scopes also read.
+- **Persistence semantics differ from D-135.** For project files, the user's choice is "merge to host or discard." For memory, persistence *is* the point — the user's choice is "trust this content for the next session or discard." Same review-before-integrate spirit; different default outcome.
+
+**Notes:**
+- Originally numbered D-176 on the `claude/rampart-clarity-whizzard-f4isl` branch; renumbered to D-177 at merge time (2026-05-27) — see D-174 note for context. Branch commit b054fd4 still references the original D-176 in its message.
+
+**Source:** conversation 2026-05-26 (Anthropic Memory tool announcement and multi-session-development pattern documentation).
+
+**Status:** open
+
 ---
 
 ## Tag vocabulary
@@ -2830,6 +2948,9 @@ The following decisions are currently **open**. Any work that depends on them sh
 - **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
-- **D-135** — Read-only project-root mounting pattern adoption
 - **D-136** — NanoClaw upstream collaboration
 - **D-171** — Sub-agent permission scoping (revisit alongside D-131)
+- **D-174** — Direct-mount + push-credentials interaction
+- **D-175** — Cache mount trust-shared surface
+- **D-176** — Constrained DNS resolver
+- **D-177** — Persistent agent memory — scope, audit, and review semantics

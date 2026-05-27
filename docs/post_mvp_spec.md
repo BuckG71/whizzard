@@ -438,6 +438,72 @@ See D-159. Symphony (InfoQ 2026-05) demonstrates the orchestration layer above h
 
 ---
 
+## 10. Writable Mount Quarantine & Diff-Merge
+
+### Objective
+
+Recover the runtime-containment promise for artifacts that outlive a session. A writable bind-mount today lets an agent plant files (`.git/hooks/`, build scripts, source backdoors, CI workflow files, modified lockfiles) that fire later on the host with the user's full privileges — the cell is contained, but the artifact isn't. This goal turns that into the user's *explicit* trust grant rather than a hidden default, while honoring the baseline framing (D-15 / D-117 / D-106): meaningful improvement over the current standard (root-mount + unrestricted network) at acceptable friction, not friction-maximizing perfection.
+
+### Concept
+
+Writable mounts ship in two modes:
+
+1. **Quarantine mode (default).** Agent writes go to a cell-private upper layer over a read-only bind-mount of the host directory. Host-side tools see the pre-session state until the user runs `whiz merge <sid>` to review the diff and apply changes back.
+2. **Direct mode (opt-in).** Per-mount `--direct-mount <path>` or per-session `--all-direct` bind-mounts the host path directly with no overlay. `mount_mode: direct` logged on session_start for audit.
+
+### Implementation
+
+v1.0 uses **cell-internal overlayfs** as the quarantine mechanism. The overlay lives inside the Docker container, not at the host filesystem level — this sidesteps the cross-platform issue. macOS and Windows host kernels have no overlayfs, but Docker Desktop runs Linux containers everywhere, and that Linux kernel has overlayfs natively. One implementation works on all three host OSes.
+
+Docker named volume + `whiz export <sid>` is kept as a future alternative for stricter-profile use cases that want physical isolation at the cost of more friction. APFS snapshots were considered and rejected (least mature path).
+
+### Diff Review Surface
+
+The `whiz merge` review TUI is the ergonomic gate. A raw diff is insufficient — at 200 lines of agent-produced changes, the user rubber-stamps and the gate provides false comfort. Phase 1 (v1.0 ship-with) actively surfaces what to look at first:
+
+- **HIGH-risk paths**, expanded by default: `.git/hooks/`, `.github/workflows/`, `Makefile`, `setup.py`, `package.json` `scripts` section, `pyproject.toml` `[build-system]` / `[project.scripts]`, lockfile pin changes, `.envrc`, dotfiles
+- **MEDIUM-risk paths**: user-configured critical paths
+- **LOW-risk paths**, collapsed by default: docs, tests, README
+
+Surface format at the top of the TUI: "**3 HIGH-risk files modified, 1 MEDIUM, 47 LOW**" — drilling in shows the diff.
+
+### Diff Tooling — Phased
+
+**Phase 1 (v1.0 ship-with):** path-class risk flagging as above. Highest ergonomic leverage at lowest engineering cost.
+
+**Phase 2 (fast-follow, v1.0 nice-to-have or v1.1):** bundle existing single-purpose tools.
+- `gitleaks` or `detect-secrets` against the diff for credential leakage
+- `semgrep` with a small ruleset for suspicious patterns (new `eval()`, `subprocess`, base64 blobs over a size threshold, network calls in unexpected files)
+- `osv-scanner` against lockfile changes for known-vulnerable deps
+
+**Phase 3+ (post v1.0):** provenance tracking ("which agent action wrote which lines"), supply-chain risk scoring of newly-added deps.
+
+### Out of Scope for v1.0
+
+- Kernel-MAC labeling (SELinux/AppArmor) of cell-produced files
+- Host-side execve interception for cell-produced binaries
+- Real-time alerting on agent writes during cell life (post-hoc review at merge time is the gate)
+- Closing the deferred-execution path entirely in `--direct-mount` sessions — by design, that's the user's explicit trust grant
+
+### Rationale
+
+Closes the deferred-execution gap identified in the 2026-05-25 threat-modeling discussion. Three framings drive the design:
+
+1. **Improvement over baseline, not perfection.** The current standard for agent harness installs is root-mount-with-unrestricted-network. Quarantine mode is a meaningful improvement on that for the deferred-execution class without claiming to eliminate it.
+2. **Friction-aware by design.** Opt-out is first-class. Users who accept the deferred-execution risk in exchange for the lower-friction direct-mount workflow can take that trade with logged, explicit consent (D-15, D-117, D-106).
+3. **The diff-merge step overlaps with hygiene devs already practice.** `git diff` before commit is something thoughtful devs already do; phase 1 risk-class flagging focuses attention where it matters most. The gate doesn't add a ritual — it focuses one that already exists.
+
+### Cross-References
+
+- **D-135** (active) — architectural commitment
+- **D-174** (open) — direct-mount + push-credentials interaction
+- **D-175** (open) — cache mount trust-shared surface
+- **D-176** (open) — constrained DNS resolver (not v1.0-blocking; leaning "don't adopt" per friction analysis)
+- **D-117, D-15, D-106** — friction-vs-security baseline this goal explicitly honors
+- **D-09, D-11** — foundational containment principles; this goal extends them to post-session artifacts
+
+---
+
 ## Operational Philosophy
 
 The safe path must also be:
