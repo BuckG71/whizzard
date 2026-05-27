@@ -42,24 +42,6 @@ the harness-side `config.yaml` MCP-client entry pointing at
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
-### `--allow-ephemeral` is not propagated through adjust + wake
-A Hermes session launched with `--allow-ephemeral` (per F-C-04) sets
-the flag on the adapter instance for that one launch. The session_start
-event does NOT record the flag, and neither `adjust._apply_changes` nor
-`wake.reconstruct_launch_params` reads it. Consequence: any `oiq adjust`
-on an ephemeral Hermes session stops the original container and then
-fails preflight on the relaunch (Hermes refuses without
-`hermes_home` unless `allow_ephemeral=True`); same for `whiz wake`. The
-session is gone and the user has no recovery path.
-*Source:* catch-up review pass 2 (2026-05-24) findings A1 + A2 + C2 + C3.
-*Disposition:* defer — needs schema call (persist `allow_ephemeral` in
-the session_start event?) plus a UX call (does `whiz wake` get its own
-`--allow-ephemeral` flag, or does it rely on persisted state?). Cleanest
-fix is probably: log_session_start records `allow_ephemeral`;
-_apply_changes + reconstruct_launch_params read it; wake_cmd adds the
-flag so the user can opt-in at wake time even if the original launch
-didn't. Multi-file but mechanical once the schema decision lands.
-
 ### `whiz wake` mis-classifies non-zero-exit launches as wake-failed
 `cli/wake.py` treats any `_perform_launch` non-zero exit as
 `session_wake_failed` and leaves the original sid in the wakeable set

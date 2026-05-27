@@ -151,6 +151,7 @@ def wake_cmd(
             allow_broad_mount=new_params["allow_broad_mount"],
             harness=new_params["harness"],
             preset_name=new_params.get("preset_name"),
+            allow_ephemeral=bool(new_params.get("allow_ephemeral", False)),
         )
     except typer.Exit as e:
         relaunch_code = int(e.exit_code) if e.exit_code is not None else 0

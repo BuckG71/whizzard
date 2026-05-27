@@ -287,6 +287,24 @@ def test_reconstruct_preserves_allow_broad_mount_false():
     assert params["allow_broad_mount"] is False
 
 
+def test_reconstruct_carries_allow_ephemeral_when_persisted():
+    """A1+A2: a session_start with allow_ephemeral=True must propagate
+    forward, so waking an ephemeral Hermes session doesn't fail preflight."""
+    start = _start("abc")
+    start["allow_ephemeral"] = True
+    params = wake.reconstruct_launch_params(start)
+    assert params["allow_ephemeral"] is True
+
+
+def test_reconstruct_defaults_allow_ephemeral_to_false_when_absent():
+    """A1+A2: the field is absent on the common non-ephemeral path; wake
+    must default to False, not crash on lookup."""
+    start = _start("abc")
+    assert "allow_ephemeral" not in start
+    params = wake.reconstruct_launch_params(start)
+    assert params["allow_ephemeral"] is False
+
+
 # --- log_wake_event audit -------------------------------------------------
 
 

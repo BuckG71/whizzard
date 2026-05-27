@@ -288,6 +288,11 @@ def reconstruct_launch_params(
         "allow_broad_mount": original_used_override,
         "harness": _harness_from_argv(start_event.get("argv", []) or []) or "generic",
         "preset_name": start_event.get("preset"),
+        # A1+A2: carry the original --allow-ephemeral opt-in forward so
+        # waking an ephemeral Hermes session doesn't fail preflight. No
+        # wake-time override flag (per the resolution call): the persisted
+        # state is authoritative.
+        "allow_ephemeral": bool(start_event.get("allow_ephemeral", False)),
     }
 
 

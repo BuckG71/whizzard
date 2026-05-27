@@ -596,6 +596,12 @@ def _apply_changes(start_event: dict, changes: Changes) -> dict:
         "harness": _harness_from_argv(start_event.get("argv", []) or []) or "generic",
         "preset_name": start_event.get("preset"),
         "duration_override_seconds": duration_override,
+        # A1+A2: carry the original --allow-ephemeral opt-in through the
+        # relaunch so an adjust on an ephemeral Hermes session doesn't
+        # fail preflight. No adjust-time override — there is no use case
+        # for opting into ephemeral on a session that wasn't ephemeral
+        # originally; the persisted state is the source of truth.
+        "allow_ephemeral": bool(start_event.get("allow_ephemeral", False)),
     }
 
 
@@ -856,6 +862,7 @@ def _default_relauncher(new_params: dict) -> tuple[int, str | None]:
             harness=new_params["harness"],
             preset_name=new_params.get("preset_name"),
             duration_override_seconds=new_params.get("duration_override_seconds"),
+            allow_ephemeral=bool(new_params.get("allow_ephemeral", False)),
         )
     except typer.Exit as e:  # noqa: F841
         return (int(e.exit_code) if e.exit_code is not None else 0, None)

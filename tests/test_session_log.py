@@ -102,6 +102,45 @@ def test_log_session_start_records_overrides_used(tmp_path: Path):
     assert "broad folder" in record["overrides_used"][0]["reason"]
 
 
+def test_log_session_start_omits_allow_ephemeral_when_false(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-eph-0",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert "allow_ephemeral" not in record
+
+
+def test_log_session_start_records_allow_ephemeral_when_true(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-eph-1",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        allow_ephemeral=True,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert record["allow_ephemeral"] is True
+
+
 def test_log_session_start_handles_unlimited_duration(tmp_path: Path):
     target = tmp_path / "sessions.jsonl"
     log_session_start(

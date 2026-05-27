@@ -86,6 +86,7 @@ def log_session_start(
     start_time: float,
     overrides_used: list[dict[str, Any]] | None = None,
     preset_name: str | None = None,
+    allow_ephemeral: bool = False,
     path: Path | None = None,
 ) -> None:
     event: dict[str, Any] = {
@@ -108,6 +109,13 @@ def log_session_start(
     # `whiz r` (bare) to look up the most-recent preset.
     if preset_name is not None:
         event["preset"] = preset_name
+    # A1+A2: persist the --allow-ephemeral opt-in so adjust + wake can
+    # rehydrate it on relaunch. Without this, an adjust or wake of an
+    # ephemeral Hermes session fails preflight (Hermes refuses without
+    # hermes_home unless allow_ephemeral=True) and the session is lost.
+    # Only written when set; absent for the common non-ephemeral path.
+    if allow_ephemeral:
+        event["allow_ephemeral"] = True
     append_event(event, path=path)
 
 

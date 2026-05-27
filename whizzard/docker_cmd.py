@@ -369,6 +369,9 @@ def run_shell(
         start_time=wall_start_time,
         overrides_used=overrides_used or [],
         preset_name=preset_name,
+        # A1+A2: pull --allow-ephemeral off the adapter (set by
+        # _perform_launch via F-C-04) so adjust + wake can rehydrate it.
+        allow_ephemeral=bool(getattr(adapter, "allow_ephemeral", False)),
     )
 
     # Stage 15: launch via Popen so a duration / idle limit can interrupt

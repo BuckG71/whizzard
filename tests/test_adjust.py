@@ -545,6 +545,30 @@ def test_apply_changes_extend_adds_to_remaining(monkeypatch):
     assert params["duration_override_seconds"] == 4800
 
 
+def test_apply_changes_carries_allow_ephemeral_when_persisted(monkeypatch):
+    """A1+A2: an adjust on a session that was launched with --allow-ephemeral
+    must propagate the flag through to the relaunch so preflight passes."""
+    monkeypatch.setattr("whizzard.adjust._session_elapsed_seconds", lambda ev: 0.0)
+    start = {
+        "duration_limit_seconds": None,
+        "mounts": [],
+        "argv": [],
+        "allow_ephemeral": True,
+    }
+    params = _apply_changes(start, Changes())
+    assert params["allow_ephemeral"] is True
+
+
+def test_apply_changes_defaults_allow_ephemeral_false_when_absent(monkeypatch):
+    """A1+A2: the field is absent on common non-ephemeral starts; adjust
+    must default to False, not crash on lookup."""
+    monkeypatch.setattr("whizzard.adjust._session_elapsed_seconds", lambda ev: 0.0)
+    start = {"duration_limit_seconds": None, "mounts": [], "argv": []}
+    assert "allow_ephemeral" not in start
+    params = _apply_changes(start, Changes())
+    assert params["allow_ephemeral"] is False
+
+
 def test_apply_changes_unlimited_session_has_no_override():
     start = {"duration_limit_seconds": None, "mounts": [], "argv": []}
     params = _apply_changes(start, Changes(extend_seconds=1800))
