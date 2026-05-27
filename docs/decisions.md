@@ -2314,15 +2314,23 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 
 **Type:** scope
 
-**Door Type:** two-way (still open; the OSS-launch scope decision is intentionally deferred until MVP operational evidence informs it).
+**Tags:** oss-launch, sequencing
 
-**Decision:** The OSS-launch milestone scope (distinct from MVP) is unresolved; needs definition once MVP is operational.
+**Door Type:** one-way for the *commitment* (announcing publicly that v0.1.0 is the launch milestone sets a public roadmap expectation); two-way for the v1.0 *scope details*, which the post-launch user feedback is expected to reshape.
 
-**Source:** docs/control_surface.md (Open items #2)
+**Decision:** OSS launch ships as **v0.1.0**, scoped to MVP (Stages 1–20 of `docs/mvp_build_plan.md`) plus OSS-launch hygiene (D-173: account hardening, branch protection, workflow hardening, supply chain, `SECURITY.md`, PII history scrub). v1.0 is staked as a published post-launch milestone covering the ten v1.0 primary goals in `docs/post_mvp_spec.md`. The launch ships with a public `ROADMAP.md` (Stage 20 deliverable 9) that names the v1.0 primary goals with rough sequencing, and a README "Scope and limitations" section that honestly discloses gaps (e.g. deferred-execution as a known un-addressed class for v0.1.0, with `--strict-overlay` shipping in v1.0 per D-135).
 
-**Status:** open
+**Rationale:** v1.0 is ten primary goals, not just overlay (D-135). Shipping all of them gates the launch on multi-month additional scope and locks in design judgments made without users. Real-user feedback shapes v1.0 better than internal design conversations — the overlay default-direction question (D-135), multi-harness adapter shape, Discord control plane ergonomics, and preset catalog all benefit from "how do actual users work?" data before commitment. Versioning as v0.1.0 signals "pre-1.0; expect iteration" honestly. The differentiators MVP already ships — containment, one-way capability flow, opinionated profile/mount model, audit log, adapter contract — are substantive on their own; v1.0 is positioning improvement, not the minimum viable launch.
 
-**Notes (2026-05-14, repo-structure sub-question):**
+**Notes:**
+- D-131's open sub-question about extras-based packaging at launch (`whizzard[hermes]`) carries forward — current lean is Option 2 (monorepo + extras) at v0.1.0. Decision finalizes in Stage 19 (Packaging & Install).
+- Risk: without launch deadline pressure, v1.0 work slips. Mitigation = the public `ROADMAP.md` itself; public commitment substitutes for deadline pressure.
+
+**Source:** conversation 2026-05-27 (D-135 implementation-cost discussion surfaced the underlying question; resolved alongside the v0.1.0 framing).
+
+**Status:** active
+
+**Notes (2026-05-14, repo-structure sub-question — preserved for historical context):**
 
 One input toward eventual scope: how to structure the OSS repo(s) so that updates to one harness don't compromise other users' installs. Three options considered:
 
@@ -2945,7 +2953,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-131** — OSS-launch milestone scope
 - **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
 - **D-136** — NanoClaw upstream collaboration
