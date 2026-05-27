@@ -42,25 +42,6 @@ the harness-side `config.yaml` MCP-client entry pointing at
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
-### `mark_resolved` audit-log race — denial can vanish on cell-mirror write failure
-`mark_resolved` writes the authoritative resolution to the host-only
-store FIRST, then mirrors to the cell file, THEN emits the F-D-03
-`session_request_resolved` audit-log event for denied/error
-outcomes. If the cell-mirror write (`tmp.write_text` / `tmp.replace`)
-fails — disk-full, the cell removed its requests/ dir mid-flight,
-permission flake — the exception propagates and the `append_event`
-call never runs. The host store has the truth but `sessions.jsonl`
-shows no record of the denial.
-*Source:* catch-up review pass 2 finding B4.
-*Disposition:* defer — design call on write ordering. Cleanest fix:
-emit the audit-log event BEFORE the cell-mirror write, OR wrap the
-mirror write in try/except so the audit log still gets the entry on
-mirror failure. Either order has trade-offs (audit-before-mirror: log
-claims a resolution that may not be visible to the cell yet;
-mirror-before-audit-with-try: audit lands even if mirror fails but the
-operator's at-the-moment "denial confirmed" view diverges from
-durable state).
-
 ### D-157 user-config drift
 The maintainer's personal `~/.whizzard/config/profiles.json` predates several
 schema additions (`allow_broad_mount` default per D-157, now

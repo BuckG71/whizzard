@@ -462,6 +462,81 @@ def test_load_request_ignores_cell_supplied_applied_status(sessions_dir):
     assert req.status == "pending"
 
 
+# --- B4: mark_resolved audit-log race --------------------------------------
+
+
+def test_mark_resolved_writes_audit_log_even_when_mirror_fails(
+    sessions_dir, monkeypatch,
+):
+    """B4 regression: a cell-mirror write failure (disk-full, cell
+    removed its requests/ dir, permission flake) must NOT silence the
+    audit log. Previously the order was host → mirror → audit, so a
+    mirror exception propagated and the audit-log append never ran.
+    After the fix: host → audit → mirror (try/except), so the operator's
+    durable record of the decision is preserved regardless."""
+    path = _write_request(sessions_dir, request_id="mirror-fails")
+    req = _load(path)
+
+    # Redirect the audit log to a tmp file.
+    audit_log = sessions_dir.parent / "audit.jsonl"
+    from whizzard import session_log
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", audit_log)
+
+    # Simulate a mirror-write failure by making the parent directory
+    # read-only AFTER the resolutions store write succeeds. The
+    # resolutions store lives outside this directory, so it lands; the
+    # cell file rename inside this directory raises.
+    real_replace = reqs.Path.replace
+
+    def failing_replace(self, target):
+        if self == path.with_name(f".{path.name}.tmp"):
+            raise OSError("simulated mirror-write failure")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(reqs.Path, "replace", failing_replace)
+
+    # Must not raise — mark_resolved swallows the mirror failure now.
+    reqs.mark_resolved(req, "denied", "operator declined")
+
+    # Host-only resolution store landed:
+    res_path = reqs._resolutions_path(req.session_id, req.request_id)
+    assert res_path.exists()
+    res_data = json.loads(res_path.read_text())
+    assert res_data["status"] == "denied"
+
+    # Audit log entry landed despite the mirror failure (the bug being
+    # fixed):
+    assert audit_log.exists()
+    entry = json.loads(audit_log.read_text().splitlines()[0])
+    assert entry["event"] == "session_request_resolved"
+    assert entry["status"] == "denied"
+    assert entry["request_id"] == "mirror-fails"
+
+
+def test_mark_resolved_does_not_raise_on_mirror_failure(sessions_dir, monkeypatch):
+    """B4: callers should not see a misleading exception from a mirror
+    write failure — from the operator's perspective the resolution
+    completed (host store + audit log both landed)."""
+    path = _write_request(sessions_dir, request_id="silent-mirror-fail")
+    req = _load(path)
+
+    audit_log = sessions_dir.parent / "audit.jsonl"
+    from whizzard import session_log
+    monkeypatch.setattr(session_log, "SESSIONS_LOG", audit_log)
+
+    def failing_write_text(self, *args, **kwargs):
+        if self.name.startswith("."):  # the .tmp mirror file
+            raise OSError("disk full")
+        # Allow non-mirror writes through.
+        return original_write_text(self, *args, **kwargs)
+
+    original_write_text = reqs.Path.write_text
+    monkeypatch.setattr(reqs.Path, "write_text", failing_write_text)
+
+    # Must not raise.
+    reqs.mark_resolved(req, "error", "approve+apply failed")
+
+
 # --- B3: cell cannot hide a resolved request by mangling kind --------------
 
 

@@ -290,9 +290,18 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
     """
     resolved_at = _dt.datetime.now(_dt.UTC).isoformat()
 
-    # Authoritative record in the host-only store. F-E-02: snapshot the
-    # full request shape (kind / params / reason / created_at) here so
-    # `_load_request` can source those fields from this store for
+    # Write order (B4): host store → audit log → cell mirror (best-effort).
+    # The host store is the source of truth; the audit log is the
+    # operator's durable record of the decision; the cell mirror is a
+    # convenience for the agent's `whiz_check_request`. A failure on
+    # the mirror (disk-full, cell removed its requests/ dir, permission
+    # flake) must not silence the audit log — the operator's view of
+    # what happened cannot depend on whether the cell's filesystem was
+    # cooperative.
+
+    # 1. Authoritative record in the host-only store. F-E-02: snapshot
+    # the full request shape (kind / params / reason / created_at) here
+    # so `_load_request` can source those fields from this store for
     # resolved requests — the cell-writable file can no longer be used
     # to retroactively repaint a resolved request's apparent semantics.
     res_path = _resolutions_path(req.session_id, req.request_id)
@@ -309,32 +318,11 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
         "resolved_at": resolved_at,
     }, indent=2))
 
-    # Mirror to the cell-visible request file. The cell can stomp this
-    # afterward, but host listing reads from the authoritative store above.
-    try:
-        data = json.loads(req.path.read_text())
-        if not isinstance(data, dict):
-            raise ValueError
-    except (OSError, json.JSONDecodeError, ValueError):
-        # Backing file lost or corrupt — reconstruct from the in-memory record.
-        data = {
-            "request_id": req.request_id,
-            "session_id": req.session_id,
-            "kind": req.kind,
-            "params": req.params,
-            "reason": req.reason,
-            "created_at": req.created_at,
-        }
-    data["status"] = status
-    data["resolution_detail"] = detail
-    data["resolved_at"] = resolved_at
-    tmp = req.path.with_name(f".{req.path.name}.tmp")
-    tmp.write_text(json.dumps(data, indent=2))
-    tmp.replace(req.path)
-
-    # F-D-03: log denials/errors to the host audit log. Applied resolutions
-    # are already logged by adjust._log_adjustment; we skip them here so the
-    # log doesn't carry duplicate events for the same outcome.
+    # 2. F-D-03: log denials/errors to the host audit log. Applied
+    # resolutions are already logged by adjust._log_adjustment; skipping
+    # them here avoids duplicate events for the same outcome. Runs
+    # BEFORE the cell mirror (B4) so a mirror-write failure can never
+    # take the audit-log entry with it.
     if status in ("denied", "error"):
         append_event({
             "ts": resolved_at,
@@ -347,6 +335,43 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
             "resolution_detail": detail,
             "origin": "whizzard",
         })
+
+    # 3. Mirror to the cell-visible request file (best-effort). The
+    # cell's `whiz_check_request` MCP tool reads this file, so the
+    # mirror is how the agent sees the outcome via its own channel.
+    # B4: wrapped in try/except — if the mirror fails the host record
+    # and audit log are already durable, so the operator's record of
+    # the decision is preserved. The cell can re-poll until its file
+    # catches up, or the operator can manually re-mirror.
+    try:
+        try:
+            data = json.loads(req.path.read_text())
+            if not isinstance(data, dict):
+                raise ValueError
+        except (OSError, json.JSONDecodeError, ValueError):
+            # Backing file lost or corrupt — reconstruct from the in-memory record.
+            data = {
+                "request_id": req.request_id,
+                "session_id": req.session_id,
+                "kind": req.kind,
+                "params": req.params,
+                "reason": req.reason,
+                "created_at": req.created_at,
+            }
+        data["status"] = status
+        data["resolution_detail"] = detail
+        data["resolved_at"] = resolved_at
+        tmp = req.path.with_name(f".{req.path.name}.tmp")
+        tmp.write_text(json.dumps(data, indent=2))
+        tmp.replace(req.path)
+    except OSError:
+        # B4: a mirror write failure is recoverable — the host store
+        # has the resolution and the audit log has the operator's
+        # record. The cell file may show stale "pending" until the
+        # next mirror attempt; agent code can re-poll. Swallow the
+        # exception so callers don't see a misleading failure on what
+        # is, from the operator's perspective, a completed resolution.
+        pass
 
 
 # --- Request → Changes mapping + validation ---------------------------------
