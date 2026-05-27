@@ -42,19 +42,6 @@ the harness-side `config.yaml` MCP-client entry pointing at
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
-### `whiz wake` mis-classifies non-zero-exit launches as wake-failed
-`cli/wake.py` treats any `_perform_launch` non-zero exit as
-`session_wake_failed` and leaves the original sid in the wakeable set
-(`woken` only updates on `session_woken`). A user who hits Ctrl-C
-during the wake (container exits with 130) sees "Wake relaunch returned
-exit 130" and a bare `whiz wake` next time picks the SAME idle session
-again, ignoring the wake that just ran. Same shape applies to
-`adjust_session` per Angle A's note.
-*Source:* catch-up review pass 2 finding A3.
-*Disposition:* defer — design call: is SIGINT a clean exit (mark
-woken, don't re-pick) or a wake failure (preserve eligibility)? Both
-have user-defensible interpretations. Operator-decision territory.
-
 ### Cell can hide a resolved request from operator listing
 F-E-02 moved kind/params for resolved requests to the host-only store,
 but `_load_request`'s structural-validity gate (`kind not in

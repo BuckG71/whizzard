@@ -102,6 +102,141 @@ def test_log_session_start_records_overrides_used(tmp_path: Path):
     assert "broad folder" in record["overrides_used"][0]["reason"]
 
 
+def test_session_log_size_returns_zero_when_missing(tmp_path: Path):
+    """A3: session_log_size handles the no-log-yet case gracefully."""
+    from whizzard.session_log import session_log_size
+
+    missing = tmp_path / "no-log.jsonl"
+    assert session_log_size(missing) == 0
+
+
+def test_session_log_size_returns_byte_size(tmp_path: Path):
+    """A3: session_log_size returns the actual file size."""
+    from whizzard.session_log import session_log_size
+
+    target = tmp_path / "sessions.jsonl"
+    target.write_text("line one\nline two\n")
+    assert session_log_size(target) == len(b"line one\nline two\n")
+
+
+def test_find_session_start_after_offset_returns_none_when_no_log(tmp_path: Path):
+    """A3: helper handles the no-log case."""
+    from whizzard.session_log import find_session_start_after_offset
+
+    missing = tmp_path / "no-log.jsonl"
+    assert find_session_start_after_offset(0, missing) is None
+
+
+def test_find_session_start_after_offset_returns_none_when_no_match(tmp_path: Path):
+    """A3: helper returns None if no session_start event is after the offset.
+
+    This is the "preflight failed; no new container launched" case —
+    the audit-log ground truth that the wake / adjust should record
+    as a *_failed event instead of *_woken / adjusted."""
+    from whizzard.session_log import (
+        find_session_start_after_offset,
+        log_session_end,
+    )
+
+    target = tmp_path / "sessions.jsonl"
+    # Pre-existing event written; offset captured AFTER.
+    log_session_end(
+        session_id="prior",
+        container_id="c1",
+        exit_status=0,
+        end_time=1_700_000_000.0,
+        duration_seconds=10.0,
+        path=target,
+    )
+    offset = target.stat().st_size
+    # New session_end written, but NO session_start.
+    log_session_end(
+        session_id="prior2",
+        container_id="c2",
+        exit_status=0,
+        end_time=1_700_000_100.0,
+        duration_seconds=10.0,
+        path=target,
+    )
+    assert find_session_start_after_offset(offset, target) is None
+
+
+def test_find_session_start_after_offset_finds_new_session_id(tmp_path: Path):
+    """A3: helper returns the new sid when session_start was logged
+    after the offset. This is the "new container started" case — wake
+    succeeded (whatever exit code follows). Closes the longstanding TODO
+    of recovering the new sid for the audit chain."""
+    from whizzard.session_log import (
+        find_session_start_after_offset,
+        log_session_end,
+        log_session_start,
+    )
+
+    target = tmp_path / "sessions.jsonl"
+    log_session_end(
+        session_id="prior",
+        container_id="c1",
+        exit_status=0,
+        end_time=1_700_000_000.0,
+        duration_seconds=10.0,
+        path=target,
+    )
+    offset = target.stat().st_size
+    log_session_start(
+        session_id="new-sid-42",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_100.0,
+        path=target,
+    )
+    assert find_session_start_after_offset(offset, target) == "new-sid-42"
+
+
+def test_find_session_start_after_offset_picks_latest_when_multiple(tmp_path: Path):
+    """A3: if multiple session_start events appear after the offset,
+    return the latest (last written) — that's the one the wake / adjust
+    actually produced."""
+    from whizzard.session_log import (
+        find_session_start_after_offset,
+        log_session_start,
+    )
+
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="old",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1.0,
+        path=target,
+    )
+    log_session_start(
+        session_id="new",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=2.0,
+        path=target,
+    )
+    assert find_session_start_after_offset(0, target) == "new"
+
+
 def test_log_session_start_omits_allow_ephemeral_when_false(tmp_path: Path):
     target = tmp_path / "sessions.jsonl"
     log_session_start(

@@ -516,6 +516,97 @@ def test_adjust_session_early_exits_when_all_changes_are_noops(monkeypatch, tmp_
     assert relauncher_called is False
 
 
+# --- A3: signal-exit during relaunch -------------------------------------
+
+
+def test_adjust_session_signal_exit_after_session_start_is_classified_adjusted(
+    monkeypatch, tmp_path,
+):
+    """A3 regression: a Ctrl-C during the relaunched session (exit 130)
+    must classify as adjusted (the new container *did* start), not
+    adjust_failed. The (exit_code, new_sid) tuple is the audit-log
+    ground truth — sid present means session_start was logged, which
+    means the new container ran."""
+    import whizzard.adjust as adj
+
+    monkeypatch.setattr(
+        adj, "_docker_label_lookup",
+        lambda prefix: [("abcd1234", "cid")],
+    )
+    log = tmp_path / "sessions.jsonl"
+    log.write_text(json.dumps({
+        "event": "session_start",
+        "session_id": "abcd1234",
+        "profile": "default",
+        "mounts": [],
+        "duration_limit_seconds": None,
+        "image_tag": "whizzard-base:latest",
+        "argv": ["docker", "run", "--label", "whizzard.harness=generic"],
+        "allow_broad_mount": False,
+    }) + "\n")
+    monkeypatch.setattr(adj, "SESSIONS_LOG", log)
+    monkeypatch.setattr(adj, "_stop_container", lambda cid, grace_seconds=30: (0, ""))
+
+    # Tuple-returning fake: session_start was logged (sid present) but
+    # the new session exited 130 (user Ctrl-C). Adjust must classify
+    # this as adjusted, propagating 130 as the exit code.
+    def fake_relauncher(params: dict) -> tuple[int, str | None]:
+        return (130, "new-sid-after-sigint")
+
+    result = adjust_session(
+        "abcd",
+        Changes(add_mounts=(MountAddition("alpha", "rw"),)),
+        approver=lambda diff: True,
+        relauncher=fake_relauncher,
+    )
+    assert result.exit_code == 130
+    assert result.new_session_id == "new-sid-after-sigint"
+    assert "adjusted" in result.detail
+    assert "code 130" in result.detail
+
+
+def test_adjust_session_no_session_start_is_classified_adjust_failed(
+    monkeypatch, tmp_path,
+):
+    """A3: a tuple return with sid=None (audit-log lookup found no
+    session_start) means the relaunch never started a new container.
+    Original session is gone; classify as adjust_failed."""
+    import whizzard.adjust as adj
+
+    monkeypatch.setattr(
+        adj, "_docker_label_lookup",
+        lambda prefix: [("abcd1234", "cid")],
+    )
+    log = tmp_path / "sessions.jsonl"
+    log.write_text(json.dumps({
+        "event": "session_start",
+        "session_id": "abcd1234",
+        "profile": "default",
+        "mounts": [],
+        "duration_limit_seconds": None,
+        "image_tag": "whizzard-base:latest",
+        "argv": ["docker", "run", "--label", "whizzard.harness=generic"],
+        "allow_broad_mount": False,
+    }) + "\n")
+    monkeypatch.setattr(adj, "SESSIONS_LOG", log)
+    monkeypatch.setattr(adj, "_stop_container", lambda cid, grace_seconds=30: (0, ""))
+
+    # Tuple-returning fake: preflight or image fetch failed before the
+    # container started. No session_start logged → sid=None.
+    def fake_relauncher(params: dict) -> tuple[int, str | None]:
+        return (125, None)
+
+    result = adjust_session(
+        "abcd",
+        Changes(add_mounts=(MountAddition("alpha", "rw"),)),
+        approver=lambda diff: True,
+        relauncher=fake_relauncher,
+    )
+    assert result.exit_code == 125
+    assert result.new_session_id is None
+    assert "failed before the new container started" in result.detail
+
+
 # --- Stage 15: duration override on relaunch -------------------------------
 
 

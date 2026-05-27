@@ -20,6 +20,10 @@ import typer
 
 from whizzard.cli._launch import _perform_launch
 from whizzard.cli._shared import console
+from whizzard.session_log import (
+    find_session_start_after_offset,
+    session_log_size,
+)
 from whizzard.wake import (
     WakeStatus,
     check_mounts_exist,
@@ -131,16 +135,21 @@ def wake_cmd(
             console.print(f"  Dropped mounts: {', '.join(sorted(drop_names))}")
         return
 
-    # F-G-03: log the `session_woken` event AFTER a successful relaunch.
-    # Previously this fired before relaunch on the theory that "the link
-    # survives a failure," but the event also marks the sid as already
-    # woken — a failed wake would invisibly block the next bare
-    # `whiz wake` from picking the same idle session up again. Now: log
-    # `session_woken` only on success; log `session_wake_failed` (which
-    # is NOT in the woken-set predicate) on failure, so the user can
-    # retry. F-G-12: broad-except on the relaunch so an unexpected
-    # exception is recorded as wake-failed instead of leaking a
-    # traceback to the user with no audit trace.
+    # F-G-03 / A3: classify the relaunch by whether session_start was
+    # logged for the new session — the audit-log ground truth for "did
+    # the new container actually start?" Snapshot the log offset
+    # *before* the call, then look for any session_start appended after.
+    # If found → wake succeeded; the new sid is recovered and logged on
+    # the session_woken event (closes the longstanding TODO at
+    # adjust.py:843 for the wake side). Any exit code from
+    # `_perform_launch` then belongs to the new session itself — SIGINT
+    # (130), SIGTERM (143), or a crash inside the woken session — not
+    # to the wake.
+    #
+    # F-G-12: broad-except on the relaunch so an unexpected exception
+    # is recorded as wake-failed instead of leaking a traceback to the
+    # user with no audit trace.
+    offset_before = session_log_size()
     relaunch_code = 0
     try:
         _perform_launch(
@@ -170,23 +179,37 @@ def wake_cmd(
         )
         raise typer.Exit(code=125) from exc
 
-    if relaunch_code == 0:
+    new_sid = find_session_start_after_offset(offset_before)
+    dropped = sorted(drop_names) if drop_names else []
+    if new_sid is not None:
+        # The new container started (session_start was logged). The
+        # wake succeeded; the relaunch_code is the new session's own
+        # exit code (clean exit, user-interrupted, crash, etc.) and
+        # propagates to the caller verbatim.
         log_wake_event(
             superseded_session_id=candidate.session_id,
-            new_session_id=None,
-            dropped_mounts=sorted(drop_names) if drop_names else [],
+            new_session_id=new_sid,
+            dropped_mounts=dropped,
         )
-    else:
-        log_wake_event(
-            superseded_session_id=candidate.session_id,
-            new_session_id=None,
-            dropped_mounts=sorted(drop_names) if drop_names else [],
-            event="session_wake_failed",
-            detail=f"relaunch returned exit {relaunch_code}",
-        )
-        console.print(
-            f"[red]Wake relaunch returned exit {relaunch_code}.[/red] "
-            f"The idle session remains wakeable; retry once the "
-            f"underlying issue is fixed."
-        )
+        if relaunch_code != 0:
+            console.print(
+                f"[dim]Session ended with exit code {relaunch_code}.[/dim]"
+            )
         raise typer.Exit(code=relaunch_code)
+    # No session_start in the appended log range → relaunch never
+    # reached the container-launch point (preflight / image / daemon /
+    # credential error). The original session remains wakeable so the
+    # user can retry after fixing the issue.
+    log_wake_event(
+        superseded_session_id=candidate.session_id,
+        new_session_id=None,
+        dropped_mounts=dropped,
+        event="session_wake_failed",
+        detail=f"relaunch returned exit {relaunch_code}; no session_start logged",
+    )
+    console.print(
+        f"[red]Wake relaunch failed before the container started "
+        f"(exit {relaunch_code}).[/red] The idle session remains "
+        f"wakeable; retry once the underlying issue is fixed."
+    )
+    raise typer.Exit(code=relaunch_code or 125)

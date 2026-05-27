@@ -802,37 +802,65 @@ def adjust_session(
 
     # Relauncher API: int exit code OR (exit_code, new_session_id) tuple.
     # _default_relauncher returns the tuple; older callers (tests) may
-    # still pass int-returning fakes.
+    # still pass int-returning fakes — those don't have audit-log
+    # access, so the int exit code is the only available success signal.
     if isinstance(relaunch_result, tuple):
         relaunch_code, new_session_id = relaunch_result
+        # A3: tuple return uses audit-log ground truth — sid is recovered
+        # from the session_start event written during the relaunch. If
+        # present, the new container started; whatever exit code follows
+        # is the new session's own ending (Ctrl-C, crash, etc.).
+        adjusted = new_session_id is not None
     else:
         relaunch_code = int(relaunch_result)
         new_session_id = None
+        # Legacy int-returning fakes: no audit-log lookup available;
+        # trust the int exit code as the success signal.
+        adjusted = relaunch_code == 0
 
-    if relaunch_code == 0:
+    # A3: classify by whether the new container actually started, not
+    # by the relaunch exit code. A non-zero exit on a successfully-
+    # launched session (user Ctrl-C, crash inside the new session, etc.)
+    # is the new session's own ending, not an adjust failure. Without
+    # this distinction, Ctrl-C-during-adjust torches both the audit
+    # chain ("adjust_failed" recorded for a session that did launch)
+    # and the user's confidence in the operation.
+    if adjusted:
+        adjusted_detail = f"{warning_prefix}session adjusted"
+        if relaunch_code != 0:
+            adjusted_detail += (
+                f" (new session exited with code {relaunch_code})"
+            )
         _log_adjustment(
             session_id, effective_changes, new_session_id=new_session_id,
         )
         return AdjustResult(
-            exit_code=0,
-            detail=f"{warning_prefix}session adjusted",
+            exit_code=relaunch_code,
+            detail=adjusted_detail,
             new_session_id=new_session_id,
         )
 
-    # F-G-04/F-G-05: relaunch returned non-zero. Audit log records a
-    # distinct event so the chain shows "adjusted (succeeded)" vs
-    # "adjust_failed (session torched)" without ambiguity.
+    # F-G-04/F-G-05 + A3: no session_start logged in the post-relaunch
+    # window — the relaunch never reached the container-start point
+    # (preflight, image, daemon, credential, or pre-launch failure).
+    # Original session is already stopped; audit chain records the
+    # adjust_failed shape so consumers can see "stop succeeded but
+    # relaunch never got the new container running."
     _log_adjustment(
         session_id, effective_changes,
-        new_session_id=new_session_id,
+        new_session_id=None,
         event="session_adjust_failed",
-        detail=f"relauncher returned exit code {relaunch_code}",
+        detail=(
+            f"relauncher returned exit code {relaunch_code}; "
+            "no session_start logged"
+        ),
     )
     return AdjustResult(
         exit_code=relaunch_code,
         detail=(
-            f"{warning_prefix}stop succeeded but relaunch returned exit "
-            f"{relaunch_code}; the original session is gone."
+            f"{warning_prefix}stop succeeded but relaunch failed before "
+            f"the new container started (exit {relaunch_code}); the "
+            "original session is gone."
         ),
     )
 
@@ -841,17 +869,25 @@ def _default_relauncher(new_params: dict) -> tuple[int, str | None]:
     """Default relaunch path: invoke the CLI's `_perform_launch`.
 
     Returns ``(exit_code, new_session_id)``. ``_perform_launch`` raises
-    ``typer.Exit`` on every path; we translate to an int. The new
-    session_id is not yet wired through ``_perform_launch``'s return
-    path (it mints internally via `new_session_id()`), so this returns
-    ``None`` for the id — the audit-log breadcrumb still links the
-    superseded sid forward, just without the new sid filled in. Future
-    work: have ``_perform_launch`` return its sid for cleaner audit.
+    ``typer.Exit`` on every path; we translate to an int. The new sid
+    is recovered from the audit log: snapshot the log offset before
+    the relaunch, then look for any ``session_start`` event written
+    after — if present, the relaunch reached the container-start point
+    and the new sid is the audit-log ground truth (A3). This closes
+    the previous TODO ("have ``_perform_launch`` return its sid for
+    cleaner audit") without refactoring the five call sites that
+    expect the existing typer.Exit-raising contract.
     """
     import typer
 
     from whizzard.cli._launch import _perform_launch
+    from whizzard.session_log import (
+        find_session_start_after_offset,
+        session_log_size,
+    )
 
+    offset_before = session_log_size()
+    exit_code = 0
     try:
         _perform_launch(
             profile_name=new_params["profile_name"],
@@ -865,5 +901,5 @@ def _default_relauncher(new_params: dict) -> tuple[int, str | None]:
             allow_ephemeral=bool(new_params.get("allow_ephemeral", False)),
         )
     except typer.Exit as e:  # noqa: F841
-        return (int(e.exit_code) if e.exit_code is not None else 0, None)
-    return (0, None)
+        exit_code = int(e.exit_code) if e.exit_code is not None else 0
+    return (exit_code, find_session_start_after_offset(offset_before))

@@ -231,11 +231,29 @@ def test_wake_bare_picks_most_recent_idle_ended_and_relaunches(tmp_path, monkeyp
     ]
     _write_log(log, events)
     monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
     monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
     # Don't actually run docker; capture the relaunch call.
+    # A3: fake_launch must write session_start to the audit log so the
+    # post-relaunch audit-log check (find_session_start_after_offset)
+    # sees the new sid and classifies as a successful wake. The real
+    # _perform_launch does this inside run_shell.
     captured: dict = {}
     def fake_launch(**kw):
         captured.update(kw)
+        from whizzard.session_log import log_session_start
+        log_session_start(
+            session_id="new-from-fake-launch",
+            profile_name=kw["profile_name"],
+            network_enabled=False,
+            duration_limit_seconds=None,
+            allow_broad_mount=kw["allow_broad_mount"],
+            image_tag=kw["image"],
+            image_id=None,
+            mounts=[],
+            argv=[],
+            start_time=2_000_000_000.0,
+        )
     monkeypatch.setattr("whizzard.cli.wake._perform_launch", fake_launch)
     # Also stub log_wake_event so we don't write to the test log file
     # (cleaner test isolation).
@@ -249,6 +267,8 @@ def test_wake_bare_picks_most_recent_idle_ended_and_relaunches(tmp_path, monkeyp
     assert res.exit_code == 0, res.stdout
     # bbb is the most-recent idle-ended session
     assert woken_calls[0]["superseded_session_id"] == "bbb"
+    # A3: new sid is now recovered from the audit log
+    assert woken_calls[0]["new_session_id"] == "new-from-fake-launch"
     # relaunched with bbb's params
     assert captured["profile_name"] == "build"
     assert captured["mount_specs"] == ["m1:ro"]
@@ -275,11 +295,28 @@ def test_wake_preserves_allow_broad_mount(tmp_path, monkeypatch):
     events = [start, _end("aaa11111", reason="idle")]
     _write_log(log, events)
     monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
     monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
 
+    # A3: fake_launch must write session_start to mirror real
+    # _perform_launch behavior — the post-relaunch audit-log check
+    # uses it to classify success.
     captured: dict = {}
     def fake_launch(**kw):
         captured.update(kw)
+        from whizzard.session_log import log_session_start
+        log_session_start(
+            session_id="woken-broad-mount",
+            profile_name=kw["profile_name"],
+            network_enabled=False,
+            duration_limit_seconds=None,
+            allow_broad_mount=kw["allow_broad_mount"],
+            image_tag=kw["image"],
+            image_id=None,
+            mounts=[],
+            argv=[],
+            start_time=2_000_000_000.0,
+        )
     monkeypatch.setattr("whizzard.cli.wake._perform_launch", fake_launch)
     monkeypatch.setattr("whizzard.cli.wake.log_wake_event", lambda **kw: None)
 
@@ -306,7 +343,24 @@ def test_wake_logs_audit_event_on_relaunch(tmp_path, monkeypatch):
     monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
     monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
     monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
-    monkeypatch.setattr("whizzard.cli.wake._perform_launch", lambda **kw: None)
+    # A3: fake_launch writes session_start to mirror real
+    # _perform_launch — the audit-log check uses it to classify success
+    # and recover the new sid.
+    def fake_launch(**kw):
+        from whizzard.session_log import log_session_start
+        log_session_start(
+            session_id="audit-event-new-sid",
+            profile_name=kw["profile_name"],
+            network_enabled=False,
+            duration_limit_seconds=None,
+            allow_broad_mount=kw["allow_broad_mount"],
+            image_tag=kw["image"],
+            image_id=None,
+            mounts=[],
+            argv=[],
+            start_time=2_000_000_000.0,
+        )
+    monkeypatch.setattr("whizzard.cli.wake._perform_launch", fake_launch)
 
     runner = CliRunner()
     res = runner.invoke(app, ["wake", "aaa11111"])
@@ -318,3 +372,102 @@ def test_wake_logs_audit_event_on_relaunch(tmp_path, monkeypatch):
     woken = [e for e in parsed if e.get("event") == "session_woken"]
     assert len(woken) == 1
     assert woken[0]["superseded_session_id"] == "aaa11111"
+    # A3: new sid is now populated from the audit-log lookup
+    assert woken[0]["new_session_id"] == "audit-event-new-sid"
+
+
+def test_wake_signal_exit_is_classified_woken_not_failed(tmp_path, monkeypatch):
+    """A3 regression: a Ctrl-C during the woken session (exit 130)
+    must classify as session_woken (the new container *did* start;
+    the user interrupted it), not session_wake_failed (which would
+    leave the original sid wakeable and the next bare wake would
+    pick the same idle session again)."""
+    import typer
+
+    log = tmp_path / "sessions.jsonl"
+    real = tmp_path / "mount-dir"
+    real.mkdir()
+    events = [
+        _start("aaa11111", mounts=[
+            {"name": "m1", "mode": "rw", "host_path": str(real)},
+        ]),
+        _end("aaa11111", reason="idle"),
+    ]
+    _write_log(log, events)
+    monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
+
+    # Simulate: launch wrote session_start, then container exited 130
+    # (user Ctrl-C). The wake should still record session_woken because
+    # the new session *did* start.
+    def fake_launch_then_sigint(**kw):
+        from whizzard.session_log import log_session_start
+        log_session_start(
+            session_id="sigint-woken-sid",
+            profile_name=kw["profile_name"],
+            network_enabled=False,
+            duration_limit_seconds=None,
+            allow_broad_mount=kw["allow_broad_mount"],
+            image_tag=kw["image"],
+            image_id=None,
+            mounts=[],
+            argv=[],
+            start_time=2_000_000_000.0,
+        )
+        raise typer.Exit(code=130)
+    monkeypatch.setattr(
+        "whizzard.cli.wake._perform_launch", fake_launch_then_sigint
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(app, ["wake", "aaa11111"])
+    # Exit code propagates the session's own exit (130 = SIGINT)
+    assert res.exit_code == 130, res.stdout
+
+    parsed = [json.loads(line) for line in log.read_text().strip().splitlines()]
+    woken = [e for e in parsed if e.get("event") == "session_woken"]
+    wake_failed = [e for e in parsed if e.get("event") == "session_wake_failed"]
+    assert len(woken) == 1, "SIGINT after session_start should be classified as woken"
+    assert len(wake_failed) == 0, "must not record wake_failed when session_start was logged"
+    assert woken[0]["new_session_id"] == "sigint-woken-sid"
+
+
+def test_wake_no_session_start_classifies_as_wake_failed(tmp_path, monkeypatch):
+    """A3: an exit before session_start (e.g. preflight, daemon, image
+    not found) must remain session_wake_failed so the original sid
+    stays in the wakeable set for retry."""
+    import typer
+
+    log = tmp_path / "sessions.jsonl"
+    real = tmp_path / "mount-dir"
+    real.mkdir()
+    events = [
+        _start("aaa11111", mounts=[
+            {"name": "m1", "mode": "rw", "host_path": str(real)},
+        ]),
+        _end("aaa11111", reason="idle"),
+    ]
+    _write_log(log, events)
+    monkeypatch.setattr("whizzard.wake.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.session_log.SESSIONS_LOG", log)
+    monkeypatch.setattr("whizzard.wake._docker_label_lookup", lambda p: [])
+
+    # Simulate: launch exited with a preflight failure (exit 2). No
+    # session_start was written. The wake must record session_wake_failed.
+    def fake_launch_preflight_fail(**kw):
+        raise typer.Exit(code=2)
+    monkeypatch.setattr(
+        "whizzard.cli.wake._perform_launch", fake_launch_preflight_fail
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(app, ["wake", "aaa11111"])
+    assert res.exit_code == 2, res.stdout
+
+    parsed = [json.loads(line) for line in log.read_text().strip().splitlines()]
+    woken = [e for e in parsed if e.get("event") == "session_woken"]
+    wake_failed = [e for e in parsed if e.get("event") == "session_wake_failed"]
+    assert len(wake_failed) == 1
+    assert len(woken) == 0
+    assert wake_failed[0]["superseded_session_id"] == "aaa11111"

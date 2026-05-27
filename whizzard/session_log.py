@@ -43,6 +43,66 @@ def new_session_id() -> str:
     return str(uuid.uuid4())
 
 
+def session_log_size(path: Path | None = None) -> int:
+    """Current byte size of the audit log (zero if it doesn't exist).
+
+    A3: used by wake + adjust to snapshot the log offset *before* a
+    relaunch so they can detect whether `session_start` got written
+    during the call — the audit-log ground truth for "did the new
+    session actually launch?" (vs. "did setup fail before the
+    container ever started?").
+    """
+    target = path or SESSIONS_LOG
+    try:
+        return target.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def find_session_start_after_offset(
+    offset: int,
+    path: Path | None = None,
+) -> str | None:
+    """Return the session_id of the most-recent session_start event
+    appended to the audit log after byte `offset`, or None if none.
+
+    A3: wake + adjust call this after `_perform_launch` to find out
+    whether a new container actually started. If yes, the relaunch
+    succeeded (regardless of whatever exit code the new session
+    eventually returned — SIGINT, crash, whatever); the wake/adjust
+    event is logged with the recovered new sid. If no, the relaunch
+    never got off the ground and the original session remains
+    wakeable / adjustable.
+
+    Closes the longstanding TODO at adjust.py:843 ("have _perform_launch
+    return its sid for cleaner audit") without refactoring the five
+    call sites — the audit log is the source of truth either way.
+    """
+    target = path or SESSIONS_LOG
+    if not target.exists():
+        return None
+    try:
+        with target.open("rb") as fh:
+            fh.seek(offset)
+            tail = fh.read()
+    except OSError:
+        return None
+    text = tail.decode("utf-8", errors="replace")
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("event") == "session_start":
+            sid = event.get("session_id")
+            if isinstance(sid, str):
+                return sid
+    return None
+
+
 def _iso(ts: float | None = None) -> str:
     """ISO 8601 UTC timestamp with microsecond precision (F-D-08).
 
