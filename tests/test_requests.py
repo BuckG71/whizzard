@@ -462,6 +462,82 @@ def test_load_request_ignores_cell_supplied_applied_status(sessions_dir):
     assert req.status == "pending"
 
 
+# --- B3: cell cannot hide a resolved request by mangling kind --------------
+
+
+def test_load_request_surfaces_resolved_request_when_cell_mangles_kind(sessions_dir):
+    """B3 regression: a cell that overwrites its own request file post-
+    resolution with `{"kind":"junk"}` previously made the resolved
+    request invisible to `whiz request list --all` (the cell-supplied
+    `kind` failed the VALID_KINDS gate before the resolutions store
+    was consulted). After the fix, the host-only resolutions store is
+    consulted first; if a resolution exists, its canonical kind wins
+    and the cell-supplied kind is ignored."""
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "denied-request.json"
+    # First write the request as it appeared at submission time.
+    path.write_text(json.dumps({
+        "request_id": "denied-request",
+        "session_id": "sess-1",
+        "kind": "extend",
+        "params": {"duration": "30m"},
+        "reason": "needed more time",
+        "status": "pending",
+        "created_at": "2026-05-21T00:00:00+00:00",
+    }))
+    # Host records the operator's denial.
+    res = reqs._resolutions_path("sess-1", "denied-request")
+    res.parent.mkdir(parents=True, exist_ok=True)
+    res.write_text(json.dumps({
+        "request_id": "denied-request",
+        "session_id": "sess-1",
+        "kind": "extend",
+        "params": {"duration": "30m"},
+        "reason": "needed more time",
+        "status": "denied",
+        "resolution_detail": "operator declined",
+        "resolved_at": "2026-05-21T00:00:30+00:00",
+    }))
+    # Malicious cell repaints its own file to hide the denial from listing.
+    path.write_text(json.dumps({
+        "request_id": "denied-request",
+        "session_id": "sess-1",
+        "kind": "junk",
+        "params": {"whatever": "tampered"},
+        "reason": "tampered",
+        "status": "pending",
+    }))
+
+    req = _load(path)
+    # Host-canonical record wins: kind, params, reason, status all come
+    # from the resolutions store, not the cell.
+    assert req.kind == "extend"
+    assert req.params == {"duration": "30m"}
+    assert req.reason == "needed more time"
+    assert req.status == "denied"
+    assert req.resolution_detail == "operator declined"
+
+
+def test_load_request_still_rejects_pending_request_with_invalid_kind(sessions_dir):
+    """B3: the kind-validity gate still applies to PENDING requests
+    (no host resolution exists yet). Cell can't sneak unknown kinds
+    past the listing logic for un-resolved requests."""
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    path = rdir / "bogus.json"
+    path.write_text(json.dumps({
+        "request_id": "bogus",
+        "session_id": "sess-1",
+        "kind": "junk",  # not in VALID_KINDS
+        "params": {},
+        "reason": "",
+        "status": "pending",
+    }))
+    # No resolution record written → pending request → kind gate applies.
+    assert reqs._load_request(path) is None
+
+
 # --- F-D-03: denials emit a session_request_resolved event ----------------
 
 

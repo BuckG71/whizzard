@@ -42,22 +42,6 @@ the harness-side `config.yaml` MCP-client entry pointing at
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
-### Cell can hide a resolved request from operator listing
-F-E-02 moved kind/params for resolved requests to the host-only store,
-but `_load_request`'s structural-validity gate (`kind not in
-VALID_KINDS` → return None) still uses the cell-claimed kind, which
-runs BEFORE consulting the resolutions store. A malicious cell can
-overwrite its own request file after resolution with `{"kind":"junk"}`,
-making the resolved request invisible to `whiz request list --all` and
-similar listings — even though the host-only resolutions store has
-the truth.
-*Source:* catch-up review pass 2 finding B3.
-*Disposition:* defer — security architecture call. The fix is to
-consult the resolutions store FIRST (does this request_id have a host
-resolution?) and only fall through to cell-side validity checks if
-not. Real but narrow: cell can hide its own resolved requests; cannot
-forge state or affect other sessions.
-
 ### `mark_resolved` audit-log race — denial can vanish on cell-mirror write failure
 `mark_resolved` writes the authoritative resolution to the host-only
 store FIRST, then mirrors to the cell file, THEN emits the F-D-03

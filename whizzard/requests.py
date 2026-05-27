@@ -165,21 +165,27 @@ def _load_request(path: Path) -> AgentRequest | None:
     if not isinstance(data, dict):
         return None
     request_id = data.get("request_id")
-    kind = data.get("kind")
-    if not request_id or kind not in VALID_KINDS:
+    if not request_id:
         return None
+    kind = data.get("kind")
 
-    # F-D-05 / F-E-02: for resolved requests, the entire record (kind,
-    # params, reason, created_at, status, resolution_detail) comes from
-    # the host-only store. Cell can repaint its own file with new
-    # kind/params after resolution, but listing reads from the immutable
-    # host snapshot. For pending requests, cell-supplied fields are
-    # used — there's nothing to forge against yet.
+    # B3: consult the resolutions store BEFORE applying the cell-supplied
+    # `kind` validation. The host-only resolutions store has the
+    # canonical record (kind, params, reason, created_at) per F-E-02; a
+    # malicious cell that overwrites its own request file post-resolution
+    # with `{"kind":"junk"}` previously made the resolved request
+    # invisible to `whiz request list --all` because the kind check
+    # tripped before the resolutions lookup ever ran. Order swapped so
+    # the host record is authoritative for the validity gate too.
     resolution = _read_resolution_record(canonical_session_id, str(request_id))
+
     if resolution is not None:
+        # Resolved request: host store is the source of truth for every
+        # field. Cell-supplied `kind` is ignored entirely (the host
+        # record carries the canonical kind from submission time).
         cell_params = data.get("params")
         res_params = resolution.get("params")
-        canonical_kind = str(resolution.get("kind") or kind)
+        canonical_kind = str(resolution.get("kind") or "")
         canonical_params = res_params if isinstance(res_params, dict) else (
             cell_params if isinstance(cell_params, dict) else {}
         )
@@ -189,7 +195,16 @@ def _load_request(path: Path) -> AgentRequest | None:
         )
         canonical_status = str(resolution.get("status") or "pending")
         canonical_detail = str(resolution.get("resolution_detail") or "")
+        # B3 defense: if the host record itself has a bad kind (should
+        # never happen — host writes through validated paths only), bail
+        # rather than surface a record with an unknown kind.
+        if canonical_kind not in VALID_KINDS:
+            return None
     else:
+        # Pending request: cell-supplied fields are the only source.
+        # Apply the kind-validity gate here, where it makes sense.
+        if kind not in VALID_KINDS:
+            return None
         cell_params = data.get("params")
         canonical_kind = str(kind)
         canonical_params = cell_params if isinstance(cell_params, dict) else {}
