@@ -2810,6 +2810,35 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** open
 
+### D-176: Persistent agent memory — scope, audit, and review semantics
+
+**Type:** architecture
+
+**Tags:** post-mvp, safety
+
+**Door Type:** two-way (integration depth can move incrementally — shallow scoping today, deeper backend tomorrow — without breaking earlier commitments).
+
+**Decision:** Open — surfaced by Anthropic's 2026-05 Memory tool announcement. The Memory tool defines a client-side protocol where agents call `view` / `create` / `str_replace` / `insert` / `delete` / `rename` against a `/memories` directory that persists across sessions. Anthropic's documented multi-session-development pattern has each new session read `/memories` *first* as a bootstrap step — making memory contents the highest-leverage cross-session influence surface in the agent's environment. Three candidate Whizzard postures:
+
+(a) **Ignore.** Treat memory files as ordinary cell writes under D-135. If mounted, quarantined. If unmounted, lost at session end (defeating memory's purpose). Zero new code; zero Whizzard value-add.
+
+(b) **Shallow integration.** Introduce a profile-scoped memory mount type with predictable semantics — scoped per agent / profile / project, audited via the session log, retention policy at the mount layer, path-traversal protections enforced. Don't implement a Memory-tool-protocol backend; provide a known-good path harnesses can choose to use.
+
+(c) **Deep integration.** Whizzard-owned Memory-tool backend exposed via the in-cell MCP server (extends Stage 9, D-156, D-167). Whizzard implements all six memory commands against a backend that integrates with the overlay-quarantine pattern (D-135) — agent writes go to a cell-private upper layer; user reviews at session end before the persistent store is updated for future sessions.
+
+**Current lean:** (b) as the post-MVP target, with (c) as a stretch goal contingent on community demand. (a) is the do-nothing baseline; if (b) or (c) aren't adopted, (a) is the de-facto outcome. (b) is the low-cost middle ground that establishes memory as a first-class scoped artifact without committing to a backend implementation — consistent with D-15 / D-117 / D-106 friction-aware framing.
+
+**Threat-model notes:**
+
+- **Prompt-injection-via-memory** is a distinct attack class from D-135's deferred-execution. Poisoned memory contents activate at the *start* of every subsequent session before the user has prompted anything. Anthropic's documented multi-session pattern (initializer → subsequent → end-of-session update) makes this more acute — a maliciously-modified progress log or feature checklist redirects the entire framing of the next session.
+- **Path-traversal protections are MUST-haves** if Whizzard implements (c): validate `/memories` prefix, resolve to canonical form, reject `../` and URL-encoded variants (`%2e%2e%2f`), use `pathlib.Path.resolve()` + `relative_to()`. Anthropic's own docs call these out explicitly.
+- **Scoping is non-trivial:** per-agent? per-profile? per-project? per-session-chain? Cross-scope memory access is the natural escalation vector — an agent compromised under a low-trust scope writes to a shared memory namespace that higher-trust scopes also read.
+- **Persistence semantics differ from D-135.** For project files, the user's choice is "merge to host or discard." For memory, persistence *is* the point — the user's choice is "trust this content for the next session or discard." Same review-before-integrate spirit; different default outcome.
+
+**Source:** conversation 2026-05-26 (Anthropic Memory tool announcement and multi-session-development pattern documentation).
+
+**Status:** open
+
 ---
 
 ## Tag vocabulary
@@ -2889,3 +2918,4 @@ The following decisions are currently **open**. Any work that depends on them sh
 - **D-173** — Direct-mount + push-credentials interaction
 - **D-174** — Cache mount trust-shared surface
 - **D-175** — Constrained DNS resolver
+- **D-176** — Persistent agent memory — scope, audit, and review semantics
