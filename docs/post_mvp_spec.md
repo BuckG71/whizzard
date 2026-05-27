@@ -548,3 +548,7 @@ Likely surfaces:
 Out of scope for this entry: visualization (covered by "Session Replay / Audit Visualization" above) and any change to the on-disk log format.
 
 Surfaced by: 2026-05-23 review of the "Control Layer" article (chat-only; no decision entry — per D-24 / D-26 the article's LLM-call middleware sits on the harness side of the boundary, but its audit/analytics shape is borrowable).
+
+### Memory governance for agent harnesses
+
+See internal doc.
