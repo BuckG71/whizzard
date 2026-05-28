@@ -2743,7 +2743,7 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 **Rationale:** The lifecycle and audience are both disjoint: Rampart and Clarity stop where Whizzard begins, and their enterprise CI focus targets a different buyer than Whizzard's solo/OSS focus (D-17, D-18). Conflating the categories at launch either drags Whizzard into a comparison it isn't trying to win, or invites users expecting prompt-injection regression coverage from a tool that does kernel-enforced capability scoping. "Rampart tests behavior; Whizzard bounds capability" is the one-line framing that preserves the niche.
 
 **Notes:**
-- Companion artifact: `rampart_clarity_vs_whizzard.html` (committed fd571b4) — the side-by-side that drove this decision.
+- Companion artifact: `docs/positioning_rampart_clarity.html` (originally committed fd571b4 as `rampart_clarity_vs_whizzard.html` at repo root; moved to `docs/` and renamed on 2026-05-27) — the side-by-side that drove this decision.
 - Pattern-borrows queued separately (post-MVP candidates, not folded in here): Rampart-shaped pytest suite for Whizzard's own policy invariants; Clarity-style failure-analysis template for higher-risk decisions.
 - OSS-launch implication: README copy needs an explicit one-line differentiator vs. Rampart/Clarity. Concrete wording is downstream of D-131.
 - D-144 successor naming: avoid Rampart-adjacent connotations (perimeter, defense). Whizzard's differentiator is *capability scoping*.

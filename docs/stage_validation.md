@@ -1024,7 +1024,7 @@ whizzard harnesses init --force
 
 ## Stage 8 — Hermes Integration
 
-The Hermes adapter and supporting plumbing land in **eight milestones** — six code milestones (M1–M6) validated by the unit test suite, plus the live end-to-end check (M7 manual smoke, requires built image + Hermes install) and the packaging closeout (M8). All eight are shipped as of 2026-05-19. The original sequence (M1–M5 + M6 wrap_up + M7 packaging) was renumbered when the HERMES_HOME wiring gap was identified mid-build (see `STAGE_8_BUILD_PLAN.md`).
+The Hermes adapter and supporting plumbing land in **eight milestones** — six code milestones (M1–M6) validated by the unit test suite, plus the live end-to-end check (M7 manual smoke, requires built image + Hermes install) and the packaging closeout (M8). All eight are shipped as of 2026-05-19. The original sequence (M1–M5 + M6 wrap_up + M7 packaging) was renumbered when the HERMES_HOME wiring gap was identified mid-build (see `archive/STAGE_8_BUILD_PLAN.md`).
 
 ### Unit-test-validated milestones (run `make test` or `pytest tests/`)
 
@@ -1039,7 +1039,7 @@ The Hermes adapter and supporting plumbing land in **eight milestones** — six 
 
 ### Manual end-to-end smoke (M7, requires built image + Hermes)
 
-These are the steps that prove the adapter drives a real Hermes container. They are NOT part of the automated suite — run them manually once the prerequisites are in place. **M7 ran successfully 2026-05-19 against `whizzard-hermes:latest` (derived from `whizzard-base:latest` via `docker/Dockerfile.hermes`, Hermes 0.12.0 pip-installed from `github.com/NousResearch/hermes-agent`) with mistral-nemo via Mac Studio Ollama as the LLM provider.** See `STAGE_8_BUILD_PLAN.md` §M7 Runbook for the full procedure.
+These are the steps that prove the adapter drives a real Hermes container. They are NOT part of the automated suite — run them manually once the prerequisites are in place. **M7 ran successfully 2026-05-19 against `whizzard-hermes:latest` (derived from `whizzard-base:latest` via `docker/Dockerfile.hermes`, Hermes 0.12.0 pip-installed from `github.com/NousResearch/hermes-agent`) with mistral-nemo via Mac Studio Ollama as the LLM provider.** See `archive/STAGE_8_BUILD_PLAN.md` §M7 Runbook for the full procedure.
 
 Prerequisites:
 - `whizzard-base:latest` built (`docker build -t whizzard-base:latest docker/`).

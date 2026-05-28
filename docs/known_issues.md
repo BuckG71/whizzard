@@ -1,15 +1,14 @@
-# Whizzard — Known Issues, Deferred Work, Tech Debt, and Process Risks
+# Whizzard — Known Issues, Deferred Work, and Tech Debt
 
 A consolidated index of things known not to be ideal in the project right now.
-Most entries link out to a canonical source (decision, build plan stage,
-handoff section) — the value of this doc is the *single cross-cutting view*,
-not duplicate copy of those sources.
+Most entries link out to a canonical source (decision, build plan stage) — the
+value of this doc is the *single cross-cutting view*, not duplicate copy of
+those sources.
 
 Categories:
 - **Functional gaps** — works differently than designed/documented.
 - **Deferred features** — known-deliberate "not yet" items.
 - **Tech debt** — code/structure improvements desired.
-- **Process risks** — workflow-level risks.
 
 ---
 
@@ -38,7 +37,7 @@ heavier smoke needs the user's `~/.hermes-whizzard-cell`. Tracked as the
 The Hermes adapter sets the WHIZ_* env vars for the in-cell MCP server, but
 the harness-side `config.yaml` MCP-client entry pointing at
 `python /opt/whiz/mcp_server.py` is still a manual user step.
-*Source:* `docs/HANDOFF.md` "What's next".
+*Source:* maintainer working notes.
 *Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
 verb or fold into `oiq hermes profile create`.
 
@@ -47,7 +46,7 @@ The maintainer's personal `~/.whizzard/config/profiles.json` predates several
 schema additions (`allow_broad_mount` default per D-157, now
 `idle_timeout_seconds` per Stage 15). Bundled defaults updated; the personal
 file needs syncing for the changes to take effect locally.
-*Source:* `docs/HANDOFF.md` "What's next".
+*Source:* maintainer working notes.
 *Disposition:* a one-time `whiz profiles init --force` (or manual edit) when
 convenient.
 
@@ -59,29 +58,29 @@ convenient.
 Spec in the build plan; not implemented. `whiz resume <sid>` verb (+ bare
 `whiz r` resuming the most-recent idle-ended session). Restricted to
 `expiry_reason == idle` so duration caps can't be circumvented.
-*Source:* `docs/mvp_build_plan.md` §Stage 15.5.
+*Source:* roadmap §Stage 15.5.
 
 ### Stages 16–17 — Discord control plane
 Read-only (16) then write/approve (17). Both carry a D-148 design pause
 requirement before any coding.
-*Source:* `docs/mvp_build_plan.md` §Stages 16, 17.
+*Source:* roadmap §Stages 16, 17.
 
 ### Stage 18 — Image management
 Image build / digest pinning / audit. Autonomous-able when scheduled.
-*Source:* `docs/mvp_build_plan.md` §Stage 18.
+*Source:* roadmap §Stage 18.
 
 ### MVP+ Stage 19 — Packaging & Install
 Published Python distribution, execution-image distribution, clean-machine
 install verification, first-run config init. Pre-OSS-launch gate.
-*Source:* `docs/mvp_build_plan.md` §Stage 19.
+*Source:* roadmap §Stage 19.
 
 ### MVP+ Stage 20 — Security review & hardening audit
 Consolidated threat model (`docs/threat_model.md`, not yet written),
-adversarial red-team suite (partially started — see Process risks below),
+adversarial red-team suite (partially started),
 fail-closed audit closing D-133, injection / command-construction audit,
 credential-handling audit, supply-chain scan in CI, independent reviewer
 pass. Pre-OSS-launch gate.
-*Source:* `docs/mvp_build_plan.md` §Stage 20; closes D-131 / D-133.
+*Source:* roadmap §Stage 20; closes D-131 / D-133.
 
 ### Whizzard → Osmotiq rename
 Triggered after MVP operational, before Hermes migration. CLI becomes `oiq`;
@@ -95,10 +94,6 @@ Contributor-facing adapter Protocol artifact. Decided but not authored.
 ---
 
 ## Tech debt
-
-### `STAGE_8_BUILD_PLAN.md` is closed but not archived
-A stage-specific build plan that's fully shipped. Lives as cruft in `docs/`.
-*Disposition:* archive to `docs/archive/` when next touching that area.
 
 ### In-cell `snapshot.json` is writable by the agent
 The per-session `/run/whiz` mount is `:rw` because the cell legitimately writes
@@ -298,111 +293,12 @@ workflow today; needs hardening for CI.
 
 ---
 
-## Process risks
-
-### CHANGELOG format reframe pre-OSS-launch
-The current `CHANGELOG.md` is engineering-tone — long bullets with
-decision IDs (D-46 etc.), internal terminology, retrospective context.
-That's appropriate for the MVP-internal phase but not what an OSS
-audience expects from a CHANGELOG. Maintainer plan: at OSS launch,
-move the existing CHANGELOG.md to `docs/engineering_log.md` (still in
-the repo, signaled-as-internal via the filename) and start a fresh
-user-facing `CHANGELOG.md` with the typical one-line-per-entry shape.
-Stays a deferred decision until the OSS-launch milestone (D-131).
-*Source:* catch-up review 2026-05-23 conversation about CHANGELOG
-detail level matching the project's actual audience.
-*Disposition:* defer — execute alongside Stage 19/20 OSS-launch prep.
-
-### Pre-OSS-launch PII / history scrub — MUST run before going public
-Catch-up review of 2026-05-23 scanned tracked files for sensitive
-content. Concrete disclosures found in the live tree:
-
-1. **`docs/session_handoff.md:13`** — full PII paragraph: "**Bryan
-   Garrett** (`<redacted>`, `BuckG71` on GitHub)". Full
-   name + personal email + GitHub handle in one line.
-2. **`/Users/USER/...` paths in 15 places across 3 files** — mostly
-   in `docs/stage_validation.md` (12 occurrences, real `cd` commands
-   captured during testing), plus `docs/decisions.md` (2x) and
-   `docs/session_handoff.md` (1x). Reveals the maintainer's macOS
-   username + local directory layout.
-3. **Personal email `<redacted>`** in
-   `docs/session_handoff.md` — single occurrence; LICENSE +
-   `pyproject.toml` use the bare name (no email), which is fine.
-4. **`<host>.tailnet` hostname** in
-   `docs/home_lab_deployment.md:70-72` — reveals home-lab device
-   naming + that the maintainer runs a tailnet.
-
-**Why this needs explicit tracking:** editing the files only adds new
-state. Old commits remain reachable via `git log -p`, `git show
-<old-commit>`, or GitHub's file-history UI. The ONLY way to actually
-scrub history is `git filter-repo` (the modern replacement for
-`git filter-branch`), which rewrites every commit that touched the
-sensitive content and changes every commit SHA.
-
-**Window:** the repo is currently private — that's the only clean
-moment to rewrite history. Once public, forks/clones spread the old
-state, GitHub's reflog retains rewritten history for ~90 days, and
-search engines may have indexed file contents. Effectively impossible
-to fully recall post-launch.
-
-**Going forward (maintainer plan):** to prevent re-capture of the
-macOS username (`USER`) into future paths/output, move dev into a
-containerized environment (option (c) from the 2026-05-23 discussion).
-Mitigations (a) "manual sanitization before commit" and (b) "rename
-the macOS user" are inferior — (a) requires constant discipline,
-(b) is a large user-account migration.
-
-*Source:* catch-up review 2026-05-23; D-173 deliverable (f);
-`docs/mvp_build_plan.md` Stage 20 deliverable 8.
-*Disposition:* **OSS-launch blocker.** Schedule the `git filter-repo`
-pass + verification (`git log -p | grep` returns nothing for the four
-strings above) into Stage 20 (Security Review & Hardening Audit).
-Containerized-dev-environment setup is parallel work, separate from
-the history scrub itself.
-
-### Pace + no formal review-gate combination
-The maintainer + AI-pair workflow can land a large volume of code in one
-session without an explicit second-pair-of-eyes review. The integration
-smoke harness catches *wiring* bugs (the MCP `tool_*` registration bug is
-the proof); it does not catch *design-level* issues (API choice, abstraction
-quality, security trade-offs).
-*Mitigation:* the `work-wrap-up` skill surfaces `/ultrareview` as the
-recommended review checkpoint at `/wrap-up stage`. Build the habit of
-running it at meaningful milestones.
-
-### Lightweight post-mortem discipline (now codified)
-When a real bug surfaces (M7 nested-mount, MCP `tool_*` registration),
-lessons were discussed implicitly but not always codified. A
-durable-lesson rule is now captured as `feedback_postmortem_pattern` in
-project memory — when a real bug surfaces, capture *what got missed* and
-*what would have caught it earlier* as a small feedback memory or
-known-issues entry.
-
-### Documentation drift between architecture / build plan / decisions
-Architecture.md, the build plan, and decisions.md can drift relative to
-each other and the code (the 2026-05-22 cross-check found 8 issues, all
-docs-lagging-code). The full cross-check is a periodic-judgment-pass
-discipline; the `work-wrap-up` skill's quick alignment check catches the
-common cases per-boundary.
-*Mitigation:* lightweight check on every wrap-up; full cross-check every
-~10 stages or every ~6 weeks.
-
-### Solo code-review until OSS-launch
-Beyond the maintainer + Claude, no second pair of human eyes on changes.
-External reviewers are planned for Stage 20.
-*Mitigation:* `/ultrareview` (via the wrap-up skill) for now;
-external-reviewer pass at OSS-launch.
-
----
-
 ## How to keep this doc useful
 
 Add an entry when:
 - a bug-find surfaces a durable lesson (link the commit or decision).
 - a tech-debt item gets identified during real work (don't lose it in
   conversation).
-- a known process gap is identified (mitigation goes here, the *rule*
-  goes in a feedback memory).
 
 Remove an entry (move to `git log` history) when:
 - the underlying issue is resolved.

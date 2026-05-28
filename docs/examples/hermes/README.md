@@ -1,6 +1,6 @@
 # Hermes adapter setup — full recipe
 
-This is the production-grade Hermes adapter setup. It's what the OIQ MVP user (Bryan) runs for daily autonomous Hermes via Discord, and what M7 was validated against (2026-05-19, see [`../../STAGE_8_BUILD_PLAN.md`](../../STAGE_8_BUILD_PLAN.md) §M7 Runbook).
+This is the production-grade Hermes adapter setup, used for daily autonomous Hermes via Discord and validated end-to-end at the Stage 8 M7 milestone (2026-05-19; runbook archived at [`../../archive/STAGE_8_BUILD_PLAN.md`](../../archive/STAGE_8_BUILD_PLAN.md) §M7).
 
 Hermes is [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) — a self-improving agent harness with platform connectors (Discord, Slack, WhatsApp), cron scheduling, kanban, and a curator for ongoing skill maintenance.
 
