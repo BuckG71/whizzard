@@ -8,11 +8,11 @@ Whizzard is a local capability-governance layer for AI agents — wraps an agent
 
 ## Before you write code
 
-1. **Read [`docs/README.md`](docs/README.md)** — the doc nav index. Specifically the first-time orientation order: vision → architecture → mvp_build_plan → control_surface → post_mvp_spec.
+1. **Read [`docs/README.md`](docs/README.md)** — the doc nav index. Recommended first-time orientation order: vision → architecture → decisions.
 2. **Read [`docs/decisions.md`](docs/decisions.md)** for any decision IDs your change interacts with. Decisions are append-only (D-129); they capture the *why* behind the code. Use `python3 scripts/dx.py D-NN` to look up a specific decision or `python3 scripts/dx.py find <text>` to search.
-3. **Check [`docs/HANDOFF.md`](docs/HANDOFF.md)** for the latest session entry (newest at top of the log) and the Current State header — tells you what's in flight and what's just-shipped.
+3. **Check [`ROADMAP.md`](ROADMAP.md)** to see what's planned for v1.0 and where contribution would land well.
 4. **Skim [`docs/known_issues.md`](docs/known_issues.md)** if your change touches an area with deferred work, a known functional gap, or recorded tech debt — saves you rediscovering it.
-5. **For UX-shaped changes** (CLI surfaces, presets, slash commands, Discord control plane), expect a design conversation before code per D-148. Stages 11, 16, 17 have explicit design-pause requirements.
+5. **For UX-shaped changes** (CLI surfaces, presets, slash commands, Discord control plane), expect a design conversation before code per D-148.
 
 ## Local setup
 
@@ -64,8 +64,7 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR
 
 ## Decisions, handoffs, and process artifacts
 
-- **`docs/decisions.md`** is append-only. Add a new `D-NN` rather than editing prior entries. If your change supersedes a prior decision, update the prior entry's `Status:` to `superseded by D-NN` in the same commit. See [`~/.claude/skills/decision-capture/SKILL.md`](https://github.com/) (TBD repo link) for the schema and self-audit checklist; canonical tag vocabulary lives at the bottom of `docs/decisions.md`.
-- **`docs/HANDOFF.md`** is append-only per D-150. The `# Current State` block at the top of the file is mutable; the log section below is not.
+- **`docs/decisions.md`** is append-only. Add a new `D-NN` rather than editing prior entries. If your change supersedes a prior decision, update the prior entry's `Status:` to `superseded by D-NN` in the same commit. Canonical tag vocabulary lives at the bottom of `docs/decisions.md`.
 - **Memory entries** (collaboration patterns, user preferences) live in personal memory files outside the repo — not part of the contribution surface.
 
 ## Filing issues

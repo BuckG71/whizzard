@@ -1,6 +1,6 @@
 # Whizzard — Vision & Strategy
 
-This document is the single source of truth for what Whizzard is, who it serves, and where it is going. Tactical plans live in [mvp_build_plan.md](mvp_build_plan.md) and [post_mvp_spec.md](post_mvp_spec.md). System architecture lives in [architecture.md](architecture.md).
+This document is the single source of truth for what Whizzard is, who it serves, and where it is going. Public-facing v1.0 sequencing lives in [../ROADMAP.md](../ROADMAP.md). System architecture lives in [architecture.md](architecture.md).
 
 > Naming note: earlier drafts used a two-name framing ("Airlock" = containment, "Whizzard" = orchestrator). Project consolidated to single name "Whizzard" on 2026-05-09 (D-144). "Whizzard" is itself a working placeholder; long-term name TBD.
 
@@ -160,8 +160,6 @@ Focus:
 
 Goal: validate the capability-governance workflow.
 
-See [mvp_build_plan.md](mvp_build_plan.md) for details.
-
 ### Phase 2 — Post-MVP v1.0
 
 Focus:
@@ -173,7 +171,7 @@ Focus:
 - image management
 - presets and onboarding
 
-See [post_mvp_spec.md](post_mvp_spec.md) for details.
+See [../ROADMAP.md](../ROADMAP.md) for the public-facing v1.0 sequencing.
 
 ### Phase 3 — Breaker System
 

@@ -24,8 +24,9 @@ section, are tracked on this roadmap with mitigation paths.
 
 ## v1.0 — Primary goals
 
-Each goal below is a substantial deliverable. Their detailed specifications
-live in [`docs/post_mvp_spec.md`](docs/post_mvp_spec.md).
+Each goal below is a substantial deliverable. Sketches here are intentionally
+high-level; concrete designs land as decisions in
+[`docs/decisions.md`](docs/decisions.md) when each goal enters active work.
 
 ### 1. Per-agent capability scoping
 

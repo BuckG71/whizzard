@@ -2,7 +2,7 @@
 
 Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
 
-> **Status:** MVP under construction. Stages 1–10 + 12 SHIPPED (containment, mount registry, profiles, dry-run, session logging, safety, generic adapter, Hermes integration end-to-end including manual smoke validation, in-cell MCP read-only surface, presets + CLI ergonomics, cross-adapter credential utility). Outstanding: Stage 11 (harness integration examples in `docs/examples/`), Stages 13–18 (capability adjustment, mutating MCP tools, duration enforcement, Discord control plane, image management). See [docs/mvp_build_plan.md](docs/mvp_build_plan.md).
+> **Status:** MVP under construction. Stages 1–15.5 shipped. See [ROADMAP.md](ROADMAP.md) for what's next.
 
 > **Naming:** "Whizzard" is a working name. The project may rename before OSS launch. See [docs/decisions.md](docs/decisions.md) D-144.
 
@@ -174,7 +174,5 @@ whizzard/
 
 - [docs/vision_and_strategy.md](docs/vision_and_strategy.md) — what this is, who it's for, where it's going
 - [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract, control layering
-- [docs/mvp_build_plan.md](docs/mvp_build_plan.md) — tactical MVP plan (18 stages)
-- [docs/post_mvp_spec.md](docs/post_mvp_spec.md) — v1.0 features and backlog
-- [docs/control_surface.md](docs/control_surface.md) — full structural-control surface map
+- [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
 - [docs/decisions.md](docs/decisions.md) — append-only decisions index

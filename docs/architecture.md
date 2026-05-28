@@ -158,7 +158,7 @@ Dangerous-command interception, in-session approval flows, tool intent gating, `
 
 A first-class part of the design. MCP support is treated as a baseline harness capability, not a per-adapter feature flag. Exposes a small set of agent-facing tools that let the running agent introspect its own constraints, write structured audit entries, and request structural changes. Capability-change requests are mediated by Whizzard host-side and applied via stop+restart of the container.
 
-The cooperation layer never replaces the enforcement layer; it is a structured, agent-visible interface to the host-side capability brain. The full cooperation-layer tool surface is documented in [control_surface.md](control_surface.md).
+The cooperation layer never replaces the enforcement layer; it is a structured, agent-visible interface to the host-side capability brain.
 
 ### Composition rule
 
