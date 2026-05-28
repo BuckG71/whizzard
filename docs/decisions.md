@@ -1081,7 +1081,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/post_mvp_spec.md §6
 
-**Status:** active
+**Status:** superseded by D-178 (the `image check` half is pulled into Stage 18; per-profile auto-rebuild policy remains v1.0).
 
 ### D-76: Image management was Stage 9, becomes Stage 11
 
@@ -2881,6 +2881,22 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 **Source:** conversation 2026-05-26 (Anthropic Memory tool announcement and multi-session-development pattern documentation).
 
 **Status:** open
+
+### D-178: `whiz image check` pulled into Stage 18; threshold hardcoded at 30 days
+
+**Type:** architecture
+
+**Tags:** mvp, safety, sequencing
+
+**Door Type:** two-way (threshold and config surface are easy to revisit; per-profile auto-rebuild is a clean v1.0 addition).
+
+**Decision:** `whiz image check` ships in Stage 18 as part of MVP, with a hardcoded 30-day staleness threshold (override via `--threshold-days`). Exit codes: 0 fresh, 1 stale, 2 not-built, 125 daemon, 127 no-docker. Per-profile auto-rebuild policy stays deferred to v1.0 per the unchanged half of D-75.
+
+**Rationale:** Stage 18's whole point is preventing stale-image-undermines-containment failure modes; shipping `image check` alongside the digest pin closes the loop without waiting for v1.0. Hardcoded threshold honors D-101 (personal-use MVP threshold) — config-file plumbing is a v1.0 expansion, not a launch blocker.
+
+**Source:** conversation 2026-05-28 (Stage 18 design pass).
+
+**Status:** active
 
 ---
 

@@ -1,10 +1,14 @@
-# Whizzard execution cell — Stage 1 baseline image
+# Whizzard execution cell — baseline image.
 #
-# A minimal Debian-based image with a non-root user. Stage 9 will pin the
-# base image by digest. For Stage 1 we use a tag and the build will be
-# reproducible enough for verifying contained execution.
+# A minimal Debian-based image with a non-root user. Base image pinned by
+# digest per Stage 18 (D-74 / D-75-amended): a floating tag silently rolls
+# the containment surface, so the digest is the integrity anchor session
+# logs and `whiz image status` reference.
+#
+# To refresh the pin: `docker pull debian:12-slim` then read `RepoDigests`
+# via `docker image inspect`. Bump the SHA below and rebuild.
 
-FROM debian:12-slim
+FROM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
 
 # Install only what a generic shell session needs. Keep the image small.
 RUN apt-get update && \

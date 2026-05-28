@@ -65,10 +65,6 @@ Read-only (16) then write/approve (17). Both carry a D-148 design pause
 requirement before any coding.
 *Source:* roadmap §Stages 16, 17.
 
-### Stage 18 — Image management
-Image build / digest pinning / audit. Autonomous-able when scheduled.
-*Source:* roadmap §Stage 18.
-
 ### MVP+ Stage 19 — Packaging & Install
 Published Python distribution, execution-image distribution, clean-machine
 install verification, first-run config init. Pre-OSS-launch gate.
@@ -120,17 +116,6 @@ and `harnesses.json` is a Whizzard-owned surface (D-153) so no current path
 exercises this; the denylist is defensive hardening.
 *Source:* catch-up review 2026-05-23 finding F-B-07.
 *Disposition:* Stage 20 hardening audit.
-
-### `cidfile` orphans in STATE_DIR on a mid-launch crash
-`run_shell` clears `cidfile` before `Popen`, populates it during the run,
-and unlinks it at the end. If an unhandled exception fires between the
-Popen and the final unlink (KeyboardInterrupt during `monitor_and_enforce`,
-etc.), the cidfile is left behind. Each orphan is a few bytes; impact is
-slow STATE_DIR growth. Fix is a `try/finally` wrap of a sizable block;
-natural home is the Stage 18 (image management) work that already touches
-this area.
-*Source:* catch-up review 2026-05-23 finding F-B-09.
-*Disposition:* Stage 18.
 
 ### No test for agent-event merge ordering vs `session_end`
 `run_shell` documents in code that agent events MUST be merged into the
@@ -243,8 +228,9 @@ dir is small (KB) so urgency is low; the fix needs a retention policy
 (N days? referenced-by-audit-log? `whiz sessions clear`?) that's a design
 call, not a one-line change.
 *Source:* catch-up review 2026-05-23 finding F-D-09.
-*Disposition:* defer — natural home is Stage 18 (image management) or a
-dedicated retention-policy feature.
+*Disposition:* defer — natural home is a dedicated retention-policy feature
+(Stage 18 chose not to absorb it; the design call — N days? referenced-by-log?
+`whiz sessions clear`? — is bigger than image management cleanly carries).
 
 ### Hermes adapter `parent_dir` parameter has no input validation
 `create_hermes_profile` validates the `name` argument (no slashes, no

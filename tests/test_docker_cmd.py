@@ -475,3 +475,128 @@ def test_get_image_id_raises_when_daemon_unreachable(monkeypatch):
     import pytest
     with pytest.raises(dc.DockerDaemonError):
         dc.get_image_id("any:tag")
+
+
+# --- Stage 18: image_inspect helper ---
+
+
+def test_image_inspect_parses_id_and_created(monkeypatch):
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 0,
+            "stdout": "sha256:abc123\t2025-09-12T18:42:11.123456789Z\n",
+            "stderr": "",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    meta = dc.image_inspect("whizzard-base:latest")
+    assert meta is not None
+    assert meta.id == "sha256:abc123"
+    assert meta.created.year == 2025
+    assert meta.created.month == 9
+    assert meta.created.tzinfo is not None
+
+
+def test_image_inspect_returns_none_when_image_missing(monkeypatch):
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "Error: No such image: whizzard:latest",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    assert dc.image_inspect("whizzard:latest") is None
+
+
+def test_image_inspect_raises_on_daemon_down(monkeypatch):
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "Cannot connect to the Docker daemon",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    import pytest
+    with pytest.raises(dc.DockerDaemonError):
+        dc.image_inspect("whizzard:latest")
+
+
+def test_image_inspect_handles_iso_without_fractional_seconds(monkeypatch):
+    import whizzard.docker_cmd as dc
+
+    def fake_run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": 0,
+            "stdout": "sha256:xyz\t2025-01-02T03:04:05Z\n",
+            "stderr": "",
+        })()
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+    monkeypatch.setattr(dc.subprocess, "run", fake_run)
+    meta = dc.image_inspect("any:tag")
+    assert meta is not None
+    assert meta.created.hour == 3
+
+
+# --- F-B-09: cidfile is unlinked even when the session path raises ---
+
+
+def test_run_shell_cleans_cidfile_when_monitor_raises(tmp_path, monkeypatch):
+    """If monitor_and_enforce raises, the cidfile must still be removed."""
+    import pytest
+
+    from whizzard.adapters import GenericShellAdapter
+    from whizzard.config import Profile
+
+    dc, _log = _isolated_run_shell_env(tmp_path, monkeypatch)
+
+    def _boom(proc, **kwargs):
+        # Simulate a host-side cidfile that docker has already created.
+        cid_path = next((tmp_path / "state").glob("cid-*.txt"), None)
+        if cid_path is not None:
+            cid_path.write_text("ffeedd")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(dc, "monitor_and_enforce", _boom)
+
+    prof = Profile("safe", network_enabled=False, duration_seconds=60)
+    with pytest.raises(KeyboardInterrupt):
+        dc.run_shell(prof, adapter=GenericShellAdapter(), session_id="sess-fb09")
+
+    # The cidfile must be gone — no orphans in STATE_DIR.
+    orphans = list((tmp_path / "state").glob("cid-*.txt"))
+    assert orphans == [], f"orphaned cidfiles: {orphans}"
+
+
+def test_run_shell_cleans_cidfile_on_clean_exit(tmp_path, monkeypatch):
+    """Cleanup path on the happy path is unchanged by the try/finally wrap."""
+    from whizzard.adapters import GenericShellAdapter
+    from whizzard.config import Profile
+
+    dc, _log = _isolated_run_shell_env(tmp_path, monkeypatch)
+
+    def _ok(proc, **kwargs):
+        cid_path = next((tmp_path / "state").glob("cid-*.txt"), None)
+        if cid_path is not None:
+            cid_path.write_text("ddcc")
+        proc.returncode = 0
+        return "clean"
+
+    monkeypatch.setattr(dc, "monitor_and_enforce", _ok)
+
+    prof = Profile("safe", network_enabled=False, duration_seconds=60)
+    dc.run_shell(prof, adapter=GenericShellAdapter(), session_id="sess-clean")
+
+    orphans = list((tmp_path / "state").glob("cid-*.txt"))
+    assert orphans == []

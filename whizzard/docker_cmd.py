@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from whizzard.adapters import GenericShellAdapter, HarnessAdapter
@@ -126,6 +127,112 @@ def get_image_id(image: str = WHIZZARD_IMAGE) -> str | None:
             )
         return None
     return result.stdout.strip() or None
+
+
+@dataclass
+class ImageMeta:
+    """Snapshot of a local image's identity and provenance (Stage 18).
+
+    `id` is the sha256 docker assigns the built image.
+    `created` is the image's build timestamp (UTC datetime).
+    """
+
+    id: str
+    created: datetime
+
+
+def image_inspect(image: str = WHIZZARD_IMAGE) -> ImageMeta | None:
+    """Return id + creation timestamp for the image, or None if missing.
+
+    Uses a tab-separated `--format` to fetch both fields in one daemon call.
+    Stage 18 powers `whiz image status` and `whiz image check`.
+
+    Raises ``DockerDaemonError`` if the daemon is unreachable (matches
+    ``image_exists`` / ``get_image_id`` per F-B-01).
+    """
+    if not docker_available():
+        return None
+    result = subprocess.run(
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}\t{{.Created}}",
+            image,
+        ],
+        capture_output=True,
+        text=True,
+        env=_docker_env(),
+    )
+    if result.returncode != 0:
+        if _looks_like_daemon_error(result.stderr):
+            raise DockerDaemonError(
+                f"Docker daemon unreachable while inspecting image.\n"
+                f"docker said: {result.stderr.strip()}"
+            )
+        return None
+    line = result.stdout.strip()
+    if not line or "\t" not in line:
+        return None
+    raw_id, raw_created = line.split("\t", 1)
+    image_id = raw_id.strip()
+    if not image_id:
+        return None
+    # Docker emits RFC3339 with nanosecond precision (e.g.
+    # `2025-09-12T18:42:11.123456789Z`). fromisoformat in 3.11+ tolerates Z
+    # and fractional seconds up to microseconds; trim ns to us defensively.
+    iso = raw_created.strip()
+    if iso.endswith("Z"):
+        iso = iso[:-1] + "+00:00"
+    # Truncate sub-microsecond precision so fromisoformat doesn't reject it.
+    if "." in iso:
+        head, frac_and_tz = iso.split(".", 1)
+        # frac may be followed by +HH:MM; split on the first sign that isn't
+        # the leading digit run.
+        frac = frac_and_tz
+        tz = ""
+        for marker in ("+", "-"):
+            idx = frac_and_tz.find(marker)
+            if idx > 0:
+                frac = frac_and_tz[:idx]
+                tz = frac_and_tz[idx:]
+                break
+        frac = frac[:6]  # microseconds max
+        iso = f"{head}.{frac}{tz}"
+    try:
+        created = datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return ImageMeta(id=image_id, created=created)
+
+
+def parse_dockerfile_base_pin(dockerfile: Path) -> str | None:
+    """Return the sha256 digest pinned in the Dockerfile's first FROM, or None.
+
+    Recognizes the `FROM image:tag@sha256:HEX` form. Returns just the
+    digest string (e.g. `sha256:01...eb`). Returns None if the FROM line
+    is not digest-pinned or the file is unreadable.
+    """
+    try:
+        text = dockerfile.read_text()
+    except OSError:
+        return None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not line.upper().startswith("FROM "):
+            continue
+        # First FROM wins; multi-stage Dockerfiles aren't in scope.
+        ref = line.split(None, 1)[1].strip()
+        if "@" not in ref:
+            return None
+        digest = ref.split("@", 1)[1]
+        return digest if digest.startswith("sha256:") else None
+    return None
 
 
 def build_run_argv(
@@ -384,37 +491,44 @@ def run_shell(
             return cidfile.read_text().strip() or None
         return None
 
-    expiry_reason = monitor_and_enforce(
-        proc,
-        container_id_reader=_read_container_id,
-        adapter=adapter,
-        session_id=session_id,
-        start_time=mono_start_time,
-        duration_limit=duration_limit,
-        idle_limit=idle_limit,
-    )
+    # F-B-09 (Stage 18): the cidfile lives in STATE_DIR for the duration of
+    # the session and must be unlinked before we return — including paths
+    # that exit via exception (KeyboardInterrupt during monitor_and_enforce,
+    # docker-CLI errors raised by merge_agent_events / log_session_end, ...).
+    # Without a try/finally, those orphans accumulate as STATE_DIR debris.
+    try:
+        expiry_reason = monitor_and_enforce(
+            proc,
+            container_id_reader=_read_container_id,
+            adapter=adapter,
+            session_id=session_id,
+            start_time=mono_start_time,
+            duration_limit=duration_limit,
+            idle_limit=idle_limit,
+        )
 
-    end_time = time.time()
-    container_id = _read_container_id()
-    cidfile.unlink(missing_ok=True)
-    exit_code = proc.returncode if proc.returncode is not None else 0
+        end_time = time.time()
+        container_id = _read_container_id()
+        exit_code = proc.returncode if proc.returncode is not None else 0
 
-    # Stage 9 / D-156: merge any agent-emitted events from this session's
-    # event file into the main audit log BEFORE writing session_end. Agent
-    # events are timestamped during the session, so they belong between
-    # session_start and session_end in temporal order.
-    merge_agent_events(
-        session_id=session_id,
-        event_log_path=event_log_path(session_id),
-    )
+        # Stage 9 / D-156: merge any agent-emitted events from this session's
+        # event file into the main audit log BEFORE writing session_end.
+        # Agent events are timestamped during the session, so they belong
+        # between session_start and session_end in temporal order.
+        merge_agent_events(
+            session_id=session_id,
+            event_log_path=event_log_path(session_id),
+        )
 
-    log_session_end(
-        session_id=session_id,
-        container_id=container_id,
-        exit_status=exit_code,
-        end_time=end_time,
-        duration_seconds=end_time - wall_start_time,
-        expiry_reason=expiry_reason,
-    )
+        log_session_end(
+            session_id=session_id,
+            container_id=container_id,
+            exit_status=exit_code,
+            end_time=end_time,
+            duration_seconds=end_time - wall_start_time,
+            expiry_reason=expiry_reason,
+        )
 
-    return RunResult(container_id=container_id, exit_code=exit_code)
+        return RunResult(container_id=container_id, exit_code=exit_code)
+    finally:
+        cidfile.unlink(missing_ok=True)
