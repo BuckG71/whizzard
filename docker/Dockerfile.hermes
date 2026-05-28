@@ -42,7 +42,7 @@ RUN apt-get update && \
 # --break-system-packages: PEP 668 marker on Debian 12+; acceptable in a
 # single-purpose container where there is no other system Python user.
 # Pinned to Bryan's host HEAD at smoke time; bump as needed.
-ARG HERMES_REF=54e78cadb
+ARG HERMES_REF=e8b9369a9
 RUN pip install --no-cache-dir --break-system-packages \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
 
