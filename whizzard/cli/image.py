@@ -33,8 +33,10 @@ IMAGE_STALENESS_DAYS = 30
 
 
 def _dockerfile_path() -> Path:
-    """Path to the bundled Dockerfile relative to this package."""
-    return Path(__file__).resolve().parent.parent.parent / "docker" / "Dockerfile"
+    """Path to the bundled Dockerfile (Stage 19: package data location)."""
+    from importlib.resources import files
+
+    return Path(str(files("whizzard._dockerfiles") / "Dockerfile"))
 
 
 def _format_age(delta_days: float) -> str:
@@ -97,7 +99,7 @@ def image_build_cmd(
         str, typer.Option("--image", help="Image tag to build.")
     ] = WHIZZARD_IMAGE,
 ) -> None:
-    """Build the Whizzard execution image from docker/Dockerfile."""
+    """Build the Whizzard execution image from the bundled Dockerfile."""
     # F-H-02: preflight docker availability before invoking the subprocess.
     # Without this, `whiz image build` on a host with no docker CLI raises
     # a raw `FileNotFoundError` traceback at `subprocess.run` instead of

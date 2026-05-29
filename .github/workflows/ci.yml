@@ -84,7 +84,7 @@ jobs:
       - name: Install dev deps
         run: pip install -e ".[dev]"
       - name: Build whizzard-base image
-        run: docker build -t whizzard-base:latest -f docker/Dockerfile docker/
+        run: docker build -t whizzard-base:latest -f whizzard/_dockerfiles/Dockerfile whizzard/_dockerfiles/
       - name: Run integration tests
         run: pytest -m integration -v
 

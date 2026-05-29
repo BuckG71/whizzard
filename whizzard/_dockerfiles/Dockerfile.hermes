@@ -4,7 +4,7 @@
 # and installs Hermes via pip from the NousResearch/hermes-agent GitHub repo
 # at a pinned commit. Build with:
 #
-#   docker build -f docker/Dockerfile.hermes -t whizzard-hermes:latest .
+#   docker build -f whizzard/_dockerfiles/Dockerfile.hermes -t whizzard-hermes:latest .
 #
 # Used for Stage 8 M7 manual smoke. The pinned HERMES_REF matches the
 # version Bryan runs on the host so the smoke validates against the

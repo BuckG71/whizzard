@@ -55,12 +55,12 @@ def _require_docker() -> None:
 
 @pytest.fixture(scope="session")
 def whizzard_base_image() -> str:
-    """Ensure `whizzard-base:latest` exists; build it from docker/Dockerfile
-    if not. Returns the image tag for use in tests."""
+    """Ensure `whizzard-base:latest` exists; build it from the bundled
+    Dockerfile if not. Returns the image tag for use in tests."""
     if _image_present(WHIZZARD_BASE_IMAGE):
         return WHIZZARD_BASE_IMAGE
 
-    dockerfile = REPO_ROOT / "docker" / "Dockerfile"
+    dockerfile = REPO_ROOT / "whizzard" / "_dockerfiles" / "Dockerfile"
     if not dockerfile.exists():
         pytest.skip(f"Dockerfile not found at {dockerfile}", allow_module_level=True)
 
@@ -107,14 +107,14 @@ def ollama_reachable(whizzard_hermes_image: str) -> bool:
 
 @pytest.fixture(scope="session")
 def whizzard_hermes_image() -> str:
-    """Ensure `whizzard-hermes:latest` exists; build it from
-    `docker/Dockerfile.hermes` with the project root as context if not.
+    """Ensure `whizzard-hermes:latest` exists; build it from the bundled
+    `Dockerfile.hermes` with the project root as context if not.
     Used by Tranche B smokes that need the in-cell MCP deployment per D-167.
     """
     if _image_present(WHIZZARD_HERMES_IMAGE):
         return WHIZZARD_HERMES_IMAGE
 
-    dockerfile = REPO_ROOT / "docker" / "Dockerfile.hermes"
+    dockerfile = REPO_ROOT / "whizzard" / "_dockerfiles" / "Dockerfile.hermes"
     if not dockerfile.exists():
         pytest.skip(
             f"Dockerfile.hermes not found at {dockerfile}",

@@ -58,7 +58,8 @@ _DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
 _GATEWAY_LOCK_FILENAME = "gateway.lock"
 
 # In-cell HERMES_HOME path. Matches Hermes's own convention ($HOME/.hermes)
-# where $HOME is the cell user's home dir from docker/Dockerfile. Mounting
+# where $HOME is the cell user's home dir from whizzard/_dockerfiles/Dockerfile.
+# Mounting
 # the host hermes_home here lets in-cell Hermes find its profile under its
 # default lookup, no flag plumbing required.
 _IN_CELL_HERMES_HOME = "/home/whizzard/.hermes"

@@ -1,7 +1,8 @@
 """Stage 1 baseline image — real-Docker integration smoke.
 
-These exercise the actual `whizzard-base:latest` image (built via
-`docker/Dockerfile`) rather than mocking the docker invocation. They prove
+These exercise the actual `whizzard-base:latest` image (built via the
+bundled `whizzard/_dockerfiles/Dockerfile`) rather than mocking the docker
+invocation. They prove
 that the containment posture documented in the unit tests (`--cap-drop=ALL`,
 non-root `whizzard` user, read-only rootfs, tmpfs at /home/whizzard) holds
 when a container is actually launched.
@@ -57,7 +58,8 @@ def test_image_runs_and_exits_cleanly(whizzard_base_image: str) -> None:
 
 def test_container_runs_as_whizzard_user(whizzard_base_image: str) -> None:
     """The image's default user is `whizzard`, not root — enforced by the
-    `USER whizzard` line in docker/Dockerfile. This is the foundational
+    `USER whizzard` line in whizzard/_dockerfiles/Dockerfile. This is the
+    foundational
     safety posture: a containerized command running as root would have
     more capabilities than we want even with `--cap-drop=ALL`."""
     result = subprocess.run(
