@@ -16,16 +16,6 @@ Whizzard is a local capability-governance layer for AI agents. Code-level orient
 
 - **[reference/whizzard-architecture.html](reference/whizzard-architecture.html)** — self-contained architecture overview rendered for quick browsing.
 
-## Archive
-
-**[archive/](archive/)** holds finished research artifacts kept for reference but no longer part of the active reading order:
-
-- `hermes_research.md` — deep dive into the Hermes harness (informed the Hermes adapter design).
-- `nanoclaw_research.md` — security and containment analysis of NanoClaw.
-- `nanoclaw_internals.md` — companion to the above; covers NanoClaw's operator-side skill model and internals.
-
-These were the input material for several decisions; the conclusions live in `decisions.md`. Don't re-derive — read the decisions first and only dip into archive if you need the underlying evidence.
-
 ## Conventions
 
 - **Decisions are append-only and numbered.** When you make one, append it to `decisions.md` with the next sequential `D-NN`. Don't edit prior decisions in place — supersede with a new one and update the prior entry's `Status:` to `superseded by D-NN`.
