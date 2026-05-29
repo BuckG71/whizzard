@@ -12,6 +12,7 @@ at import time.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -348,3 +349,153 @@ def test_init_step_1b_clone_failure_does_not_abort_wizard(
     assert result.exit_code == 0
     assert "profile clone failed" in result.output
     assert "simulated clone failure" in result.output
+
+
+# ---------- step 2: profiles ----------
+
+
+def _stub_through_step_1b(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Path:
+    """Helper: skip steps 1 + 1b (force Branch B so no Hermes cloner runs)."""
+    _stub_step_1_to_succeed(monkeypatch)
+    fake_home = tmp_path / "fake-home-step2"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    return fake_home
+
+
+def test_init_step_2_yes_writes_all_five_default_profiles(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """In --yes mode, Step 2 takes option 1 (use all 5 defaults)."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    assert "wrote" in result.output and "profiles.json" in result.output
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.PROFILES_FILE.read_text())
+    names = set(payload["profiles"].keys())
+    assert names == {"default", "safe", "build", "power", "quarantine"}
+
+
+def test_init_step_2_minimal_writes_safe_and_default(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Choice 2 (minimal) writes only safe + default."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    user_input = "\n".join([
+        "",        # welcome Press Enter
+        "",        # step 1 Press Enter
+        "",        # step 1b (Branch B) Press Enter
+        "2",       # step 2: minimal subset
+        "2",       # step 3: no folders
+    ]) + "\n"
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.PROFILES_FILE.read_text())
+    names = set(payload["profiles"].keys())
+    assert names == {"safe", "default"}
+
+
+def test_init_step_3_yes_writes_empty_mount_registry(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """--yes mode skips the add-folder loop and writes an empty registry."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.MOUNTS_FILE.read_text())
+    assert payload["mounts"] == {}
+
+
+def test_init_step_3_interactive_adds_one_folder(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Interactive mode collects path/name/description/mode and saves."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    user_input = "\n".join([
+        "",                      # welcome Press Enter
+        "",                      # step 1 Press Enter
+        "",                      # step 1b (Branch B) Press Enter
+        "1",                     # step 2: all 5 defaults
+        "1",                     # step 3: yes, add a folder
+        "~/code/scratch",        # path
+        "scratch",               # name
+        "scratch projects",      # description
+        "2",                     # mode: read-write
+        "2",                     # add another? No
+    ]) + "\n"
+
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.MOUNTS_FILE.read_text())
+    assert "scratch" in payload["mounts"]
+    mount = payload["mounts"]["scratch"]
+    assert mount["host_path"] == "~/code/scratch"
+    assert mount["default_mode"] == "rw"
+    assert mount["description"] == "scratch projects"
+
+
+def test_init_step_2_custom_subflow_creates_one_profile(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Choice 3 (custom) walks the user through a single profile and saves."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    # Scripted user input: welcome-Enter, step1-Enter, step1b-Enter (Branch B),
+    # step2-choose-3, custom-profile sub-flow, then step 3 "no folders".
+    user_input = "\n".join([
+        "",          # welcome Press Enter
+        "",          # step 1 Press Enter
+        "",          # step 1b (Branch B) Press Enter
+        "3",         # step 2: define your own
+        "work",      # profile name
+        "1",         # internet: Yes
+        "2",         # time limit: Yes
+        "2",         # how many hours: 2
+        "2",         # idle limit: Yes
+        "30",        # idle minutes: 30
+        "my work",   # description
+        "1",         # save? Yes
+        "2",         # add another profile? No
+        "2",         # step 3: add a folder? No
+    ]) + "\n"
+
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.PROFILES_FILE.read_text())
+    assert "work" in payload["profiles"]
+    work = payload["profiles"]["work"]
+    assert work["network_enabled"] is True
+    assert work["duration_seconds"] == 7200  # 2 hours
+    assert work["idle_timeout_seconds"] == 1800  # 30 min
+    assert work["description"] == "my work"

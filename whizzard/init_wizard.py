@@ -303,6 +303,442 @@ def _default_hermes_cloner(name: str, source: Path) -> Path:
     return result.path
 
 
+def step_2_profiles(state: WizardState) -> None:
+    """Step 2 — set up profiles.
+
+    Three top-level options: use all 5 defaults, use minimal subset
+    (safe + default), or define-your-own (Option 3 sub-flow).
+    """
+    console.print()
+    console.print("[bold]Step 2 of 5 — Profiles[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "A profile is a named set of rules that controls what an agent "
+        "session can do. Every time you launch a session, you pick a "
+        "profile, and that profile decides:"
+    )
+    console.print()
+    console.print("  • whether the session can use the internet")
+    console.print("  • whether it has a time limit, and how long")
+    console.print("  • whether it stops automatically when idle")
+    console.print()
+    console.print(
+        "You can have many profiles for different situations — one strict, "
+        "one permissive, one for long tasks — and switch between them by "
+        "name."
+    )
+    console.print()
+    console.print("Whizzard ships with five sensible defaults:")
+    console.print()
+    console.print(
+        "  [bold]default[/bold]     internet on, no time limit, no idle limit\n"
+        "              [dim](the everyday baseline — productive, always-on)[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]safe[/bold]        internet off, 30 min limit, idle stop at 15 min\n"
+        "              [dim](running something you don't fully trust)[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]build[/bold]       internet on, 2 hour limit, idle stop at 30 min\n"
+        "              [dim](development work, long compiles)[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]power[/bold]       internet on, 1 hour limit, idle stop at 15 min\n"
+        "              [dim](broad access — shorter limit on purpose)[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]quarantine[/bold]  internet off, 30 min limit, idle stop at 15 min\n"
+        "              [dim](untrusted execution, read-only folders only)[/dim]"
+    )
+    console.print()
+
+    if state.non_interactive:
+        choice = 1
+    else:
+        console.print("[bold]How do you want to set up profiles?[/bold]")
+        choice = _prompt_numeric_choice(
+            "Profile setup",
+            options=[
+                "Use all five defaults [dim](recommended for first run)[/dim]",
+                "Use only \"safe\" and \"default\" [dim](minimal — add more later)[/dim]",
+                "Start empty and define your own [dim](advanced)[/dim]",
+            ],
+        )
+
+    if choice == 3:
+        names = _step_2_custom_profiles_subflow(state)
+    elif choice == 2:
+        # Minimal subset: safe + default.
+        names = _write_profiles_subset(["safe", "default"])
+    else:
+        names = _write_default_profiles()
+
+    state.profile_names = names
+    console.print()
+    console.print(
+        f"  [green]✓[/green] wrote {PROFILES_FILE} "
+        f"({len(names)} profile{'s' if len(names) != 1 else ''})"
+    )
+    console.print()
+    console.print(
+        "  [dim italic]For the curious: profiles are JSON; you can edit "
+        "the file directly or use `whiz profile --help` later to see the "
+        "commands for adding, listing, or removing profiles.[/dim italic]"
+    )
+
+
+def _write_profiles_subset(names: list[str]) -> list[str]:
+    """Write only the named subset of bundled profiles."""
+    all_defaults = default_profiles()
+    selected = {n: all_defaults[n] for n in names if n in all_defaults}
+    payload = {
+        "schema_version": 1,
+        "profiles": {
+            name: {
+                "network_enabled": p.network_enabled,
+                "duration_seconds": p.duration_seconds,
+                "idle_timeout_seconds": p.idle_timeout_seconds,
+                "allow_broad_mount": p.allow_broad_mount,
+                "description": p.description,
+            }
+            for name, p in selected.items()
+        },
+    }
+    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    return list(selected.keys())
+
+
+def _step_2_custom_profiles_subflow(state: WizardState) -> list[str]:
+    """Option 3 sub-flow: walk through creating one or more custom
+    profiles. Returns the names that were written.
+    """
+    console.print()
+    console.print("[bold]Step 2 of 5 — Profiles — custom setup[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "You chose to define your own profiles. Whizzard needs at least "
+        "one to launch anything, so we'll create your first one now. You "
+        "can add more later."
+    )
+    console.print()
+
+    created: dict[str, dict] = {}
+    first = True
+    while True:
+        if first:
+            console.print("[dim]──────── First profile ────────[/dim]")
+            first = False
+        else:
+            console.print("[dim]──────── Next profile ────────[/dim]")
+
+        # Name
+        console.print()
+        console.print("[bold]Pick a short name for this profile.[/bold]")
+        console.print(
+            "You'll type it to launch sessions with these rules, like "
+            "[green]whiz r <preset>[/green] later. Common names: \"work\", "
+            "\"scratch\", \"research\". Lowercase, no spaces."
+        )
+        console.print()
+        name = _prompt_text("  name").strip().lower().replace(" ", "")
+        if not name:
+            console.print(
+                "[yellow]name is required.[/yellow] Try again."
+            )
+            continue
+
+        # Internet
+        console.print()
+        console.print(
+            "[bold]Should sessions using this profile have internet access?[/bold]"
+        )
+        net_choice = _prompt_numeric_choice(
+            "Internet",
+            options=[
+                "Yes [dim](agent can fetch web pages, call APIs, install packages)[/dim]",
+                "No  [dim](fully offline — only what's in the sandbox is reachable)[/dim]",
+            ],
+        )
+        network_enabled = net_choice == 1
+
+        # Time limit
+        console.print()
+        console.print(
+            "[bold]Should sessions using this profile have a time limit?[/bold]"
+        )
+        console.print(
+            "A time limit auto-stops the session after the time runs out, "
+            "even if it's still doing useful work. Useful as a safety net; "
+            "not always wanted."
+        )
+        duration_choice = _prompt_numeric_choice(
+            "Time limit",
+            options=[
+                "No time limit [dim](sessions run until you stop them)[/dim]",
+                "Yes, set one",
+            ],
+        )
+        if duration_choice == 1:
+            duration_seconds: int | None = None
+        else:
+            console.print()
+            console.print(
+                "  [bold]How many hours?[/bold] Type a whole number — for "
+                "example, type [green]2[/green] for two hours or "
+                "[green]8[/green] for eight."
+            )
+            duration_seconds = _prompt_positive_int("  hours") * 3600
+
+        # Idle limit
+        console.print()
+        console.print(
+            "[bold]Should sessions stop automatically if idle?[/bold]"
+        )
+        console.print(
+            "\"Idle\" means no agent activity, no CPU work, no file changes. "
+            "Useful for sessions you might forget about."
+        )
+        idle_choice = _prompt_numeric_choice(
+            "Idle limit",
+            options=[
+                "No idle limit",
+                "Yes, set one",
+            ],
+        )
+        if idle_choice == 1:
+            idle_timeout_seconds: int | None = None
+        else:
+            console.print()
+            console.print(
+                "  [bold]How many minutes of idle before the session stops?[/bold]"
+            )
+            console.print(
+                "  Type a whole number — for example, [green]30[/green] for "
+                "half an hour, or [green]60[/green] for an hour."
+            )
+            idle_timeout_seconds = _prompt_positive_int("  minutes") * 60
+
+        # Description
+        console.print()
+        console.print(
+            "[bold]A short description (optional, used in `whiz status`):[/bold]"
+        )
+        description = _prompt_text("  description") or ""
+
+        # Review + confirm
+        console.print()
+        console.print("[dim]──────── Review ────────[/dim]")
+        console.print(f"  name:         {name}")
+        console.print(f"  internet:     {'on' if network_enabled else 'off'}")
+        console.print(
+            "  time limit:   "
+            + ("none" if duration_seconds is None else f"{duration_seconds // 3600} hours")
+        )
+        console.print(
+            "  idle limit:   "
+            + ("none" if idle_timeout_seconds is None else f"{idle_timeout_seconds // 60} minutes")
+        )
+        console.print(f"  description:  {description or '(none)'}")
+        console.print()
+
+        save_choice = _prompt_numeric_choice(
+            "Save this profile?",
+            options=["Yes, save and continue", "No, start over"],
+        )
+        if save_choice == 2:
+            console.print("[yellow]discarded.[/yellow] starting over.")
+            continue
+
+        created[name] = {
+            "network_enabled": network_enabled,
+            "duration_seconds": duration_seconds,
+            "idle_timeout_seconds": idle_timeout_seconds,
+            "allow_broad_mount": False,
+            "description": description,
+        }
+        console.print()
+        console.print(
+            f"  [green]✓[/green] profile \"{name}\" defined ({len(created)} "
+            f"total this session)"
+        )
+
+        # Another?
+        console.print()
+        another = _prompt_numeric_choice(
+            "Add another profile?",
+            options=["Yes", "No, continue to step 3"],
+        )
+        if another == 2:
+            break
+        console.print()
+
+    # Write what we collected.
+    payload = {"schema_version": 1, "profiles": created}
+    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    return list(created.keys())
+
+
+def step_3_mounts(state: WizardState) -> None:
+    """Step 3 — register host folders the agent is allowed to see.
+
+    Loop: ask "add a folder?" → collect path/name/description/mode →
+    confirm → ask "add another?" → repeat. Empty registry is fine
+    (Hermes uses HERMES_HOME for its own profile dir; user-registered
+    mounts are for project work).
+    """
+    console.print()
+    console.print("[bold]Step 3 of 5 — Mounts[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "This step is the heart of Whizzard's safety model. Pay attention "
+        "here."
+    )
+    console.print()
+    console.print(
+        "A \"mount\" tells Whizzard which folders on your computer the agent "
+        "is allowed to see. Once a session starts, the mount list is locked "
+        "for that session — no flag, no agent request, no edit you make can "
+        "change what's mounted. To change mounts, stop the session, edit "
+        "the list, then launch a new one. The list is the ceiling, not a "
+        "default."
+    )
+    console.print()
+    console.print("For each folder you list, you also pick what the agent can do with it:")
+    console.print()
+    console.print(
+        "  • [bold]read-only[/bold]   agent can look at the files but can't change them"
+    )
+    console.print(
+        "  • [bold]read-write[/bold]  agent can both look at and change the files"
+    )
+    console.print()
+    console.print(
+        "At session launch, you can restrict a folder further than its "
+        "registered mode (for example, mount a read-write folder as "
+        "read-only for that session), but you can never grant more access "
+        "than the mode listed here."
+    )
+    console.print()
+    console.print(
+        "The list starts empty. You'll typically add folders here for "
+        "projects you want an agent to work on."
+    )
+    console.print()
+
+    mounts: dict[str, dict] = {}
+
+    if state.non_interactive:
+        # Default: empty registry. User adds folders later with `whiz mount add`.
+        _write_mounts(mounts)
+        state.mount_count = 0
+        state.mount_names = []
+        console.print(
+            f"  [green]✓[/green] wrote {MOUNTS_FILE} (0 folders) — "
+            "[dim]non-interactive mode; add later with `whiz mount --help`[/dim]"
+        )
+        return
+
+    add_choice = _prompt_numeric_choice(
+        "Add a folder to the list now?",
+        options=["Yes", "No"],
+    )
+
+    while add_choice == 1:
+        console.print()
+        path_raw = _prompt_text("  Path on your computer")
+        if not path_raw:
+            console.print("[yellow]path required.[/yellow] try again.")
+            continue
+        # Keep path string as the user typed; mounts.py expands ~ at load.
+        name = _prompt_text(
+            "  Name (how you'll refer to it later)"
+        ).strip().lower().replace(" ", "-")
+        if not name:
+            console.print("[yellow]name required.[/yellow] try again.")
+            continue
+        if name in mounts:
+            console.print(
+                f"[yellow]\"{name}\" already added in this session — "
+                "pick a different name.[/yellow]"
+            )
+            continue
+        description = _prompt_text(
+            "  Description (optional — a note for your own reference)"
+        )
+        console.print()
+        console.print("  [bold]Read-only or read-write?[/bold]")
+        mode_choice = _prompt_numeric_choice(
+            "Mode",
+            options=[
+                "read-only   [dim](agent can look at the files but can't change them)[/dim]",
+                "read-write  [dim](agent can both look at and change the files)[/dim]",
+            ],
+        )
+        default_mode = "ro" if mode_choice == 1 else "rw"
+        mounts[name] = {
+            "host_path": path_raw,
+            "default_mode": default_mode,
+            "description": description,
+        }
+        # Render absolute path for the confirmation line if the user used ~.
+        resolved = Path(path_raw).expanduser()
+        console.print()
+        console.print(
+            f"  [green]✓[/green] added: {name} → {resolved} "
+            f"({'read-write' if default_mode == 'rw' else 'read-only'})"
+        )
+        console.print()
+        add_choice = _prompt_numeric_choice(
+            "Add another?",
+            options=["Yes", "No"],
+        )
+
+    _write_mounts(mounts)
+    state.mount_count = len(mounts)
+    state.mount_names = list(mounts.keys())
+    console.print()
+    console.print(
+        f"  [green]✓[/green] wrote {MOUNTS_FILE} "
+        f"({len(mounts)} folder{'s' if len(mounts) != 1 else ''})"
+    )
+    console.print()
+    console.print(
+        "  [dim italic]For the curious: you can add more folders later "
+        "with `whiz mount --help`, or edit the JSON file directly.[/dim italic]"
+    )
+
+
+def _write_mounts(mounts: dict[str, dict]) -> None:
+    """Write the mount registry JSON."""
+    payload = {"schema_version": 1, "mounts": mounts}
+    MOUNTS_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def _prompt_positive_int(label: str) -> int:
+    """Prompt for a positive integer, re-prompting until valid."""
+    while True:
+        raw = _prompt_text(label).strip()
+        try:
+            n = int(raw)
+        except ValueError:
+            console.print(
+                "[yellow]please enter a whole number greater than zero[/yellow]"
+            )
+            continue
+        if n > 0:
+            return n
+        console.print(
+            "[yellow]please enter a whole number greater than zero[/yellow]"
+        )
+
+
 def step_1b_hermes_profile(
     state: WizardState,
     cloner: Callable[[str, Path], Path] | None = None,
@@ -474,7 +910,9 @@ def run_wizard(
     step_welcome(state)
     step_1_image(state, build_runner=build_runner)
     step_1b_hermes_profile(state)
-    # Steps 2 through 5 + Done land in follow-up commits.
+    step_2_profiles(state)
+    step_3_mounts(state)
+    # Step 4, Step 5, Done land in the next commit.
 
     return state
 
