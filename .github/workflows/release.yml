@@ -68,12 +68,16 @@ jobs:
         # Belt-and-suspenders: confirm the package-data wiring actually
         # included Dockerfile + Dockerfile.hermes in both the sdist and
         # the wheel. Catches regressions where pyproject.toml drifts.
+        # Materializes the listings first to sidestep the pipefail +
+        # grep -q SIGPIPE failure mode.
         run: |
-          set -euxo pipefail
-          tar tzf dist/whizzard-*.tar.gz | grep -q "whizzard/_dockerfiles/Dockerfile$"
-          tar tzf dist/whizzard-*.tar.gz | grep -q "whizzard/_dockerfiles/Dockerfile.hermes$"
-          unzip -l dist/whizzard-*-py3-none-any.whl | grep -q "whizzard/_dockerfiles/Dockerfile"
-          unzip -l dist/whizzard-*-py3-none-any.whl | grep -q "whizzard/_dockerfiles/Dockerfile.hermes"
+          set -eux
+          tar tzf dist/whizzard-*.tar.gz > /tmp/sdist-list
+          unzip -l dist/whizzard-*-py3-none-any.whl > /tmp/wheel-list
+          grep -q "whizzard/_dockerfiles/Dockerfile$" /tmp/sdist-list
+          grep -q "whizzard/_dockerfiles/Dockerfile.hermes$" /tmp/sdist-list
+          grep -q "whizzard/_dockerfiles/Dockerfile" /tmp/wheel-list
+          grep -q "whizzard/_dockerfiles/Dockerfile.hermes" /tmp/wheel-list
       - name: Upload distribution as workflow artifact
         uses: actions/upload-artifact@v4
         with:
