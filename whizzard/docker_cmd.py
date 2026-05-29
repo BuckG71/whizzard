@@ -29,6 +29,7 @@ from whizzard.session_log import (
 from whizzard.snapshot import event_log_path, request_dir, session_dir
 
 WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
+WHIZZARD_HERMES_IMAGE = os.environ.get("WHIZZARD_HERMES_IMAGE", "whizzard-hermes:latest")
 CONTAINER_USER = "whizzard"  # non-root, defined in whizzard/_dockerfiles/Dockerfile
 
 
