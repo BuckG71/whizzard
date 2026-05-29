@@ -107,7 +107,7 @@ The actual delta from current state to the four-machine topology is small:
 7. **Migrate Hermes profile** from Mac Studio to MBP per the planned D-86 Migrate path — clone `~/.hermes-whizzard-sandbox` to the MBP via scp / git / rsync; update the harness config's `hermes_home`.
 8. **Configure Hermes** to point at local Ollama endpoints over Tailscale for the model calls that should route locally.
 9. **Wake-on-LAN setup** on the Gaming PC: enable WoL in BIOS + NIC settings; configure a small script that sends the magic packet when the agent on the MBP needs inference and the Gaming PC is asleep; auto-shutdown after N minutes idle.
-10. **Validate end-to-end**: start a Hermes session on the MBP, issue a Discord command, confirm Tailscale-routed inference works, confirm state persists across container restarts via the HERMES_HOME mount (M6 wiring).
+10. **Validate end-to-end**: start a Hermes session on the MBP, issue a Discord command, confirm Tailscale-routed inference works, confirm state persists across container restarts via the HERMES_HOME mount.
 
 Total estimate: one focused weekend.
 

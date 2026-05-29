@@ -4,7 +4,7 @@ OIQ ships a CLI; **the CLI is the harness-neutral integration surface**. Any age
 
 This directory holds **copy-paste integration recipes** showing how to wire OIQ into popular harnesses ergonomically. Each subdirectory is one harness; install the relevant files into your harness's config location and you get one-keystroke OIQ commands inside that harness.
 
-> **Design context:** the choice to ship integration as docs/examples rather than as core code was captured in [D-161](../decisions.md). Earlier proposals (host-side MCP server, canonical commands.yaml with per-harness emitters, locking Stage 11 to Claude-Code-specific slash commands) were all rejected — see D-161's Rationale for the full deliberation.
+> **Design context:** the choice to ship integration as docs/examples rather than as core code was captured in [D-161](../decisions.md). Earlier proposals (host-side MCP server, canonical commands.yaml with per-harness emitters, locking integration to Claude-Code-specific slash commands) were all rejected — see D-161's Rationale for the full deliberation.
 
 ## Production-grade examples (shipped)
 

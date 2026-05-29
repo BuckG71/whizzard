@@ -1,9 +1,9 @@
 # Whizzard — Known Issues, Deferred Work, and Tech Debt
 
 A consolidated index of things known not to be ideal in the project right now.
-Most entries link out to a canonical source (decision, build plan stage) — the
-value of this doc is the *single cross-cutting view*, not duplicate copy of
-those sources.
+Most entries link out to a canonical source (a decision in `docs/decisions.md`
+or an architecture invariant) — the value of this doc is the *single cross-cutting
+view*, not duplicate copy of those sources.
 
 Categories:
 - **Functional gaps** — works differently than designed/documented.
@@ -17,7 +17,7 @@ Categories:
 ## Functional gaps
 
 ### OneCLI integration is functionally inert
-The Stage 12 OneCLI credential utility (`fetch_secret`) calls
+The OneCLI credential utility (`fetch_secret`) calls
 `onecli secrets get`, which does not exist in the actual OneCLI CLI surface;
 every invocation falls through to the env-var fallback. The integration
 nominally exists but never does the OneCLI thing.
@@ -26,11 +26,11 @@ nominally exists but never does the OneCLI thing.
 direct integration and leave only env-var-fallback.
 
 ### Hermes full-chat smoke needs HERMES_HOME setup
-The Stage 8 integration smoke verifies the deployment + Ollama reachability +
+The Hermes integration smoke verifies the deployment + Ollama reachability +
 that `hermes -z` is wired, but does not drive a real chat against Ollama.
 `hermes -z PROMPT` requires a configured HERMES_HOME (`config.yaml` +
 Hermes-state files); the smoke doesn't currently provision one.
-*Source:* commit `aeaddb0` (Stage 8 smoke).
+*Source:* internal smoke notes.
 *Disposition:* either bundle a smoke-test HERMES_HOME or document that the
 heavier smoke needs the user's `~/.hermes-whizzard-sandbox`. Tracked as the
 "next-level Hermes-integration smoke."
@@ -40,13 +40,13 @@ The Hermes adapter sets the WHIZ_* env vars for the in-sandbox MCP server, but
 the harness-side `config.yaml` MCP-client entry pointing at
 `python /opt/whiz/mcp_server.py` is still a manual user step.
 *Source:* maintainer working notes.
-*Disposition:* Stage 9 follow-up — add an `oiq hermes profile sync-mcp`
-verb or fold into `oiq hermes profile create`.
+*Disposition:* add an `oiq hermes profile sync-mcp` verb or fold into
+`oiq hermes profile create`.
 
 ### D-157 user-config drift
 The maintainer's personal `~/.whizzard/config/profiles.json` predates several
 schema additions (`allow_broad_mount` default per D-157, now
-`idle_timeout_seconds` per Stage 15). Bundled defaults updated; the personal
+`idle_timeout_seconds` from the duration-enforcement work). Bundled defaults updated; the personal
 file needs syncing for the changes to take effect locally.
 *Source:* maintainer working notes.
 *Disposition:* a one-time `whiz profiles init --force` (or manual edit) when
@@ -56,29 +56,18 @@ convenient.
 
 ## Deferred features (planned, on the roadmap)
 
-### Stage 15.5 — Hot-restart of idle-ended sessions
-Spec in the build plan; not implemented. `whiz resume <sid>` verb (+ bare
-`whiz r` resuming the most-recent idle-ended session). Restricted to
-`expiry_reason == idle` so duration caps can't be circumvented.
-*Source:* roadmap §Stage 15.5.
+### Discord control plane (read-only, then write/approve)
+Two-phase work: a read-only Discord surface for approval visibility, then
+write/approve flow on top. Carries a D-148 design pause requirement before
+any coding.
+*Source:* roadmap (post-launch).
 
-### Stages 16–17 — Discord control plane
-Read-only (16) then write/approve (17). Both carry a D-148 design pause
-requirement before any coding.
-*Source:* roadmap §Stages 16, 17.
-
-### MVP+ Stage 19 — Packaging & Install
-Published Python distribution, execution-image distribution, clean-machine
-install verification, first-run config init. Pre-OSS-launch gate.
-*Source:* roadmap §Stage 19.
-
-### MVP+ Stage 20 — Security review & hardening audit
-Consolidated threat model (`docs/threat_model.md`, not yet written),
-adversarial red-team suite (partially started),
-fail-closed audit closing D-133, injection / command-construction audit,
-credential-handling audit, supply-chain scan in CI, independent reviewer
-pass. Pre-OSS-launch gate.
-*Source:* roadmap §Stage 20; closes D-131 / D-133.
+### Security review & hardening audit
+Adversarial red-team suite expansion, fail-closed audit closing D-133,
+injection / command-construction audit, credential-handling audit,
+supply-chain scan in CI, independent reviewer pass. Pre-OSS-launch gate.
+The consolidated threat model at `docs/threat_model.md` is the anchor.
+*Source:* closes D-131 / D-133.
 
 ### Whizzard → Osmotiq rename
 Triggered after MVP operational, before Hermes migration. CLI becomes `oiq`;
@@ -106,11 +95,11 @@ can overwrite it. The host-side audit log (mounted `:ro`) is still the source
 of truth — containment is intact — but the cooperation-layer "honest
 self-reflection" guarantee leaks: a compromised harness could lie to itself
 about its own permissions via `whiz_status`.
-*Source:* catch-up review 2026-05-23 finding F-B-05.
+*Source:* internal code review.
 *Fix shape:* split `/run/whiz` into a `:ro` snapshot mount and a `:rw`
 events/requests mount, OR expose the snapshot through the in-sandbox MCP server
 instead of as a file. Either is a D-156 amendment.
-*Disposition:* Stage 20 security review, or a decision-needed item earlier
+*Disposition:* security-review backlog, or a decision-needed item earlier
 if it bothers us.
 
 ### No env-name denylist on adapter-supplied `container_env`
@@ -121,8 +110,8 @@ values would land verbatim in the sandbox. Not a containment escape (the sandbox
 is the sandbox), but a footgun for misconfig. Adapter code is core-trusted (D-10)
 and `harnesses.json` is a Whizzard-owned surface (D-153) so no current path
 exercises this; the denylist is defensive hardening.
-*Source:* catch-up review 2026-05-23 finding F-B-07.
-*Disposition:* Stage 20 hardening audit.
+*Source:* internal code review.
+*Disposition:* security-review backlog.
 
 ### No test for agent-event merge ordering vs `session_end`
 `run_shell` documents in code that agent events MUST be merged into the
@@ -131,9 +120,9 @@ ordered. No unit test populates `event_log_path(session_id)` then asserts
 the merged events appear between `session_start` and `session_end`.
 Integration smokes would catch a real ordering bug, but fast unit coverage
 is missing.
-*Source:* catch-up review 2026-05-23 finding F-B-10.
-*Disposition:* Chunk D of the catch-up review (session lifecycle + audit) —
-that chunk's review already touches the audit-log assertion machinery.
+*Source:* internal code review.
+*Disposition:* track for the session-lifecycle / audit review pass —
+that area's review already touches the audit-log assertion machinery.
 
 ### CLI flag parsing accepts empty strings for `--harness` / `--profile` / `--mount`
 Typer does not validate string-typed options as non-empty by default.
@@ -144,7 +133,7 @@ technically clear but the empty-string case would be cheaper to
 reject earlier with a flag-specific message ("--harness requires a
 non-empty name"). Shell-quoting accidents (`--harness ""` in a script)
 surface as registry errors instead of arg-parsing errors.
-*Source:* catch-up review 2026-05-23 finding F-H-04.
+*Source:* internal code review.
 *Disposition:* defer — UX polish, not a correctness bug; cheap to
 add when next touching the CLI flag layer.
 
@@ -153,12 +142,12 @@ add when next touching the CLI flag layer.
 and parses every entry. No rotation, no head/tail bound. `whiz`
 (bare) and `whiz status` invoke it on every CLI launch. After months
 of daily use the file grows linearly and status will perceptibly
-stall. Parallel to F-E-05 (in-sandbox `whiz_audit_self` slurps the
+stall. Parallel to (internal review finding) (in-sandbox `whiz_audit_self` slurps the
 whole log too). Both want the same eventual fix: audit-log rotation
 + streaming reads with optional `since=<ts>`.
-*Source:* catch-up review 2026-05-23 finding F-H-06.
+*Source:* internal code review.
 *Disposition:* defer — quality improvement when audit-log rotation
-lands OR Stage 20 hardening pass.
+lands OR security-review backlog.
 
 ### Wake selection-rule doc and code use different phrasings
 D-169 describes the wake-eligibility rule as "most-recent session with
@@ -170,7 +159,7 @@ so this is purely a doc/code drift — no behavior change required.
 Cleanest fix: reconcile the D-169 text with the actual implementation
 (or, equivalently, add a code comment in `wake._build_index` pointing
 to the D-169 phrasing as an alternative invariant).
-*Source:* catch-up review 2026-05-23 finding F-G-13.
+*Source:* internal code review.
 *Disposition:* defer — doc reconciliation, no behavior change.
 
 ### Unlimited-profile enforcer can hang forever if `docker run` client wedges
@@ -182,9 +171,9 @@ the enforcer hangs the host indefinitely. With duration/idle now
 first-class capabilities, the unlimited-profile case is precisely the
 one that wants a watchdog the most. Fix is a periodic liveness probe
 on the unlimited path — bigger than a one-line patch, overlaps with
-the Stage 20 hardening pass.
-*Source:* catch-up review 2026-05-23 finding F-F-05.
-*Disposition:* defer — enforcement-watchdog design pass or Stage 20.
+the security-review backlog.
+*Source:* internal code review.
+*Disposition:* defer — enforcement-watchdog design pass or the security review.
 
 ### Sub-agent permission scoping — none today
 Whizzard's containment boundary is the docker container. Every process
@@ -196,7 +185,7 @@ for the MVP threshold (D-101: single trusted user); becomes a real
 defense-in-depth question for OSS launch when users may run third-party
 agent code. The path forward is sub-sandboxes via host request (one
 Whizzard sandbox per scoped sub-agent), which keeps D-9 and D-164 intact.
-*Source:* D-171 (open); catch-up review 2026-05-23 Chunk E discussion.
+*Source:* D-171 (open); internal code review Chunk E discussion.
 *Disposition:* defer to OSS-launch milestone planning (D-131).
 
 ### `whiz_audit_self` reads the entire host audit log per call
@@ -205,13 +194,13 @@ with `read_text().splitlines()`, then filters in Python. The log is
 append-only and accumulates entries across every session for the
 lifetime of the install — no rotation. An agent polling
 `whiz_audit_self` on a long-lived install pays O(total-log-bytes) RAM
-per call. The Chunk D F-D-04 fix applied streaming to
+per call. The Chunk D (internal review finding) fix applied streaming to
 `merge_agent_events` on the host side for the same reason; the
 sandbox-side read deserves the same treatment plus an optional
 `since=<ts>` argument so the agent can ask for incremental tail.
-*Source:* catch-up review 2026-05-23 finding F-E-05.
+*Source:* internal code review.
 *Disposition:* defer — quality improvement when audit-log rotation
-lands OR Stage 20 hardening pass; no current install long-lived enough
+lands OR security-review backlog; no current install long-lived enough
 for it to bite.
 
 ### Safety policy two-way intersection check applies only to deep hard-blocks
@@ -223,7 +212,7 @@ that would trigger two-way matching (`$HOME`, `/`) are already Tier-1a
 hard-blocked. Becomes relevant when Linux paths land — e.g., a deeper sync
 root like `/srv/cloud-sync/<user>/Dropbox` would not be caught if a user
 mounted `/srv/cloud-sync/<user>`.
-*Source:* catch-up review 2026-05-23 finding F-D-07.
+*Source:* internal code review.
 *Disposition:* defer — fix when adding the first Linux-specific path to
 `_BROAD_FOLDERS` or `_CLOUD_SYNC_ROOTS`.
 
@@ -234,10 +223,11 @@ removes them; long-running installs accumulate one dir per session. Each
 dir is small (KB) so urgency is low; the fix needs a retention policy
 (N days? referenced-by-audit-log? `whiz sessions clear`?) that's a design
 call, not a one-line change.
-*Source:* catch-up review 2026-05-23 finding F-D-09.
+*Source:* internal code review.
 *Disposition:* defer — natural home is a dedicated retention-policy feature
-(Stage 18 chose not to absorb it; the design call — N days? referenced-by-log?
-`whiz sessions clear`? — is bigger than image management cleanly carries).
+(the image-management work chose not to absorb it; the design call — N days?
+referenced-by-log? `whiz sessions clear`? — is bigger than image management
+cleanly carries).
 
 ### Hermes adapter `parent_dir` parameter has no input validation
 `create_hermes_profile` validates the `name` argument (no slashes, no
@@ -247,7 +237,7 @@ attack surface is zero; the gap only matters if a future `--profile-dir`
 CLI flag or programmatic caller wires user input through. Treat as a
 review requirement: any new caller that exposes `parent_dir` must
 validate it.
-*Source:* catch-up review 2026-05-23 finding F-C-06.
+*Source:* internal code review.
 *Disposition:* defer — defensive hardening with no current path; would
 add at the point a user-facing profile-dir option is introduced.
 
@@ -261,7 +251,7 @@ harness-config schema next gets a touch.
 ### Idle-detection signal set is fixed-coded
 `enforcement.py`'s hybrid-idle signals (CPU + net/block I/O + event-file +
 request-channel mtimes) and CPU threshold are hard-coded constants. For a
-v1.0 / Stage 20 pass, may want to make these configurable per-profile.
+v1.0 / the security review pass, may want to make these configurable per-profile.
 *Source:* D-166 / `whizzard/enforcement.py`.
 *Disposition:* defer to v1.0 / OSS-launch.
 
@@ -273,7 +263,7 @@ often calls them several times (completion, launch, snapshot writer). Not
 a correctness bug today, but the "this file is read once per session"
 mental model is wrong, and a malformed-after-launch config could raise
 mid-session in unexpected places.
-*Source:* catch-up review 2026-05-23 finding F-A-08.
+*Source:* internal code review.
 *Disposition:* defer to v1.0 / OSS-launch.
 
 ### Integration test fixture: image-staleness detection

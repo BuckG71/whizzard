@@ -1,6 +1,6 @@
 # Hermes adapter setup — full recipe
 
-This is the production-grade Hermes adapter setup, used for daily autonomous Hermes via Discord and validated end-to-end at the Stage 8 M7 milestone (2026-05-19; runbook archived at [`../../archive/STAGE_8_BUILD_PLAN.md`](../../archive/STAGE_8_BUILD_PLAN.md) §M7).
+This is the production-grade Hermes adapter setup, used for daily autonomous Hermes via Discord and validated end-to-end against a real Mac Studio Ollama backend on 2026-05-19.
 
 Hermes is [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) — a self-improving agent harness with platform connectors (Discord, Slack, WhatsApp), cron scheduling, kanban, and a curator for ongoing skill maintenance.
 
@@ -115,7 +115,7 @@ A subsequent `whiz r hermes-sandbox-smoke` launch sees the previous state and co
 
 ## Troubleshooting
 
-- **`Permission denied` writing under `/home/whizzard/.hermes` inside the sandbox** — M6's `uid_parity=True` should prevent this on macOS Docker Desktop and Linux. If you see it, file an issue with your `docker info` output and host UID/GID.
+- **`Permission denied` writing under `/home/whizzard/.hermes` inside the sandbox** — `uid_parity=True` should prevent this on macOS Docker Desktop and Linux. If you see it, file an issue with your `docker info` output and host UID/GID.
 - **Sandbox launches but Hermes errors with "no provider configured"** — `config.yaml` provider isn't matching a `providers:` block, or the `api_key` field is missing. Cross-check the YAML against [Step 4](#4-configure-the-sandboxes-llm-provider).
 - **`host.docker.internal` doesn't resolve** — only works on Docker Desktop (macOS / Windows). On native Linux, use the host's actual IP (`172.17.0.1` is the default Docker bridge gateway), or run Ollama in a sibling container.
 - **OneCLI not found / "fetch failed"** — OIQ's `fetch_secret` calls `onecli secrets get` which doesn't exist in current OneCLI; falls through to env-var fallback. Set the env var directly until the OneCLI integration is realigned. Tracked in D-162 Notes.

@@ -6,8 +6,7 @@ document, README scope-and-limitations, SECURITY.md disclosure
 policy) into one structured reference for reviewers, contributors,
 and adopters.
 
-Status: drafted as Stage 20 deliverable 1 (Security Review &
-Hardening Audit). See `docs/known_issues.md` for unresolved items.
+See `docs/known_issues.md` for unresolved items.
 
 **Terminology:** "sandbox" throughout this document refers to the
 hardened Docker container Whizzard launches each agent session
@@ -167,9 +166,9 @@ Debian image) ships malicious code that activates in the sandbox.
 
 **Risk posture:** partially mitigated:
 
-- Base image is digest-pinned (Stage 18 / D-74)
-- Python deps are minimal (3: typer, rich, mcp); will get
-  `pip-audit` in CI as part of Stage 20 deliverable 6
+- Base image is digest-pinned (D-74)
+- Python deps are minimal (3: typer, rich, mcp); `pip-audit` in CI
+  is on the security-review backlog
 - Hermes pinned to a specific upstream commit (Dockerfile.hermes)
 - PyPI Trusted Publishing for Whizzard's own releases (no API
   tokens stored as secrets)
@@ -194,7 +193,7 @@ prevent intentional self-foot-shooting.
 
 **Risk posture:** mitigated by safety policy (hard-blocked mount
 patterns including `/`, `$HOME`, `.ssh`, etc. per D-43), structured
-approval prompts (D-163 Stage 13 adjust), and audit-log visibility.
+approval prompts (D-163 mid-session adjust), and audit-log visibility.
 Some classes of operator error (deferred-execution via writable
 mount writes) are acknowledged residual risks.
 
@@ -224,10 +223,10 @@ that establishes it.
 |---|---|
 | OneCLI vault integration: credentials never enter the sandbox as plaintext env vars; sandbox-side HTTP traffic is mediated by an OneCLI proxy that injects credentials at the wire | D-91 / D-98 / D-134 |
 | Host env fallback path emits a warning visible in `active_capabilities()` so operators see when credentials originate from less-protected sources | D-89 / D-90 |
-| Hermes `auth.json` and per-instance runtime state are excluded from profile clones (D-80); Stage 8 / catch-up review F-C-01 closed bypass paths | D-80 / D-86 |
+| Hermes `auth.json` and per-instance runtime state are excluded from profile clones (D-80); known bypass paths closed in prior internal review | D-80 / D-86 |
 | Whizzard's own config directory (`~/.whizzard/config/`) is structurally unreachable from the sandbox — no symlink, no parent-mount, no traversal trick reaches it | D-12 (config write-protection invariant) |
 | Harness `secrets:` blocks must declare credential env var **names**, not values; plaintext values in `harnesses.json` are rejected at parse time | D-162 |
-| Audit log writes redact known credential fields; no captured argv or env block emits secret values | Stage 5 / D-72 |
+| Audit log writes redact known credential fields; no captured argv or env block emits secret values | D-72 |
 
 ### 4.3 Network destinations
 
@@ -250,15 +249,15 @@ unrestricted egress.
 |---|---|
 | Config write-protection invariant: agent-writable mounts cannot reach `~/.whizzard/config/` under any circumstances (validation layer, not policy layer) | D-12 |
 | One-way capability flow: mid-session changes can only **narrow** permissions; widening requires stop+restart with operator approval | D-9 / D-27 |
-| Mid-session adjust (`whiz adjust`) shows a structured diff before applying, with TTY approval for widening changes | D-163 / Stage 13 |
+| Mid-session adjust (`whiz adjust`) shows a structured diff before applying, with TTY approval for widening changes | D-163 |
 
 ### 4.5 Audit log
 
 | Defense | Reference |
 |---|---|
-| Audit log is append-only by Whizzard; the sandbox cannot reach the host-side `~/.whizzard/logs/sessions.jsonl` to rewrite past entries | Stage 5 / D-12 |
-| In-sandbox agent events are merged into the host audit log **before** the `session_end` event is written, so temporal ordering is preserved even if the sandbox crashes mid-merge | Stage 9 / F-B-10 |
-| Audit-log origin-forgery + cross-session request spoofing closed during the catch-up review (D-12 / D-9 alignment) | Catch-up review (2026-05-23) |
+| Audit log is append-only by Whizzard; the sandbox cannot reach the host-side `~/.whizzard/logs/sessions.jsonl` to rewrite past entries | D-12 |
+| In-sandbox agent events are merged into the host audit log **before** the `session_end` event is written, so temporal ordering is preserved even if the sandbox crashes mid-merge | (audit-log temporal ordering invariant) |
+| Audit-log origin-forgery + cross-session request spoofing closed during prior internal review (D-12 / D-9 alignment) | D-9 / D-12 |
 
 ### 4.6 Host Docker control plane
 
@@ -294,8 +293,8 @@ paths (D-43). The adjust flow shows the diff before applying
 
 **Residual:** the hard-block list is hard-coded, not configurable;
 new credential file patterns (a future password manager) would
-not be blocked until the list is updated. Tracked as Stage 20
-work.
+not be blocked until the list is updated. Tracked for the
+security-review backlog.
 
 ### 5.2 The in-sandbox MCP server
 
@@ -313,14 +312,13 @@ Mutation requests are gated by host-side approval (D-26).
 directories; host-side validation cross-references `session_id`
 against the active-session table; broad-mount / profile-change
 requests from the agent path are filtered before they reach the
-adjust pipeline (`AGENT_DENIED_CHANGES` per Stage 13). Cross-
-session request spoofing was closed during the catch-up review
-(2026-05-23).
+adjust pipeline (the `AGENT_DENIED_CHANGES` filter). Cross-
+session request spoofing was closed during prior internal review.
 
 **Residual:** the in-sandbox `snapshot.json` is writable by the sandbox
 under D-156; the host-side audit log remains the source of truth,
 but the sandbox's "honest self-reflection" surface is compromisable.
-Tracked in `known_issues.md` (Stage 20 disposition).
+Tracked in `known_issues.md`.
 
 ### 5.3 Container env / command construction
 
@@ -339,8 +337,8 @@ core-trusted (D-10). Argv is constructed by appending list elements,
 not shell interpolation — no shell injection path exists.
 
 **Residual:** no env-name denylist on adapter-supplied
-`container_env` (catch-up review F-B-07). Defensive hardening, no
-current attack path; Stage 20 audit will land it.
+`container_env`. Defensive hardening, no current attack path;
+queued for the security-review backlog.
 
 ### 5.4 Profile / preset / harness config files
 
@@ -364,28 +362,27 @@ themselves capabilities the safety layer rejects (D-43).
 `sessions.jsonl`. A large or malformed log line could degrade
 performance or cause a parse error mid-session.
 
-**Path the attack would take:** the agent (via Stage 9
-`whiz_emit_event`) writes a maliciously-large or malformed event
-intended to disrupt downstream readers.
+**Path the attack would take:** the agent uses the in-sandbox
+`whiz_emit_event` MCP tool to write a maliciously-large or
+malformed event intended to disrupt downstream readers.
 
 **Defenses:** the per-session event-file emission lives in a
 sandbox-writable area and is merged at session_end. Malformed entries
-are skipped, not crashed on (Stage 5 / Stage 9 hardening).
+are skipped, not crashed on.
 
 **Residual:** `whiz_audit_self` slurps the entire log on every
-call (catch-up review F-E-05); a long-lived install would see
-linear RAM growth. Tracked as deferred — same fix as the parallel
-F-H-06 (`whiz status` reads entire log) — audit-log rotation +
-streaming reads. Pre-OSS-launch impact is bounded because installs
-won't be old enough to feel it.
+call; a long-lived install would see linear RAM growth. Tracked as
+deferred — same fix as the parallel `whiz status` reads-entire-log
+issue: audit-log rotation + streaming reads. Pre-OSS-launch impact
+is bounded because installs won't be old enough to feel it.
 
 ### 5.6 Supply chain — Python deps
 
 **Surface:** Whizzard depends on `typer`, `rich`, `mcp`. A
 compromised upstream could land malicious code.
 
-**Defenses:** declared in §3.4. `pip-audit` to be wired into CI as
-Stage 20 deliverable 6.
+**Defenses:** declared in §3.4. `pip-audit` is queued on the
+security-review backlog.
 
 **Residual:** until `pip-audit` ships in CI, supply-chain regressions
 are detected only by reading dependency release notes.
@@ -397,9 +394,8 @@ are detected only by reading dependency release notes.
 Hermes from a pinned GitHub commit.
 
 **Defenses:** digest pinning (D-74); `whiz image check` warns on
-stale images (D-178 / Stage 18). Hermes upstream commit is
-manually bumped against Bryan's host HEAD (this conversation,
-2026-05-28).
+stale images (D-178). Hermes upstream commit is manually bumped
+against a maintainer-controlled reference.
 
 **Residual:** there is no automated upstream-change-detection for
 Hermes; a bump that introduces a regression requires manual
@@ -465,13 +461,11 @@ containment, not intent analysis.
 publishes a malicious release.
 
 **Mitigation roadmap:**
-- PyPI Trusted Publishing avoids stored API tokens (Stage 19 / M4)
-- Branch protection on `main` is a launch-readiness BLOCKER; will
-  enforce signed-commits + PR-review-required before public OSS
-  launch (per `launch_readiness.md`)
-- `pip-audit` in CI lands as Stage 20 deliverable 6
-- Sigstore signature attachment is a fast-follow per
-  `launch_readiness.md`
+- PyPI Trusted Publishing avoids stored API tokens (shipped)
+- Branch protection on `main` will enforce signed-commits +
+  PR-review-required before public OSS launch
+- `pip-audit` in CI is queued on the security-review backlog
+- Sigstore signature attachment on release artifacts is a fast-follow
 
 ### 6.6 In-sandbox `snapshot.json` writable by the agent
 
@@ -482,7 +476,7 @@ harness could rewrite it to lie about the sandbox's capabilities.
 **Mitigation roadmap:** split `/run/whiz` into a `:ro` snapshot
 mount and a `:rw` events/requests mount, OR expose the snapshot
 through the in-sandbox MCP server instead of as a file. Either is a
-D-156 amendment. Stage 20 audit will land one of them.
+D-156 amendment. Queued on the security-review backlog.
 
 ### 6.7 Unlimited-profile enforcer can hang on docker client wedge
 
@@ -492,7 +486,7 @@ process wedges while the container stays alive, the enforcer hangs
 the host indefinitely.
 
 **Mitigation roadmap:** add a periodic liveness probe on the
-unlimited path. Catch-up review F-F-05; Stage 20 hardening pass.
+unlimited path. Queued on the security-review backlog.
 
 ### 6.8 Default-direction question for overlay-quarantine (D-135)
 
@@ -549,4 +543,4 @@ time; currently held open (per `launch_readiness.md`).
 
 ---
 
-*Last reviewed: 2026-05-29 (Stage 20 deliverable 1).*
+*Last reviewed: 2026-05-29.*

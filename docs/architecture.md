@@ -70,8 +70,8 @@ The wrap-up step is required from MVP, not deferred to v1. When a session is abo
 The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
 Core-maintained adapters (D-155 — the slate is intentionally capped):
-- generic shell adapter — MVP, shipped
-- Hermes adapter — MVP, shipped (Stage 8)
+- generic shell adapter — shipped
+- Hermes adapter — shipped
 - NanoClaw adapter — v1.0
 - native Whizzard harness — v2.0
 

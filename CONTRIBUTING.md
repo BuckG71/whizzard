@@ -58,9 +58,9 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR
 ## Tests
 
 - Unit tests live under `tests/`, one test file per source module (`test_<module>.py`). They use `monkeypatch` + `tmp_path`; **no real Docker, no real Hermes, no real OneCLI** required for the suite to pass. Default `make test` runs this tier (~460 tests, ~1s).
-- **Integration tests** live under `tests/integration/`, marked `@pytest.mark.integration`. They exercise real Docker against the built `whizzard-base:latest` and `whizzard-hermes:latest` images, covering: containment invariants (read-only rootfs, non-root user, capability drops, network-off egress, Docker-socket absence, bind-mount isolation, hostile-symlink containment, read-only mount writes blocked), Stage 15 enforcement (duration cap and idle timeout actually stop containers), the full `run_shell` launch path end-to-end, Stage 13 `adjust` real-Docker primitives, in-sandbox MCP deployment (D-167 invariant: the `whizzard` package is *not* importable in the sandbox), MCP stdio protocol round-trip, and Stage 8 Hermes binary + Ollama reachability. Excluded from default runs via the `addopts = "-m 'not integration'"` setting in `pyproject.toml`; run explicitly with `make integration` or `pytest -m integration`. Gated on Docker daemon availability — skipped cleanly when Docker isn't reachable.
+- **Integration tests** live under `tests/integration/`, marked `@pytest.mark.integration`. They exercise real Docker against the built `whizzard-base:latest` and `whizzard-hermes:latest` images, covering: containment invariants (read-only rootfs, non-root user, capability drops, network-off egress, Docker-socket absence, bind-mount isolation, hostile-symlink containment, read-only mount writes blocked), duration + idle-timeout enforcement (verifying the cap actually stops containers), the full `run_shell` launch path end-to-end, the `whiz adjust` mid-session primitives against real Docker, in-sandbox MCP deployment (D-167 invariant: the `whizzard` package is *not* importable in the sandbox), MCP stdio protocol round-trip, and Hermes binary + Ollama reachability. Excluded from default runs via the `addopts = "-m 'not integration'"` setting in `pyproject.toml`; run explicitly with `make integration` or `pytest -m integration`. Gated on Docker daemon availability — skipped cleanly when Docker isn't reachable.
 - Adding a new test file? Follow the existing per-module pattern (unit) or add to `tests/integration/` with the marker (integration).
-- Manual smoke tests (real Hermes + real harness) live in `docs/stage_validation.md` and `docs/archive/STAGE_8_BUILD_PLAN.md` (M7 runbook). These require user-specific config and aren't part of either automated tier.
+- Manual smoke tests (real Hermes + real harness) require user-specific config and aren't part of either automated tier; the maintainer keeps a private runbook.
 
 ## Decisions, handoffs, and process artifacts
 
@@ -79,7 +79,7 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR
 
 ## Security
 
-Security-relevant findings — escape-of-sandbox, capability-bypass, credential-leak surfaces — should be reported privately first. (Contact path will be documented at OSS launch.) See `docs/vision_and_strategy.md`'s threat-model + the security-conscious decisions cluster (D-9, D-11, D-21, D-156, D-162) for the design posture you're testing against.
+Security-relevant findings — escape-of-sandbox, capability-bypass, credential-leak surfaces — should be reported privately first via the channel in [SECURITY.md](SECURITY.md). See `docs/threat_model.md` + the security-conscious decisions cluster (D-9, D-11, D-21, D-156, D-162) for the design posture you're testing against.
 
 ## License
 

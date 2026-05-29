@@ -5,8 +5,7 @@ All notable user-facing changes to Whizzard land here. Format follows
 [Semantic Versioning](https://semver.org/) once the public API stabilizes at
 v1.0.
 
-For the detailed engineering log (stage-by-stage shipments, decision IDs,
-finding-level fixes), see [`docs/engineering_log.md`](docs/engineering_log.md).
+Decision IDs (`D-NN`) in entries below reference [`docs/decisions.md`](docs/decisions.md) — the canonical record for *why* a change happened.
 
 ## [Unreleased]
 
@@ -45,7 +44,7 @@ planned through v1.0.
 - `run_shell` now wraps the session lifecycle in a try/finally so the
   per-session cidfile is unlinked even if an exception interrupts the
   session (KeyboardInterrupt, monitor / audit errors). Prevents
-  long-running installs accumulating stray files in STATE_DIR (F-B-09).
+  long-running installs accumulating stray files in STATE_DIR.
 
 ### Packaging
 

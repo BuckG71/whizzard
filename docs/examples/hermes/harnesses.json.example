@@ -24,7 +24,7 @@
       "wrap_up_command": "/quit",
       "wrap_up_grace_seconds": 30,
       "hermes_home": "~/.hermes-whizzard-sandbox",
-      "description": "Stage 8 M7 smoke variant: interactive chat mode, no platforms, no LLM-provider secrets injection. Use this for first-launch validation with a local Ollama provider configured in the sandbox's config.yaml. No external credentials required."
+      "description": "Smoke variant: interactive chat mode, no platforms, no LLM-provider secrets injection. Use this for first-launch validation with a local Ollama provider configured in the sandbox's config.yaml. No external credentials required."
     }
   }
 }
