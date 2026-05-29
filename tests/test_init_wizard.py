@@ -1,0 +1,246 @@
+"""Stage 19 / M3 — `whiz init` wizard tests.
+
+Each step's interactive behavior is unit-tested by:
+  - patching `input()` to feed pre-scripted user responses
+  - patching the docker-build runner so no real docker is invoked
+  - using tmp_path-isolated config dirs so no host state leaks
+
+The wizard module is imported lazily inside tests so the autouse fixture
+can monkeypatch config-file paths *before* the wizard module reads them
+at import time.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from whizzard.cli import app
+
+runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect ~/.whizzard/ → tmp_path/whizzard-home for every test.
+
+    Patches the underlying config modules AND the references already
+    imported into whizzard.init_wizard, since module-level imports cache
+    the original constants.
+    """
+    home = tmp_path / "whizzard-home"
+    config = home / "config"
+    logs = home / "logs"
+    state = home / "state"
+
+    monkeypatch.setenv("WHIZZARD_HOME", str(home))
+    from whizzard import config as cfg
+    from whizzard import harness_config as hc
+    from whizzard import init_wizard as iw
+    from whizzard import mounts as mn
+    from whizzard import preset_config as pc
+
+    monkeypatch.setattr(cfg, "WHIZZARD_HOME", home)
+    monkeypatch.setattr(cfg, "CONFIG_DIR", config)
+    monkeypatch.setattr(cfg, "LOGS_DIR", logs)
+    monkeypatch.setattr(cfg, "STATE_DIR", state)
+    monkeypatch.setattr(cfg, "PROFILES_FILE", config / "profiles.json")
+    monkeypatch.setattr(mn, "MOUNTS_FILE", config / "mounts.json")
+    monkeypatch.setattr(hc, "HARNESSES_FILE", config / "harnesses.json")
+    monkeypatch.setattr(pc, "PRESETS_FILE", config / "presets.json")
+
+    # init_wizard module captured these at import time; rebind explicitly.
+    monkeypatch.setattr(iw, "CONFIG_DIR", config)
+    monkeypatch.setattr(iw, "PROFILES_FILE", config / "profiles.json")
+    monkeypatch.setattr(iw, "MOUNTS_FILE", config / "mounts.json")
+    monkeypatch.setattr(iw, "HARNESSES_FILE", config / "harnesses.json")
+    monkeypatch.setattr(iw, "PRESETS_FILE", config / "presets.json")
+    monkeypatch.setattr(
+        iw, "_CONFIG_FILES",
+        (
+            config / "profiles.json",
+            config / "mounts.json",
+            config / "harnesses.json",
+            config / "presets.json",
+        ),
+    )
+
+    # The wizard's run() creates these dirs, but tests that call
+    # writer helpers directly need them pre-created.
+    config.mkdir(parents=True, exist_ok=True)
+    logs.mkdir(parents=True, exist_ok=True)
+    state.mkdir(parents=True, exist_ok=True)
+
+    return home
+
+
+# ---------- idempotency ----------
+
+
+def test_init_refuses_when_config_already_exists(_isolated_whizzard_home: Path):
+    """The wizard refuses to run if any of the four config files exist —
+    so a first-time user can't accidentally clobber a working setup."""
+    config = _isolated_whizzard_home / "config"
+    config.mkdir(parents=True, exist_ok=True)
+    (config / "profiles.json").write_text('{"existing": true}')
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+
+
+def test_init_force_overrides_idempotency_check(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """--force lets the wizard proceed even when prior config exists."""
+    config = _isolated_whizzard_home / "config"
+    config.mkdir(parents=True, exist_ok=True)
+    (config / "profiles.json").write_text('{"existing": true}')
+
+    # Stub docker so step 1 doesn't actually try to build anything.
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+    result = runner.invoke(app, ["init", "--yes", "--force"])
+    # With --yes + --force, the welcome + step 1 should at least run
+    # without raising at idempotency.
+    assert "already exists" not in result.output
+
+
+# ---------- step 1: image build (no docker) ----------
+
+
+def test_init_exits_127_when_docker_missing(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Step 1's pre-flight surfaces the docker-not-found case clearly."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: False)
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 127
+    assert "docker not found" in result.output
+
+
+# ---------- step 1: image build (build_runner mocked) ----------
+
+
+def test_init_step_1_invokes_two_builds_in_order(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Step 1 silently chains base + Hermes image builds — the user sees
+    one "Building sandbox..." line, the runner is invoked twice."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+
+    invocations: list[list[str]] = []
+
+    def _fake_build(argv: list[str]) -> int:
+        invocations.append(argv)
+        return 0
+
+    monkeypatch.setattr(iw, "_default_build_runner", _fake_build)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    # Step 1 succeeds; later steps not yet implemented so the wizard
+    # currently ends after step 1 with the welcome + step-1 output.
+    assert "sandbox built" in result.output
+    assert len(invocations) == 2
+
+    # First build = base image; second = hermes image. Verify tag args.
+    base_argv = invocations[0]
+    hermes_argv = invocations[1]
+    assert "whizzard-base:latest" in base_argv
+    assert "whizzard-hermes:latest" in hermes_argv
+
+
+def test_init_step_1_propagates_base_build_failure(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """If the base build fails, the Hermes build is NOT attempted and
+    the wizard exits with the docker exit code."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+
+    invocations: list[list[str]] = []
+
+    def _fake_build(argv: list[str]) -> int:
+        invocations.append(argv)
+        return 13  # arbitrary non-zero
+
+    monkeypatch.setattr(iw, "_default_build_runner", _fake_build)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 13
+    assert len(invocations) == 1, "Hermes build should not run if base fails"
+    assert "docker build failed" in result.output
+
+
+# ---------- writers (used by later steps; tested early so the
+# Step-2/3/4 commits can rely on them) ----------
+
+
+def test_write_default_profiles_emits_valid_json(_isolated_whizzard_home: Path):
+    from whizzard import init_wizard as iw
+
+    names = iw._write_default_profiles()
+    assert "default" in names and "safe" in names
+    assert iw.PROFILES_FILE.exists()
+    import json
+
+    payload = json.loads(iw.PROFILES_FILE.read_text())
+    assert payload["schema_version"] == 1
+    assert "profiles" in payload
+    assert payload["profiles"]["default"]["network_enabled"] is True
+    assert payload["profiles"]["default"]["duration_seconds"] is None  # unlimited
+
+
+def test_write_default_harnesses_emits_valid_json(_isolated_whizzard_home: Path):
+    from whizzard import init_wizard as iw
+
+    count = iw._write_default_harnesses()
+    assert count >= 1
+    assert iw.HARNESSES_FILE.exists()
+    import json
+
+    payload = json.loads(iw.HARNESSES_FILE.read_text())
+    assert payload["schema_version"] == 1
+    assert "harnesses" in payload
+
+
+# ---------- hermes detection ----------
+
+
+def test_hermes_profile_detection_returns_path_when_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """When ~/.hermes/ exists, the detection helper returns its path."""
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()
+    (fake_home / ".hermes").mkdir()
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    from whizzard import init_wizard as iw
+
+    detected = iw._hermes_profile_already_exists()
+    assert detected == fake_home / ".hermes"
+
+
+def test_hermes_profile_detection_returns_none_when_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """When ~/.hermes/ does not exist, returns None (→ Branch B)."""
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()  # ~/ exists but ~/.hermes/ doesn't
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    from whizzard import init_wizard as iw
+
+    detected = iw._hermes_profile_already_exists()
+    assert detected is None

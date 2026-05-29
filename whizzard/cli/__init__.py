@@ -36,6 +36,7 @@ from whizzard.cli.adjust import adjust_cmd
 from whizzard.cli.harnesses import harnesses_app
 from whizzard.cli.hermes import hermes_app
 from whizzard.cli.image import image_app
+from whizzard.cli.init import init_cmd
 from whizzard.cli.mounts import mounts_app, mounts_list_cmd
 from whizzard.cli.preset import preset_app, preset_launch_cmd, preset_list_cmd, preset_show_cmd
 from whizzard.cli.profiles import profiles_app, profiles_list_cmd
@@ -65,6 +66,7 @@ app.add_typer(hermes_app, name="hermes")
 app.add_typer(requests_app, name="requests")
 app.command("adjust")(adjust_cmd)
 app.command("wake")(wake_cmd)
+app.command("init")(init_cmd)
 
 
 @app.callback(invoke_without_command=True)
