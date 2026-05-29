@@ -104,7 +104,7 @@ The announcement validates the broader thesis (agent safety needs dev-workflow-n
     <span class="tag rt">runtime</span>
     <h3>Whizzard</h3>
     <p>Local capability-governance layer. Wraps an agent harness in a hardened, scoped, time-bounded execution sandbox (Docker today) with explicit, human-readable capability grants. Filesystem mounts, network, credentials, MCP surface all gated.</p>
-    <p><b>For:</b> solo devs, local agent operators<br/><b>Surface:</b> CLI + profiles, harness adapters (Hermes, generic shell)<br/><b>Status:</b> MVP in progress (stages 1–10, 12 shipped)</p>
+    <p><b>For:</b> solo devs, local agent operators<br/><b>Surface:</b> CLI + profiles, harness adapters (Hermes, generic shell)<br/><b>Status:</b> v0.1.0 in pre-release</p>
   </div>
 </div>
 
@@ -138,7 +138,7 @@ Whizzard's <code>docs/vision_and_strategy.md</code> explicitly carves out the op
       <code>tests/policies/</code> suite asserting "profile <code>quarantine</code> denies network", "credential X
       never appears in sandbox env unless declared" — same shape, applied to capability policy rather than model behavior.</li>
   <li><b>Clarity's "markdown artifact per decision" pattern</b> already exists in this repo as <code>docs/decisions.md</code>
-      (append-only D-XXX index). The Microsoft framing — failure analysis from multiple perspectives — could be a useful
+      (an append-only, numbered decision index). The Microsoft framing — failure analysis from multiple perspectives — could be a useful
       template addition for higher-risk decisions (e.g. new mount types, new adapter trust assumptions).</li>
 </ul>
 
@@ -152,8 +152,8 @@ comparison ("Rampart tests behavior; Whizzard bounds capability") would prevent 
 
 <h3>5. Naming collision risk</h3>
 <p>"Rampart" is firmly in the same conceptual neighborhood as Whizzard (boundaries, containment, defense).
-Per D-144, "Whizzard" is a working name pending a final rename. The shortlist should avoid names that read as Microsoft-Rampart-adjacent —
-the differentiator is capability scoping, not perimeter.</p>
+"Whizzard" is itself a working name pending a final rename — and the shortlist for that rename should avoid names that read as Microsoft-Rampart-adjacent.
+The differentiator is capability scoping, not perimeter.</p>
 
 <h2>Suggested follow-ups</h2>
 <ul>

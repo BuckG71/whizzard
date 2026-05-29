@@ -6,34 +6,34 @@ Hermes is [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-a
 
 ## What this recipe gives you
 
-A Hermes instance running inside an OIQ-governed sandbox with:
-- **State persistence:** Hermes's profile (skills, memories, sessions, kanban) lives in a host directory bind-mounted as `HERMES_HOME`. State survives container termination per D-79.
-- **No identity-credential leak:** `auth.json` (Hermes's master credential store) is explicitly excluded from the cloned profile per D-80. The sandbox never sees the host Hermes's authentication tokens.
-- **Scoped per-sandbox credentials:** LLM and platform credentials inject into the sandbox via the harness config's `secrets:` / `platforms:` fields (D-162, D-89-amended). OneCLI delivers values; env-var fallback if OneCLI isn't configured.
-- **Hardened sandbox:** `--cap-drop=ALL`, `--security-opt no-new-privileges`, `--read-only` rootfs, tmpfs scratch, host-UID parity on the HERMES_HOME mount (D-56).
+A Hermes instance running inside a Whizzard-governed sandbox with:
+- **State persistence:** Hermes's profile (skills, memories, sessions, kanban) lives in a host directory bind-mounted as `HERMES_HOME`. State survives container termination.
+- **No identity-credential leak:** `auth.json` (Hermes's master credential store) is explicitly excluded from the cloned profile. The sandbox never sees the host Hermes's authentication tokens.
+- **Scoped per-sandbox credentials:** LLM and platform credentials inject into the sandbox via the harness config's `secrets:` / `platforms:` fields. OneCLI (a separate host-side credential vault Whizzard integrates with) delivers values; env-var fallback if OneCLI isn't configured.
+- **Hardened sandbox:** `--cap-drop=ALL`, `--security-opt no-new-privileges`, `--read-only` rootfs, tmpfs scratch, host-UID parity on the HERMES_HOME mount.
 
 ## Prerequisites
 
-- OIQ installed (`pip install -e .` from the repo).
+- Whizzard installed (`pip install whizzard`).
 - Docker Desktop or equivalent.
 - An existing host-side Hermes install at `~/.hermes/` (used as the clone source). If you don't have one, `hermes setup` from upstream creates one.
-- *(Optional)* OneCLI installed with provider credentials (`Anthropic`, `Discord`, etc.). Without OneCLI, OIQ's adapter falls back to host env vars.
+- *(Optional)* OneCLI installed with provider credentials (`Anthropic`, `Discord`, etc.). Without OneCLI, Whizzard's adapter falls back to host env vars.
 
 ## Step-by-step
 
 ### 1. Build the Hermes-extended image
 
-The base `whizzard-base:latest` is a minimal Debian image with no Hermes. The included `docker/Dockerfile.hermes` layers Python + Hermes on top, pinned to a specific upstream commit.
+The base `whizzard-base:latest` is a minimal Debian image with no Hermes. The bundled Hermes Dockerfile layers Python + Hermes on top, pinned to a specific upstream commit.
 
 ```sh
-docker build -f docker/Dockerfile.hermes -t whizzard-hermes:latest .
+whiz hermes image build
 ```
 
-Bump `HERMES_REF` in `docker/Dockerfile.hermes` to update the pinned version.
+`whiz init` runs this for you the first time; the verb is shown here so you can rebuild explicitly (e.g. after the bundled Dockerfile updates Hermes's pinned commit).
 
 ### 2. Clone a Hermes profile for the sandbox
 
-This creates a *sibling* of your existing `~/.hermes/`, excluding `auth.json` (D-80) and per-instance runtime state.
+This creates a *sibling* of your existing `~/.hermes/`, excluding `auth.json` (the host Hermes's master credential file) and per-instance runtime state.
 
 ```sh
 whiz hermes profile create whizzard-sandbox --clone-from default
@@ -47,7 +47,7 @@ See [`harnesses.json.example`](harnesses.json.example) for the full snippet. The
 
 ### 4. Configure the sandbox's LLM provider
 
-OIQ doesn't touch the sandbox's `~/.hermes-whizzard-sandbox/config.yaml` — you edit it directly to choose a provider.
+Whizzard doesn't touch the sandbox's `~/.hermes-whizzard-sandbox/config.yaml` — you edit it directly to choose a provider.
 
 **Option A: Local LLM via Ollama** (validates Hermes integration without external credentials):
 
@@ -67,7 +67,7 @@ providers:
 
 The `host.docker.internal` hostname routes from the sandbox to the host's Ollama. See [`../home_lab_deployment.md`](../../home_lab_deployment.md) for the broader Tailscale-meshed inference architecture.
 
-**Option B: Cloud provider via the `secrets:` field** (D-162):
+**Option B: Cloud provider via the `secrets:` field**:
 
 In `harnesses.json`, declare:
 
@@ -78,9 +78,9 @@ In `harnesses.json`, declare:
 }
 ```
 
-Then either store `ANTHROPIC_API_KEY` in OneCLI (recommended) or export it in the shell that launches OIQ. The adapter injects it into the sandbox at launch; the value never appears in any file on disk.
+Then either store `ANTHROPIC_API_KEY` in OneCLI (recommended) or export it in the shell that launches Whizzard. The adapter injects it into the sandbox at launch; the value never appears in any file on disk.
 
-**Never put plaintext credential values directly in `harnesses.json` or `config.yaml`.** D-80 + D-162 are explicit on this.
+**Never put plaintext credential values directly in `harnesses.json` or `config.yaml`.** The schema rejects them at parse time; use the `secrets:` field with named env vars / OneCLI keys instead.
 
 ### 5. Launch
 
@@ -118,7 +118,7 @@ A subsequent `whiz r hermes-sandbox-smoke` launch sees the previous state and co
 - **`Permission denied` writing under `/home/whizzard/.hermes` inside the sandbox** — `uid_parity=True` should prevent this on macOS Docker Desktop and Linux. If you see it, file an issue with your `docker info` output and host UID/GID.
 - **Sandbox launches but Hermes errors with "no provider configured"** — `config.yaml` provider isn't matching a `providers:` block, or the `api_key` field is missing. Cross-check the YAML against [Step 4](#4-configure-the-sandboxes-llm-provider).
 - **`host.docker.internal` doesn't resolve** — only works on Docker Desktop (macOS / Windows). On native Linux, use the host's actual IP (`172.17.0.1` is the default Docker bridge gateway), or run Ollama in a sibling container.
-- **OneCLI not found / "fetch failed"** — OIQ's `fetch_secret` calls `onecli secrets get` which doesn't exist in current OneCLI; falls through to env-var fallback. Set the env var directly until the OneCLI integration is realigned. Tracked in D-162 Notes.
+- **OneCLI not found / "fetch failed"** — Whizzard's `fetch_secret` calls `onecli secrets get` which doesn't exist in current OneCLI; falls through to env-var fallback. Set the env var directly until the OneCLI integration is realigned. Tracked in `docs/known_issues.md`.
 
 ## Files in this directory
 

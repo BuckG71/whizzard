@@ -2,7 +2,7 @@
 
 This document defines the system architecture, security invariants, and adapter contract for Whizzard. It applies across all phases of the project — MVP, v1, and beyond.
 
-> Naming note: earlier drafts used a two-component framing ("Airlock = governance, Whizzard = orchestrator"). The project consolidated to a single name "Whizzard" on 2026-05-09 (D-144). Older docs and historical decisions may still reference Airlock; the substance is unchanged. A further rename Whizzard → Osmotiq is planned post-MVP (D-158); until it lands, "Whizzard" and the `whiz` CLI remain current.
+> "Whizzard" is a working name. The project may rename before broader release; the `whiz` CLI verb may change accordingly. Older decisions in `docs/decisions.md` may reference earlier names — the substance is unchanged.
 
 ---
 
@@ -22,11 +22,12 @@ This is the foundational trust model. It applies to profiles, mounts, harness ad
 
 ```text
 Whizzard         = the whole system: orchestrator, policy engine, containment layer
-Execution Sandbox   = the contained execution environment (Docker container in MVP)
-Harness Adapter  = integration layer for Hermes / OpenClaw / NanoClaw / etc.
+Execution Sandbox = the contained execution environment (Docker container today)
+Harness Adapter  = integration layer for an agent harness — a tool that drives an LLM
+                   through coding/agent tasks (Hermes, OpenClaw, NanoClaw, etc.)
 ```
 
-Whizzard is one product with three internal layers (see below). Earlier drafts split the policy/containment layer into a named sub-component "Airlock"; that split has been retired in favor of treating Whizzard as the single named entity.
+Whizzard is one product with three internal layers (see below).
 
 ---
 
@@ -69,7 +70,7 @@ The wrap-up step is required from MVP, not deferred to v1. When a session is abo
 
 The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
-Core-maintained adapters (D-155 — the slate is intentionally capped):
+Core-maintained adapters (intentionally capped — additions are governed via the decisions process):
 - generic shell adapter — shipped
 - Hermes adapter — shipped
 - NanoClaw adapter — v1.0
@@ -249,9 +250,9 @@ Optional fields: `stop_command`, `wrap_up_command`, `wrap_up_grace_seconds`, `wo
 
 The `wrap_up_command` is the string the adapter sends to the harness's interactive interface to trigger graceful wind-down (e.g., a slash command). `wrap_up_grace_seconds` bounds how long Whizzard waits for the harness to finish before proceeding to SIGTERM. Adapters whose harnesses do not have a native wrap-up mechanism omit these fields; their `wrap_up()` is a no-op.
 
-The schema is versioned (`schema_version`) so it can be extended without breaking existing configs. The MVP can ship with only `type` and `start_command` populated, but the parser must accept and ignore the optional fields from day one to avoid a breaking config change later.
+The schema is versioned (`schema_version`) so it can be extended without breaking existing configs. The initial release ships with only `type` and `start_command` required, but the parser accepts and ignores the optional fields from day one to avoid a breaking config change later.
 
-> **As-built note.** The JSON above is illustrative. The live config schema is validated in `whizzard/harness_config.py`; agent harnesses also use `platforms` (D-89) and `secrets` (D-162), and the Hermes adapter additionally reads `hermes_home`. The code-level adapter contract — the methods Whizzard core actually calls — is the `HarnessAdapter` Protocol in `whizzard/adapters/base.py`, not this JSON. `wrap_up_command` is retained in the schema but vestigial: the Hermes adapter performs graceful shutdown via `docker stop` (SIGTERM), not by sending a `/quit` command (D-88).
+> **As-built note.** The JSON above is illustrative. The live config schema is validated in `whizzard/harness_config.py`; agent harnesses also use `platforms` (the harness's platform-connector list, e.g. Discord, Slack) and `secrets` (named credentials the host injects into the sandbox), and the Hermes adapter additionally reads `hermes_home`. The code-level adapter contract — the methods Whizzard core actually calls — is the `HarnessAdapter` Protocol in `whizzard/adapters/base.py`, not this JSON. `wrap_up_command` is retained in the schema but vestigial: the Hermes adapter performs graceful shutdown via `docker stop` (SIGTERM), not by sending a `/quit` command.
 
 ---
 

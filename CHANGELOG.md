@@ -5,8 +5,6 @@ All notable user-facing changes to Whizzard land here. Format follows
 [Semantic Versioning](https://semver.org/) once the public API stabilizes at
 v1.0.
 
-Decision IDs (`D-NN`) in entries below reference [`docs/decisions.md`](docs/decisions.md) — the canonical record for *why* a change happened.
-
 ## [Unreleased]
 
 First public release in preparation. See [ROADMAP.md](ROADMAP.md) for what's

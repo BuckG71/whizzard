@@ -10,8 +10,8 @@ See `docs/known_issues.md` for unresolved items.
 
 **Terminology:** "sandbox" throughout this document refers to the
 hardened Docker container Whizzard launches each agent session
-inside. Equivalent terms in earlier drafts ("cell", "execution
-cell") map to the same concept.
+inside. "Agent harness" refers to a tool that drives an LLM through
+coding or agent tasks (Hermes, Claude Code, Cursor, etc.).
 
 ---
 
@@ -26,10 +26,11 @@ host-side assets against actions taken (or instructed) by the agent:
    cloud-credentials directories, source trees the user did not
    register, OS configuration files — must not be reachable from
    the agent's perspective.
-2. **Credentials.** Provider API keys, OneCLI-vault contents, host
-   environment secrets, and Whizzard's own `auth.json` / future
-   token stores must not be accessible to the agent at runtime nor
-   leak via the audit log.
+2. **Credentials.** Provider API keys, contents of any host-side
+   credential vault Whizzard mediates (OneCLI is the current integration),
+   host environment secrets, and any credential files belonging to
+   harnesses Whizzard launches must not be accessible to the agent at
+   runtime nor leak via the audit log.
 3. **Network destinations.** Outbound traffic must respect the
    profile's network policy (off / on at v0.1.0; off / on / allowlist
    from v1.0 per ROADMAP.md goal 11). The agent cannot reach
@@ -83,7 +84,7 @@ narrow after launch, never widen. A mid-session escalation requires
 stop+restart at the host, mediated by Whizzard, never by the agent
 acting alone (D-27).
 
-### Within the sandbox — control layering (D-architecture)
+### Within the sandbox — control layering
 
 Whizzard's controls compose in three concentric layers; this
 threat model focuses on the **enforcement** layer (the outermost,
@@ -221,7 +222,7 @@ that establishes it.
 
 | Defense | Reference |
 |---|---|
-| OneCLI vault integration: credentials never enter the sandbox as plaintext env vars; sandbox-side HTTP traffic is mediated by an OneCLI proxy that injects credentials at the wire | D-91 / D-98 / D-134 |
+| Host-side credential mediation: credentials never enter the sandbox as plaintext env vars; sandbox-side HTTP traffic to model and platform endpoints is mediated by a host-side proxy (current integration is OneCLI) that injects credentials at the moment of the outbound request | D-91 / D-98 / D-134 |
 | Host env fallback path emits a warning visible in `active_capabilities()` so operators see when credentials originate from less-protected sources | D-89 / D-90 |
 | Hermes `auth.json` and per-instance runtime state are excluded from profile clones (D-80); known bypass paths closed in prior internal review | D-80 / D-86 |
 | Whizzard's own config directory (`~/.whizzard/config/`) is structurally unreachable from the sandbox — no symlink, no parent-mount, no traversal trick reaches it | D-12 (config write-protection invariant) |

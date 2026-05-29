@@ -2,13 +2,13 @@
 
 This document is the single source of truth for what Whizzard is, who it serves, and where it is going. Public-facing v1.0 sequencing lives in [../ROADMAP.md](../ROADMAP.md). System architecture lives in [architecture.md](architecture.md).
 
-> Naming note: earlier drafts used a two-name framing ("Airlock" = containment, "Whizzard" = orchestrator). Project consolidated to single name "Whizzard" on 2026-05-09 (D-144). "Whizzard" is itself a working placeholder; long-term name TBD.
+> "Whizzard" is a working name and may change before broader release; the CLI verb may change accordingly.
 
 ---
 
 ## Core Thesis
 
-Whizzard is a local-first capability governance layer for running powerful AI agents (and, post-MVP, general OSS tools) with explicit, temporary, human-readable permission boundaries.
+Whizzard is a local-first capability governance layer for running powerful AI agents (and, in later phases, general open-source tools) with explicit, temporary, human-readable permission boundaries.
 
 The system exists to prove:
 
@@ -23,9 +23,9 @@ Useful autonomous agents can coexist with practical local security boundaries.
 | Component       | Role                                              |
 |-----------------|---------------------------------------------------|
 | Whizzard        | The whole system: orchestrator, policy engine, containment |
-| Execution Sandbox  | The contained execution environment (Docker container in MVP) |
-| Harness Adapter | Integration layer for Hermes / OpenClaw / NanoClaw / etc. |
-| Breaker         | Behavioral interruption engine (post-MVP)         |
+| Execution Sandbox  | The contained execution environment (Docker container today; other backends possible later) |
+| Harness Adapter | Integration layer for Hermes / OpenClaw / NanoClaw / etc. (these are agent harnesses — software wrappers that drive LLMs through coding or agent tasks) |
+| Breaker         | Behavioral interruption engine (planned for a later phase) |
 | Quarantine      | High-risk execution mode (a profile name)         |
 
 ---
@@ -148,7 +148,7 @@ Users should be able to read their own permissions at a glance and trust that wh
 
 ## Strategic Product Direction
 
-### Phase 1 — MVP
+### Phase 1 — Initial release (`v0.1.0`)
 
 Focus:
 - profiles
@@ -160,7 +160,7 @@ Focus:
 
 Goal: validate the capability-governance workflow.
 
-### Phase 2 — Post-MVP v1.0
+### Phase 2 — `v1.0`
 
 Focus:
 - per-agent capability scoping
@@ -298,17 +298,17 @@ Especially:
 
 ## Real-World Validation
 
-The threat model is not hypothetical. As the agent-harness landscape matures, the industry has begun surfacing incident patterns that map directly onto OIQ's value proposition. This section tracks public evidence that capability governance at the local-execution layer is becoming necessary infrastructure, not optional polish.
+The threat model is not hypothetical. As the agent-harness landscape matures, the industry has begun surfacing incident patterns that map directly onto Whizzard's value proposition. This section tracks public evidence that capability governance at the local-execution layer is becoming necessary infrastructure, not optional polish.
 
 ### 2026-05 — Hidden capabilities in harness skill/plugin ecosystems
 
 The Register (2026-05-17, "How AI agent harnesses like OpenClaw are changing LLMs, inference, and CPUs") references a wave of incidents in which third-party "skills" published to harness plugin hubs shipped with hidden capabilities — including coordinated cryptocurrency-extraction behavior across the agents that installed them. The specific framing in the article: published skills *secretly turned AI agents into a crypto-swarm*.
 
-**Why this validates OIQ's thesis:**
+**Why this validates Whizzard's thesis:**
 
-- **The vector is the skill/plugin layer, not the model layer.** No amount of alignment work on the underlying LLM stops a skill from doing exactly what the skill author wrote it to do. The harness loads the skill; the agent runs it; the agent's host-side capabilities are now the skill's capabilities. Containment has to live below the skill, at the execution-sandbox boundary — which is precisely where OIQ sits.
-- **The blast radius is the local capability surface.** A malicious skill is most dangerous when the agent runs with broad host access (full filesystem, network, credential stores). Sandboxes with explicit mount lists, default-deny networking, and ephemeral state are the structural answer. The mount-list-IS-permission-model principle (D-11) is the right grain for this.
+- **The vector is the skill/plugin layer, not the model layer.** No amount of alignment work on the underlying LLM stops a skill from doing exactly what the skill author wrote it to do. The harness loads the skill; the agent runs it; the agent's host-side capabilities are now the skill's capabilities. Containment has to live below the skill, at the execution-sandbox boundary — which is precisely where Whizzard sits.
+- **The blast radius is the local capability surface.** A malicious skill is most dangerous when the agent runs with broad host access (full filesystem, network, credential stores). Sandboxes with explicit mount lists, default-deny networking, and ephemeral state are the structural answer. The mount-list-is-the-permission-model principle is the right grain for this.
 - **The harness vendor cannot solve it alone.** A harness can vet its skill hub, but it cannot vet every locally-installed skill, every fork, every private extension. Cross-agent local capability governance is the architectural layer that survives a harness's individual vetting decisions.
-- **Confirms the harness-neutral bet.** The Register article lists Claude Code, OpenClaw, Codex, Pi Coding Agent, Cline as production harnesses. Each will face the same skill/plugin attack surface. A harness-neutral containment layer (D-10) is more durable than any single-harness security feature.
+- **Confirms the harness-neutral bet.** The Register article lists Claude Code, OpenClaw, Codex, Pi Coding Agent, Cline as production harnesses. Each will face the same skill/plugin attack surface. A harness-neutral containment layer is more durable than any single-harness security feature.
 
 **Positioning implication for OSS-launch:** The "crypto-swarm via published skills" incident class is a concrete anecdote that beats abstract "agents need guardrails" framing. When the README needs a *why this matters now* paragraph, point at the skill-hub attack surface, not at hypothetical AI risk.

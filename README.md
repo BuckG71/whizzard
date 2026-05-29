@@ -4,13 +4,11 @@ Local capability governance for AI agents. Run powerful agent harnesses inside e
 
 > **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — see [Install](#install) below.
 
-> **Naming:** "Whizzard" is a working name. The project may rename before broader release. See [docs/decisions.md](docs/decisions.md) D-144.
-
 ---
 
 ## What this is
 
-In one sentence: Whizzard wraps an agent harness in a hardened, scoped, time-bounded Docker container (hereafter "sandbox") with auditable capability grants. See [docs/vision_and_strategy.md](docs/vision_and_strategy.md) for more detail. 
+In one sentence: Whizzard wraps an *agent harness* — a tool that drives an LLM through coding or agent tasks, e.g. Hermes, Claude Code, Cursor — in a hardened, scoped, time-bounded Docker container (hereafter "sandbox") with auditable capability grants. See [docs/vision_and_strategy.md](docs/vision_and_strategy.md) for more detail.
 
 The core invariant:
 
@@ -19,6 +17,12 @@ Whizzard controls capabilities.
 Agents request capabilities.
 Agents do not grant themselves capabilities.
 ```
+
+## Concepts at a glance
+
+- **Sandbox** — the hardened Docker container Whizzard launches each agent session inside.
+- **Profile** — a named bundle of capability defaults (network policy, time limits, image, hardening flags). You launch a session by picking a profile.
+- **Mount** — an explicit path you grant the sandbox visibility into. The set of mounts *is* the agent's filesystem permission.
 
 ## Scope and limitations
 
@@ -34,7 +38,7 @@ Whizzard does not claim to be a complete security solution. The list below names
 
 - **Privilege containment.** The agent runs as a non-root user inside the sandbox, with dropped Linux capabilities, a read-only container root filesystem, `no-new-privileges` set, and the Docker socket unreachable. A vulnerability in any tool the agent invokes doesn't get root, can't load kernel modules, can't write outside declared writable mounts, can't escalate via `setuid` binaries, and can't reach back to the host Docker daemon to spawn unconstrained containers.
 
-- **Credential isolation.** Whizzard's own configuration (including the platform-integration `auth.json`) is structurally unreachable from the sandbox — no symlink, no parent-mount, no traversal trick, no rglob bypass reaches it. The sandbox can't read or modify the credentials that govern *future* Whizzard sessions. This closes the "compromise one session, persist via Whizzard's own config" path.
+- **Credential isolation.** Whizzard's own configuration directory — including any credential files belonging to harnesses Whizzard launches — is structurally unreachable from the sandbox: no symlink, no parent-mount, no traversal trick, no rglob bypass reaches it. The sandbox can't read or modify the credentials that govern *future* Whizzard sessions. This closes the "compromise one session, persist via Whizzard's own config" path.
 
 - **One-way capability flow.** Permissions only get narrower, not broader, after a session launches. An agent that needs more access than its profile allows must surface a request to the operator — it cannot grant itself broader permissions, cannot re-launch itself with new flags, cannot escape its profile by editing config. The escalation path is one-way and requires explicit operator approval. There is no "the agent quietly upgraded itself to root" path.
 
@@ -79,7 +83,7 @@ That's the entire flow. `whiz init` walks you through five short configuration s
 
 ### Hermes setup
 
-Whizzard currently supports the Hermes Agent harness by Nous Research only; additional harnesses are planned for future releases.
+Whizzard currently supports the [Hermes Agent harness by Nous Research](https://github.com/NousResearch/hermes-agent) — an open-source autonomous-agent harness with platform connectors (Discord, Slack), cron scheduling, and skill management. Additional harnesses are planned for future releases.
 
 `whiz init` detects whether you already have Hermes installed on your machine (`~/.hermes/`) and branches into one of two flows:
 
@@ -114,7 +118,7 @@ One-command lint + typecheck + test:
 make check
 ```
 
-Individual targets: `make test`, `make lint`, `make fmt` (auto-fix), `make typecheck`, `make validate-decisions`, `make dx ARGS='D-158'`. Configs for all three tools live in `pyproject.toml`.
+Individual targets: `make test`, `make lint`, `make fmt` (auto-fix), `make typecheck`, `make validate-decisions`, `make dx ARGS='<decision-id>'` (browse a decision record from `docs/decisions.md`). Configs for all three tools live in `pyproject.toml`.
 
 Pre-commit hooks for the same checks: `pip install pre-commit && pre-commit install`. CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR.
 
@@ -150,3 +154,7 @@ whizzard/
 - [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
 - [docs/decisions.md](docs/decisions.md) — append-only decisions index
 - [docs/examples/](docs/examples/) — integration recipes for wrapping `whiz` from agent harnesses (Claude Code, others)
+
+## A note on naming
+
+"Whizzard" is a working name. The project may rename before broader release; the CLI verb may change accordingly.

@@ -10,15 +10,15 @@ Whizzard is a local capability-governance layer for AI agents. Code-level orient
 
 ## Decisions record
 
-- **[decisions.md](decisions.md)** — the canonical record for "why is it this way?". Append-only per D-129. Flat list of `D-NN` entries with a flat+tags schema (`Type:` for primary classification, `Tags:` from a curated vocabulary). Three navigation aids at the bottom: a `## Tag vocabulary` section, a `## Cross-references` section grouping decisions by their source doc, and an `## Open questions tracker` listing decisions currently in `open` status.
+- **[decisions.md](decisions.md)** — the canonical record for "why is it this way?". Append-only. Flat list of `D-NN` entries with a flat+tags schema (`Type:` for primary classification, `Tags:` from a curated vocabulary). Three navigation aids at the bottom: a `## Tag vocabulary` section, a `## Cross-references` section grouping decisions by their source doc, and an `## Open questions tracker` listing decisions currently in `open` status.
 
 ## Deployment references
 
-- **[home_lab_deployment.md](home_lab_deployment.md)** — reference doc for the post-MVP multi-machine Tailscale-meshed deployment. Captures architecture, sequencing, and constraints.
+- **[home_lab_deployment.md](home_lab_deployment.md)** — reference doc for a multi-machine, Tailscale-meshed deployment of Whizzard + a self-hosted agent on a home network. Captures architecture, sequencing, and constraints.
 
 ## Harness integration examples
 
-- **[examples/](examples/)** — copy-paste recipes for using Whizzard inside specific harnesses. Currently ships `examples/claude_code/` (Claude Code skill files wrapping the CLI) and `examples/hermes/` (full Hermes adapter setup walkthrough). Other harnesses welcome via PR. See `examples/README.md` for contribution guidance and the design rationale (D-161).
+- **[examples/](examples/)** — copy-paste recipes for using Whizzard inside specific harnesses. Currently ships `examples/claude_code/` (Claude Code skill files wrapping the CLI) and `examples/hermes/` (full Hermes adapter setup walkthrough). Other harnesses welcome via PR. See `examples/README.md` for contribution guidance and the design rationale.
 
 ## Architecture reference
 
@@ -39,4 +39,4 @@ These were the input material for several decisions; the conclusions live in `de
 - **Decisions are append-only and numbered.** When you make one, append it to `decisions.md` with the next sequential `D-NN`. Don't edit prior decisions in place — supersede with a new one and update the prior entry's `Status:` to `superseded by D-NN`.
 - **Tags are drawn from the canonical vocabulary** at the bottom of `decisions.md`. New tags require an explicit vocabulary addition — never invent inline.
 - **Doc-only commits fast-forward into `main` immediately**. No PR ceremony required for documentation.
-- **Markdown filenames are lowercase** going forward (D-151); legacy uppercase files will be renamed in the planned bulk sweep alongside the Whizzard→Osmotiq product rename (D-158).
+- **Markdown filenames are lowercase** going forward; legacy uppercase files will be renamed in a planned bulk sweep alongside the eventual product-name change.

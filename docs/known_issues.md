@@ -17,10 +17,11 @@ Categories:
 ## Functional gaps
 
 ### OneCLI integration is functionally inert
-The OneCLI credential utility (`fetch_secret`) calls
-`onecli secrets get`, which does not exist in the actual OneCLI CLI surface;
-every invocation falls through to the env-var fallback. The integration
-nominally exists but never does the OneCLI thing.
+Whizzard integrates with OneCLI (a separate command-line credential vault) to
+fetch secrets without writing them to disk. The integration's `fetch_secret`
+helper calls `onecli secrets get`, which does not exist in the actual OneCLI
+CLI surface; every invocation falls through to the env-var fallback. The
+integration nominally exists but never does the OneCLI thing.
 *Source:* `docs/decisions.md` §D-162 Notes.
 *Disposition:* decide — fix to match the real OneCLI surface, or drop the
 direct integration and leave only env-var-fallback.
@@ -40,14 +41,14 @@ The Hermes adapter sets the WHIZ_* env vars for the in-sandbox MCP server, but
 the harness-side `config.yaml` MCP-client entry pointing at
 `python /opt/whiz/mcp_server.py` is still a manual user step.
 *Source:* maintainer working notes.
-*Disposition:* add an `oiq hermes profile sync-mcp` verb or fold into
-`oiq hermes profile create`.
+*Disposition:* add a `whiz hermes profile sync-mcp` verb or fold into
+`whiz hermes profile create`.
 
-### D-157 user-config drift
+### Maintainer's personal config predates schema additions
 The maintainer's personal `~/.whizzard/config/profiles.json` predates several
-schema additions (`allow_broad_mount` default per D-157, now
-`idle_timeout_seconds` from the duration-enforcement work). Bundled defaults updated; the personal
-file needs syncing for the changes to take effect locally.
+schema additions (most recent: `idle_timeout_seconds` from the
+duration-enforcement work). Bundled defaults updated; the personal file
+needs syncing for the changes to take effect locally.
 *Source:* maintainer working notes.
 *Disposition:* a one-time `whiz profiles init --force` (or manual edit) when
 convenient.
@@ -58,30 +59,19 @@ convenient.
 
 ### Discord control plane (read-only, then write/approve)
 Two-phase work: a read-only Discord surface for approval visibility, then
-write/approve flow on top. Carries a D-148 design pause requirement before
-any coding.
+write/approve flow on top. Carries a design-pause requirement before any
+coding — a UX-shaped change.
 *Source:* roadmap (post-launch).
 
 ### Security review & hardening audit
-Adversarial red-team suite expansion, fail-closed audit closing D-133,
-injection / command-construction audit, credential-handling audit,
-supply-chain scan in CI, independent reviewer pass. Pre-OSS-launch gate.
-The consolidated threat model at `docs/threat_model.md` is the anchor.
-*Source:* closes D-131 / D-133.
-
-### Whizzard → Osmotiq rename
-Triggered after MVP operational, before Hermes migration. CLI becomes `oiq`;
-`osmotiq.ai` owned. **Wizard rename ripple:** `whiz init`'s detect-and-clone
-flow creates `~/.hermes-whizz/` as the Hermes profile target; when the
-product name changes, that path needs to rename in lockstep (likely
-`~/.hermes-oiq/` or whatever the final CLI name becomes). User-facing
-migration: `mv ~/.hermes-whizz ~/.hermes-oiq` + update any presets that
-reference it.
-*Source:* D-158.
+Adversarial red-team suite expansion, a "does the system fail closed when
+config is missing or corrupt?" audit, injection / command-construction
+audit, credential-handling audit, supply-chain scan in CI, independent
+reviewer pass. Pre-OSS-launch gate. The consolidated threat model at
+`docs/threat_model.md` is the anchor.
 
 ### `ADAPTER_SPEC.md` (OSS-launch artifact)
 Contributor-facing adapter Protocol artifact. Decided but not authored.
-*Source:* D-160.
 
 ---
 
@@ -90,15 +80,16 @@ Contributor-facing adapter Protocol artifact. Decided but not authored.
 ### In-sandbox `snapshot.json` is writable by the agent
 The per-session `/run/whiz` mount is `:rw` because the sandbox legitimately writes
 `events.jsonl` and `requests/*.json` there. `snapshot.json` (the agent's
-launch-time capability view, per D-156) lives in the same dir, so the sandbox
-can overwrite it. The host-side audit log (mounted `:ro`) is still the source
-of truth — containment is intact — but the cooperation-layer "honest
-self-reflection" guarantee leaks: a compromised harness could lie to itself
-about its own permissions via `whiz_status`.
+launch-time capability view, written by Whizzard for the agent to read) lives
+in the same dir, so the sandbox can overwrite it. The host-side audit log
+(mounted `:ro`) is still the source of truth — containment is intact — but the
+cooperation-layer "honest self-reflection" guarantee leaks: a compromised
+harness could lie to itself about its own permissions via `whiz_status`.
 *Source:* internal code review.
 *Fix shape:* split `/run/whiz` into a `:ro` snapshot mount and a `:rw`
 events/requests mount, OR expose the snapshot through the in-sandbox MCP server
-instead of as a file. Either is a D-156 amendment.
+instead of as a file. Either way it amends the existing in-sandbox-MCP
+decision (D-156).
 *Disposition:* security-review backlog, or a decision-needed item earlier
 if it bothers us.
 
@@ -107,8 +98,8 @@ if it bothers us.
 `mcp_env()` into `-e K=V` flags without filtering names. A user-edited
 `harnesses.json` could include `LD_PRELOAD`, `PATH`, `HOME`, etc. and the
 values would land verbatim in the sandbox. Not a containment escape (the sandbox
-is the sandbox), but a footgun for misconfig. Adapter code is core-trusted (D-10)
-and `harnesses.json` is a Whizzard-owned surface (D-153) so no current path
+is the sandbox), but a footgun for misconfig. Adapter code and
+`harnesses.json` are both trusted core surfaces today, so no current path
 exercises this; the denylist is defensive hardening.
 *Source:* internal code review.
 *Disposition:* security-review backlog.
@@ -142,7 +133,7 @@ add when next touching the CLI flag layer.
 and parses every entry. No rotation, no head/tail bound. `whiz`
 (bare) and `whiz status` invoke it on every CLI launch. After months
 of daily use the file grows linearly and status will perceptibly
-stall. Parallel to (internal review finding) (in-sandbox `whiz_audit_self` slurps the
+stall. Parallel to the in-sandbox finding below (`whiz_audit_self` slurps the
 whole log too). Both want the same eventual fix: audit-log rotation
 + streaming reads with optional `since=<ts>`.
 *Source:* internal code review.
@@ -150,22 +141,24 @@ whole log too). Both want the same eventual fix: audit-log rotation
 lands OR security-review backlog.
 
 ### Wake selection-rule doc and code use different phrasings
-D-169 describes the wake-eligibility rule as "most-recent session with
-`expiry_reason: idle` AND no subsequent `session_start` for that sid".
-The implementation tracks `session_woken` events instead and excludes
-sids that appear as `superseded_session_id` in such events. The two are
-behaviorally equivalent today (every adjust and wake mints a new sid),
-so this is purely a doc/code drift — no behavior change required.
-Cleanest fix: reconcile the D-169 text with the actual implementation
-(or, equivalently, add a code comment in `wake._build_index` pointing
-to the D-169 phrasing as an alternative invariant).
+The decision record (D-169) describes the wake-eligibility rule as
+"most-recent session with `expiry_reason: idle` AND no subsequent
+`session_start` for that sid". The implementation tracks `session_woken`
+events instead and excludes sids that appear as `superseded_session_id`
+in such events. The two are behaviorally equivalent today (every adjust
+and wake mints a new sid), so this is purely a doc/code drift — no
+behavior change required. Cleanest fix: reconcile the decision text with
+the actual implementation (or add a code comment in
+`wake._build_index` pointing to the decision's phrasing as an alternative
+invariant).
 *Source:* internal code review.
 *Disposition:* defer — doc reconciliation, no behavior change.
 
 ### Unlimited-profile enforcer can hang forever if `docker run` client wedges
 When both `duration_seconds` and `idle_timeout_seconds` are `None`,
-`monitor_and_enforce` calls `proc.wait()` with no timeout — pre-Stage-15
-behavior, not a regression. If the docker-run client process wedges
+`monitor_and_enforce` calls `proc.wait()` with no timeout — this is the
+pre-existing behavior from before duration/idle enforcement landed, not
+a regression. If the docker-run client process wedges
 while the container stays alive (rare; bad-virtio-state class of bug),
 the enforcer hangs the host indefinitely. With duration/idle now
 first-class capabilities, the unlimited-profile case is precisely the
@@ -181,12 +174,13 @@ inside the sandbox — the parent agent, Hermes-spawned workers, tool
 subprocesses — shares the parent's full permission set: mount list,
 network, time budget, credentials, request-channel access. A buggy or
 compromised sub-agent has the same blast radius as the parent. Adequate
-for the MVP threshold (D-101: single trusted user); becomes a real
+under the project's current single-trusted-user threshold; becomes a real
 defense-in-depth question for OSS launch when users may run third-party
 agent code. The path forward is sub-sandboxes via host request (one
-Whizzard sandbox per scoped sub-agent), which keeps D-9 and D-164 intact.
-*Source:* D-171 (open); internal code review Chunk E discussion.
-*Disposition:* defer to OSS-launch milestone planning (D-131).
+Whizzard sandbox per scoped sub-agent), which preserves the one-way
+capability-flow and no-docker-socket invariants.
+*Source:* D-171 (open); internal code review.
+*Disposition:* defer to OSS-launch milestone planning.
 
 ### `whiz_audit_self` reads the entire host audit log per call
 The in-sandbox MCP tool `tool_whiz_audit_self` loads the full audit log
@@ -194,7 +188,7 @@ with `read_text().splitlines()`, then filters in Python. The log is
 append-only and accumulates entries across every session for the
 lifetime of the install — no rotation. An agent polling
 `whiz_audit_self` on a long-lived install pays O(total-log-bytes) RAM
-per call. The Chunk D (internal review finding) fix applied streaming to
+per call. A prior internal-review fix applied streaming to
 `merge_agent_events` on the host side for the same reason; the
 sandbox-side read deserves the same treatment plus an optional
 `since=<ts>` argument so the agent can ask for incremental tail.
@@ -243,8 +237,9 @@ add at the point a user-facing profile-dir option is introduced.
 
 ### Hermes image carries unused vestigial config
 `harnesses.json` schema and the bundled `_DEFAULT_HARNESSES['hermes']` retain
-`wrap_up_command: "/quit"` — the field is unused (per D-88 the adapter does
-`docker stop` instead), and architecture.md now flags it as vestigial.
+`wrap_up_command: "/quit"` — the field is unused (the adapter performs
+graceful shutdown via `docker stop` instead), and architecture.md now flags
+it as vestigial.
 *Disposition:* prune the field from the schema + bundled config when the
 harness-config schema next gets a touch.
 
@@ -296,7 +291,7 @@ Remove an entry (move to `git log` history) when:
 - the underlying issue is resolved.
 - the deferred feature ships.
 
-Aim to keep entries short; this is an index, not a discussion forum. Per
-`feedback_decisions_succinct` — the doc earns its keep by being scannable.
+Aim to keep entries short; this is an index, not a discussion forum. The
+doc earns its keep by being scannable.
 
 *Last reviewed: 2026-05-22.*

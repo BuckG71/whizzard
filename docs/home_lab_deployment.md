@@ -1,8 +1,6 @@
 # Home-Lab Deployment Reference
 
-**Status:** Reference doc, not active deployment plan. Intended for execution *after* MVP is operational, after the local Hermes→OIQ-wrapped migration is debugged on the Mac Studio (per D-86 Migrate path), and after the Whizzard→Osmotiq rename (D-158). Captured here so the architecture survives compaction and is available when execution begins.
-
-**Captured:** 2026-05-19
+**Status:** Reference doc, not active deployment plan. Captures a worked example of how Whizzard composes with a Tailscale-meshed home lab so the architecture is available when execution begins.
 
 **Terminology:** "sandbox" throughout this document refers to the hardened Docker container Whizzard launches each agent session inside.
 
@@ -46,7 +44,7 @@ The topology is hub-and-spoke over Tailscale; no machine exposes services to the
         |          +----------------+           |
         +--------> |  2015 MBP      | <---------+
                    |  (Linux)       |
-                   |  OIQ + Docker  |
+                   |  Whizzard + Docker  |
                    |  + Hermes sandbox |
                    +----------------+
                             |
@@ -61,17 +59,17 @@ The topology is hub-and-spoke over Tailscale; no machine exposes services to the
 
 ## Why this shape
 
-**Threat-model alignment.** The autonomous agent (Hermes) lives on its own host, not on the workstation that holds development files and primary credentials. The agent is wrapped in OIQ sandboxes, so even within its host, capabilities are explicit and per-session. This combines perimeter isolation (separate machine) with per-sandbox isolation (OIQ) — two boundaries instead of one. Aligns with the dep-careful + harness-yolo split threat model in `memory/user_dep_hygiene.md`.
+**Threat-model alignment.** The autonomous agent (Hermes) lives on its own host, not on the workstation that holds development files and primary credentials. The agent is wrapped in Whizzard sandboxes, so even within its host, capabilities are explicit and per-session. This combines perimeter isolation (separate machine) with per-sandbox isolation (Whizzard) — two boundaries instead of one. Aligns with the dep-careful + harness-yolo split threat model in `memory/user_dep_hygiene.md`.
 
 **Separation of concerns.** Each machine has one job:
 - Mac Studio = workstation + ad-hoc heavy-model inference.
 - MBP = always-on agent host (and Linux-deployment validation environment for the eventual cloud VM).
 - Gaming PC = dedicated GPU inference, doesn't disturb workstation responsiveness, can be powered down when unused (Wake-on-LAN brings it up on demand).
-- Cloud VM (later) = production replacement for the MBP, when the MBP role is well-understood and OIQ-on-Linux is debugged.
+- Cloud VM (later) = production replacement for the MBP, when the MBP role is well-understood and Whizzard-on-Linux is debugged.
 
 **Tailscale as the bus.** MagicDNS lets the agent call `http://<host>.tailnet:11434/v1/...` by name. No public ports, no public DNS, no NAT punching. The private mesh is the entire networking story.
 
-**OIQ stays inference-endpoint-agnostic.** The Hermes adapter doesn't dictate which model endpoint is called; that's harness config. OIQ's containment posture works identically whether the agent calls api.anthropic.com or `http://<host>.tailnet:11434/v1`. No special OIQ code is needed to support this topology — it just works.
+**Whizzard stays inference-endpoint-agnostic.** The Hermes adapter doesn't dictate which model endpoint is called; that's harness config. Whizzard's containment posture works identically whether the agent calls api.anthropic.com or `http://<host>.tailnet:11434/v1`. No special Whizzard code is needed to support this topology — it just works.
 
 ## Inference tiering
 
@@ -83,7 +81,7 @@ Three tiers, used by the agent on the MBP based on model-class requirements:
 
 3. **Frontier tier — Cloud APIs.** Anthropic / OpenAI / OpenRouter / etc. for queries that need frontier-quality reasoning that no local model can match. OneCLI-mediated credentials per D-134.
 
-The Hermes-side config decides which endpoint to call; routing logic lives in Hermes (or in a future routing skill), not in OIQ.
+The Hermes-side config decides which endpoint to call; routing logic lives in Hermes (or in a future routing skill), not in Whizzard.
 
 ## What's already in place
 
@@ -91,10 +89,10 @@ The Hermes-side config decides which endpoint to call; routing logic lives in He
 - **Ollama on Mac Studio**: installed, models curated and validated.
 - **Ollama on Gaming PC**: installed, models curated and validated.
 - **OneCLI**: configured on Mac Studio with platform credentials.
-- **OIQ + Hermes integration**: in development on Mac Studio (the MVP work). Will be validated locally before any deployment migration.
+- **Whizzard + Hermes integration**: in development on Mac Studio (the MVP work). Will be validated locally before any deployment migration.
 - **2015 MacBook Pro 15"**: hardware in hand, brand-new battery (recall replacement, ~1 year old), needs OS wipe and Linux install.
 
-## What's required to execute (post-MVP)
+## What's required to execute
 
 The actual delta from current state to the four-machine topology is small:
 
@@ -103,8 +101,8 @@ The actual delta from current state to the four-machine topology is small:
 3. **Configure clamshell mode**: set `systemd-logind` so closing the lid doesn't suspend; keep on permanent power.
 4. **Join Tailscale**: `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`. Note the MagicDNS hostname.
 5. **Install Docker** (standard Linux Docker, not Docker Desktop).
-6. **Install OIQ** (the renamed package, post-D-158).
-7. **Migrate Hermes profile** from Mac Studio to MBP per the planned D-86 Migrate path — clone `~/.hermes-whizzard-sandbox` to the MBP via scp / git / rsync; update the harness config's `hermes_home`.
+6. **Install Whizzard** (`pip install whizzard`).
+7. **Migrate Hermes profile** from Mac Studio to MBP — clone `~/.hermes-whizzard-sandbox` to the MBP via scp / git / rsync; update the harness config's `hermes_home`.
 8. **Configure Hermes** to point at local Ollama endpoints over Tailscale for the model calls that should route locally.
 9. **Wake-on-LAN setup** on the Gaming PC: enable WoL in BIOS + NIC settings; configure a small script that sends the magic packet when the agent on the MBP needs inference and the Gaming PC is asleep; auto-shutdown after N minutes idle.
 10. **Validate end-to-end**: start a Hermes session on the MBP, issue a Discord command, confirm Tailscale-routed inference works, confirm state persists across container restarts via the HERMES_HOME mount.
@@ -127,9 +125,9 @@ Total estimate: one focused weekend.
 
 ## OSS-launch positioning notes
 
-This topology is reproducible by any user with similar hardware. Three open-source tools (OIQ, Tailscale, Ollama) + three commonly-owned machine classes (workstation, secondary box, gaming/AI PC) + one weekend = a self-hosted agent stack with capability containment, private inference, and no cloud trust chain. Worth mentioning as a recommended deployment pattern in the OSS README and `docs/examples/` — likely as `docs/examples/deployments/home_lab/` with a copy-paste setup walkthrough.
+This topology is reproducible by any user with similar hardware. Three open-source tools (Whizzard, Tailscale, Ollama) + three commonly-owned machine classes (workstation, secondary box, gaming/AI PC) + one weekend = a self-hosted agent stack with capability containment, private inference, and no cloud trust chain. Worth mentioning as a recommended deployment pattern in the OSS README and `docs/examples/` — likely as `docs/examples/deployments/home_lab/` with a copy-paste setup walkthrough.
 
-The narrative angle to lean into: "you already own most of this." Not "buy a Mac mini" or "rent a VM" — *use what's on your desk*. The differentiator from existing self-hosted-agent stories is OIQ's per-sandbox containment layer turning the hand-rolled isolation checklist (Docker, mounts, network policy, credential scoping, audit logs) into a single opinion-having tool.
+The narrative angle to lean into: "you already own most of this." Not "buy a Mac mini" or "rent a VM" — *use what's on your desk*. The differentiator from existing self-hosted-agent stories is Whizzard's per-sandbox containment layer turning the hand-rolled isolation checklist (Docker, mounts, network policy, credential scoping, audit logs) into a single opinion-having tool.
 
 ## Open questions to revisit at execution time
 
