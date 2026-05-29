@@ -244,3 +244,107 @@ def test_hermes_profile_detection_returns_none_when_absent(
 
     detected = iw._hermes_profile_already_exists()
     assert detected is None
+
+
+# ---------- step 1b: Hermes profile setup ----------
+
+
+def _stub_step_1_to_succeed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Helper: skip Step 1 so a test can focus on later steps."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+
+def test_init_step_1b_branch_a_clones_hermes_profile(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """When ~/.hermes/ exists, Branch A triggers and clones to ~/.hermes-whizz/."""
+    _stub_step_1_to_succeed(monkeypatch)
+
+    # Fake host with ~/.hermes/ present.
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()
+    hermes = fake_home / ".hermes"
+    hermes.mkdir()
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    from whizzard import init_wizard as iw
+
+    # Mock the cloner so no real Hermes adapter primitive runs.
+    cloner_calls: list[tuple[str, Path]] = []
+
+    def _fake_cloner(name: str, source: Path) -> Path:
+        cloner_calls.append((name, source))
+        return fake_home / f".hermes-{name}"
+
+    monkeypatch.setattr(iw, "_default_hermes_cloner", _fake_cloner)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    assert "Hermes detected" in result.output
+    assert "✓" in result.output and "whizz" in result.output
+    assert len(cloner_calls) == 1
+    assert cloner_calls[0][0] == "whizz"
+    assert cloner_calls[0][1] == hermes
+
+
+def test_init_step_1b_branch_b_shows_install_instructions(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """When ~/.hermes/ is absent, Branch B shows the install link
+    and the wizard continues without cloning."""
+    _stub_step_1_to_succeed(monkeypatch)
+
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()  # no ~/.hermes/
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    from whizzard import init_wizard as iw
+
+    def _cloner_should_not_run(name: str, source: Path) -> Path:
+        raise AssertionError("cloner should not run in Branch B")
+
+    monkeypatch.setattr(iw, "_default_hermes_cloner", _cloner_should_not_run)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    assert "Hermes is not yet installed" in result.output
+    assert "github.com/NousResearch/hermes-agent" in result.output
+    assert "whiz hermes profile create whizz" in result.output
+
+
+def test_init_step_1b_clone_failure_does_not_abort_wizard(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """If the clone raises, the wizard logs the error and continues —
+    the user can retry the profile clone later."""
+    _stub_step_1_to_succeed(monkeypatch)
+
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()
+    (fake_home / ".hermes").mkdir()
+
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    from whizzard import init_wizard as iw
+
+    def _failing_cloner(name: str, source: Path) -> Path:
+        raise RuntimeError("simulated clone failure")
+
+    monkeypatch.setattr(iw, "_default_hermes_cloner", _failing_cloner)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    # The wizard should NOT crash with the cloner's exception.
+    assert result.exit_code == 0
+    assert "profile clone failed" in result.output
+    assert "simulated clone failure" in result.output

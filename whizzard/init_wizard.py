@@ -275,6 +275,153 @@ def _default_build_runner(argv: list[str]) -> int:
     return completed.returncode
 
 
+# ---------- Hermes profile clone ----------
+
+
+def _clone_hermes_profile(
+    name: str,
+    source: Path,
+    cloner: Callable[[str, Path], Path] | None = None,
+) -> Path:
+    """Invoke the existing Hermes profile clone primitive.
+
+    Wrapped so tests can substitute a fake. The real implementation
+    calls the same code path as `whiz hermes profile create <name>
+    --clone-from <source>`.
+    """
+    if cloner is None:
+        cloner = _default_hermes_cloner
+    return cloner(name, source)
+
+
+def _default_hermes_cloner(name: str, source: Path) -> Path:
+    """Default Hermes profile clone — uses the adapter's existing
+    create_hermes_profile primitive (Stage 8 / D-80 / D-86)."""
+    from whizzard.adapters import create_hermes_profile
+
+    result = create_hermes_profile(name, clone_from=str(source))
+    return result.path
+
+
+def step_1b_hermes_profile(
+    state: WizardState,
+    cloner: Callable[[str, Path], Path] | None = None,
+) -> None:
+    """Step 1b — set up the Hermes profile sandbox sessions will use.
+
+    Detects ``~/.hermes/`` on the host:
+    - Present (Branch A): offer to clone it into ``~/.hermes-whizz/``
+    - Absent (Branch B): print install instructions, continue setup
+
+    Either branch leaves ``whiz init`` runnable to completion — Branch B
+    users just need to install Hermes + create a profile before the
+    bundled "hermes" preset will launch a working session.
+    """
+    console.print()
+    console.print("[bold]Step 1b of 5 — Hermes profile setup[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "The sandbox is built and ready. Hermes also needs a profile — "
+        "a folder on your computer that holds the agent's model config "
+        "(which LLM to use), persona, memories, and skills. Whizzard "
+        "reads from it when it launches Hermes inside the sandbox."
+    )
+    console.print()
+
+    detected = _hermes_profile_already_exists()
+
+    if detected is None:
+        # Branch B — Hermes not installed.
+        state.hermes_branch = "B"
+        console.print(
+            "[yellow]Hermes is not yet installed on your computer.[/yellow]"
+        )
+        console.print()
+        console.print("To finish Hermes setup, you'll need two things:")
+        console.print()
+        console.print("  1. [bold]Install Hermes on your computer[/bold]")
+        console.print("     [green]https://github.com/NousResearch/hermes-agent[/green]")
+        console.print("     (this gives you a starting profile at ~/.hermes/)")
+        console.print()
+        console.print("  2. [bold]Create a Whizzard profile that points at it[/bold]")
+        console.print("     Once Hermes is installed, run:")
+        console.print("       [green]whiz hermes profile create whizz[/green]")
+        console.print("     to copy your Hermes setup into ~/.hermes-whizz/, which")
+        console.print("     is what the bundled \"hermes\" preset uses.")
+        console.print()
+        console.print(
+            "You don't have to do this now. The rest of `whiz init` will still "
+            "run, and Whizzard's other commands work without Hermes. Just the "
+            "\"hermes\" preset won't launch a working session until the steps "
+            "above are done."
+        )
+        console.print()
+        if not state.non_interactive:
+            _pause_for_enter("Press Enter to continue with setup.")
+        return
+
+    # Branch A — Hermes detected; offer to clone.
+    state.hermes_branch = "A"
+    target = Path.home() / ".hermes-whizz"
+    console.print("[bold]Hermes detected on your computer.[/bold]")
+    console.print()
+    console.print(
+        f"You already have Hermes installed at [green]{detected}[/green]. "
+        "Whizzard can copy that setup into a profile that sessions inside "
+        "the sandbox will use. Your existing Hermes setup on the host is "
+        "not changed — Whizzard only reads from it."
+    )
+    console.print()
+    console.print(
+        f"The copy lives at [green]{target}[/green] and includes your "
+        "model config, persona, memories, and skills."
+    )
+    console.print()
+
+    if state.non_interactive:
+        # Default in --yes mode: clone the profile.
+        choice = 1
+    else:
+        console.print("[bold]Copy your Hermes setup into a Whizzard profile?[/bold]")
+        choice = _prompt_numeric_choice(
+            "Copy your Hermes setup?",
+            options=[
+                "Yes (recommended — gets you running right away)",
+                "No  (I'll set up a profile later with `whiz hermes profile create`)",
+            ],
+        )
+
+    if choice == 2:
+        # User declined the clone — leave a footer note.
+        console.print()
+        console.print(
+            "  [dim]Skipped. Run `whiz hermes profile create whizz` "
+            "when you're ready.[/dim]"
+        )
+        return
+
+    # Proceed with the clone.
+    console.print()
+    console.print(f"  [dim]cloning {detected} → {target} ...[/dim]")
+    try:
+        path = _clone_hermes_profile("whizz", detected, cloner=cloner)
+    except Exception as e:  # noqa: BLE001 -- surface anything the cloner raises
+        console.print(f"[red]profile clone failed:[/red] {e}")
+        console.print(
+            "You can retry later with [green]whiz hermes profile create whizz[/green]."
+        )
+        return
+    state.hermes_profile_path = path
+    console.print(f"  [green]✓[/green] profile \"whizz\" created at {path}")
+    console.print()
+    console.print(
+        "  [dim italic]For the curious: the bundled \"hermes\" preset in "
+        "step 4 uses this profile by default. To use a different profile, "
+        "create one with `whiz hermes profile create <name>`.[/dim italic]"
+    )
+
+
 # ---------- orchestration ----------
 
 
@@ -326,7 +473,8 @@ def run_wizard(
 
     step_welcome(state)
     step_1_image(state, build_runner=build_runner)
-    # Steps 1b through 5 + Done land in follow-up commits.
+    step_1b_hermes_profile(state)
+    # Steps 2 through 5 + Done land in follow-up commits.
 
     return state
 
