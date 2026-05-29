@@ -97,6 +97,28 @@ Open question for the v1.0 design conversation: should overlay-quarantine
 be the default, or shipped as `--strict-overlay` opt-in? Default-direction
 will be decided with user feedback in hand, not in isolation.
 
+### 11. Network policy: per-destination allowlist
+
+Today's network policy is a per-profile boolean: `on` (full outbound
+access) or `off` (no network at all, including DNS). v1.0 adds a third
+posture — an **allowlist** mode — where a profile declares the specific
+destinations the cell is allowed to reach (model endpoint, package
+index, configured webhooks). Everything else is dropped.
+
+The likely mechanical shape extends the OneCLI proxy pattern Whizzard
+already uses for credential mediation: the cell launches with
+`--network none` at the Docker layer (no direct egress) and routes
+outbound HTTPS through a host-side proxy that validates each
+destination against the profile's declared list. Same isolation
+primitive as `off`, with controlled egress added on top — no kernel
+capability changes inside the cell, no iptables rules to maintain.
+
+Sub-track: DNS gating. The current `off` posture blocks DNS as a
+side-effect of `--network none`; the current `on` posture allows DNS
+to anywhere. Allowlist mode needs an explicit answer for DNS (resolve
+only listed hostnames? proxy DNS through the host?). See the README
+"DNS-based exfiltration" residual-risk entry.
+
 ---
 
 ## How sequencing will evolve

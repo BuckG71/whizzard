@@ -26,9 +26,10 @@ host-side assets against actions taken (or instructed) by the agent:
    environment secrets, and Whizzard's own `auth.json` / future
    token stores must not be accessible to the agent at runtime nor
    leak via the audit log.
-3. **Network destinations.** Outbound HTTP traffic must respect the
-   profile's network policy (off / on / allowlisted). The agent
-   cannot reach destinations the user did not approve.
+3. **Network destinations.** Outbound traffic must respect the
+   profile's network policy (off / on at v0.1.0; off / on / allowlist
+   from v1.0 per ROADMAP.md goal 11). The agent cannot reach
+   destinations the user did not approve.
 4. **Future Whizzard sessions.** The agent must not be able to
    modify Whizzard's own configuration in a way that loosens
    policies for sessions that have not yet launched.
@@ -225,11 +226,18 @@ that establishes it.
 
 ### 4.3 Network destinations
 
+**v0.1.0 ships a boolean only**, not a per-destination allowlist. Profiles
+declare `network_enabled: true | false`; off-network profiles launch with
+`--network none` (no outbound, no DNS). On-network profiles get full
+unrestricted egress.
+
 | Defense | Reference |
 |---|---|
 | Profiles include explicit `network_enabled` boolean; off-network profiles launch with `--network none` | D-39 |
-| Default profile is "SAFE-NET" — network on with no mounts and no broad-mount override; explicit baseline rather than implicit default | D-38 |
-| Allowlist-style network restriction (per-destination) is on the v1.0 roadmap; v0.1.0 ships boolean on/off | Per `ROADMAP.md` v1.0 primary goal |
+| Default profile is "SAFE-NET" baseline — network on with no mounts and no broad-mount override; explicit baseline rather than implicit default | D-38 |
+| Bundled `safe` and `quarantine` profiles ship with network `off` for use against untrusted content | `whizzard/config.py:_DEFAULT_PROFILES` |
+| Per-destination allowlist mode is **tagged for v1.0** (ROADMAP.md goal 11). Likely mechanical shape: `--network none` at the Docker layer + a host-side egress proxy (extending the OneCLI proxy pattern) that validates each destination against the profile's declared list before forwarding | ROADMAP.md goal 11 |
+| DNS-based exfiltration gating is a sub-track of the v1.0 allowlist work; today, `off` blocks DNS as a side effect of `--network none`, `on` allows DNS to anywhere | ROADMAP.md goal 11 sub-track |
 
 ### 4.4 Future Whizzard sessions
 
@@ -414,12 +422,14 @@ explicitly before they land on the host filesystem.
 
 ### 6.2 DNS-based exfiltration
 
-**Risk:** when network is allowed, an agent can encode data in
-DNS lookups even to hostnames not in the (future) allowlist.
+**Risk:** when network is on, an agent can encode data in DNS
+lookups. v0.1.0 does not gate DNS independently of the on/off
+boolean — `off` blocks DNS as a side effect of `--network none`;
+`on` allows DNS to anywhere.
 
-**Mitigation roadmap:** per-profile constrained-DNS option under
-consideration for v1.0; not blocking. For high-stakes work today,
-the `safe` or `quarantine` profile's `network_enabled=False`
+**Mitigation roadmap:** DNS gating is a sub-track of the v1.0
+network-allowlist work (ROADMAP.md goal 11). For high-stakes work
+today, the `safe` or `quarantine` profile's `network_enabled=False`
 posture blocks DNS too.
 
 ### 6.3 Container escape via kernel CVE
