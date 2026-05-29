@@ -721,6 +721,404 @@ def _write_mounts(mounts: dict[str, dict]) -> None:
     MOUNTS_FILE.write_text(json.dumps(payload, indent=2) + "\n")
 
 
+def step_4_presets(state: WizardState) -> None:
+    """Step 4 — define a preset, optionally attaching registered folders.
+
+    Writes both ``harnesses.json`` (the wizard-bundled hermes-cell entry
+    pointing at ``~/.hermes-whizz/``) and ``presets.json``.
+    """
+    console.print()
+    console.print("[bold]Step 4 of 5 — Presets[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "Whizzard doesn't ship its own agent. It gives you a hardened "
+        "place to run other people's agents. A \"harness\" is the actual "
+        "AI agent runtime that runs inside the sandbox. The Hermes "
+        "harness — which you set up in step 1b — is registered for you. "
+        "Whizzard currently only supports the Hermes Agent harness but "
+        "intends to extend support to additional agent harnesses in the "
+        "future."
+    )
+    console.print()
+    console.print("Presets:")
+    console.print()
+    console.print(
+        "Instead of typing out the profile, harness, and folders every "
+        "time you launch, you save those choices under a short name — a "
+        "preset — and Whizzard remembers them. Then:"
+    )
+    console.print()
+    console.print("  [green]whiz r hermes[/green]")
+    console.print()
+    console.print(
+        "launches whatever you wired into the \"hermes\" preset."
+    )
+    console.print()
+    console.print("Whizzard ships one preset:")
+    console.print()
+    console.print(
+        "  [bold]hermes[/bold]  preset uses the \"default\" profile and "
+        "the \"hermes\" harness"
+    )
+    console.print()
+
+    # Write harnesses.json — wizard-customized hermes-cell pointing at
+    # the profile dir we created in Step 1b.
+    _write_wizard_harnesses()
+
+    if state.non_interactive:
+        choice = 1
+    else:
+        console.print("[bold]Use the bundled \"hermes\" preset?[/bold]")
+        choice = _prompt_numeric_choice(
+            "Preset setup",
+            options=[
+                "Yes [dim](recommended)[/dim]",
+                "No — let me define my own now",
+                "Skip — I'll set up presets later [dim](advanced)[/dim]",
+            ],
+        )
+
+    if choice == 3:
+        # Skip — write an empty presets.json so subsequent commands have
+        # the file shape even if it has no entries.
+        _write_presets({})
+        state.preset_count = 0
+        state.preset_names = []
+        console.print()
+        console.print(
+            f"  [green]✓[/green] wrote {PRESETS_FILE} (0 presets) — "
+            "[dim]add later with `whiz preset --help`[/dim]"
+        )
+        return
+
+    if choice == 2:
+        presets = _step_4_custom_preset_subflow(state)
+    else:
+        # Choice 1: bundled preset, then per-mount attach prompts.
+        attached = _step_4_attach_mounts_prompt(state)
+        presets = {
+            "hermes": {
+                "profile": "default",
+                "harness": "hermes-cell",
+                "mounts": attached,
+                "description": "Hermes session (uses ~/.hermes-whizz profile)",
+            }
+        }
+
+    _write_presets(presets)
+    state.preset_count = len(presets)
+    state.preset_names = list(presets.keys())
+    attached_summary = ""
+    if presets and any(p.get("mounts") for p in presets.values()):
+        mount_names = [
+            ", ".join(p["mounts"])
+            for p in presets.values() if p.get("mounts")
+        ]
+        attached_summary = f", attached: {'; '.join(mount_names)}"
+    console.print()
+    console.print(
+        f"  [green]✓[/green] wrote {HARNESSES_FILE} (1 harness)"
+    )
+    console.print(
+        f"  [green]✓[/green] wrote {PRESETS_FILE} ("
+        f"{len(presets)} preset{'s' if len(presets) != 1 else ''}{attached_summary})"
+    )
+    console.print()
+    console.print(
+        "  [dim italic]For the curious: to change the preset later, "
+        "see `whiz preset --help`.[/dim italic]"
+    )
+
+
+def _step_4_attach_mounts_prompt(state: WizardState) -> list[str]:
+    """Ask the user which registered mounts to attach to the bundled
+    "hermes" preset.
+
+    Returns the list of mount names to attach. Handles 0 / 1 / 2+ cases:
+    - 0 mounts: skip the prompt entirely.
+    - 1 mount: single yes/no.
+    - 2+ mounts: per-mount yes/no loop.
+
+    In non-interactive mode, every registered mount is attached.
+    """
+    if not state.mount_names:
+        return []
+
+    if state.non_interactive:
+        return list(state.mount_names)
+
+    attached: list[str] = []
+    if len(state.mount_names) == 1:
+        name = state.mount_names[0]
+        console.print()
+        console.print("[bold]Attach a folder to your preset?[/bold]")
+        console.print()
+        console.print(
+            f"Your \"{name}\" folder is registered (from step 3). You can "
+            "attach it to the preset, which means it'll be mounted every "
+            "time you launch a session with that preset. You can change "
+            "the attachment later."
+        )
+        console.print()
+        choice = _prompt_numeric_choice(
+            "Attach folder",
+            options=[
+                f"Yes, attach \"{name}\"",
+                "No, leave the preset without a folder",
+            ],
+        )
+        if choice == 1:
+            attached.append(name)
+        return attached
+
+    # 2+ mounts.
+    console.print()
+    console.print("[bold]Attach folders to your preset?[/bold]")
+    console.print()
+    console.print(
+        f"You have {len(state.mount_names)} folders registered (from "
+        "step 3). An attached folder is mounted every time you launch a "
+        "session with this preset. You can change attachments later."
+    )
+    console.print()
+    for name in state.mount_names:
+        console.print(f"[bold]Attach \"{name}\" to the \"hermes\" preset?[/bold]")
+        choice = _prompt_numeric_choice(
+            f"Attach {name}",
+            options=["Yes", "No"],
+        )
+        if choice == 1:
+            attached.append(name)
+        console.print()
+    return attached
+
+
+def _step_4_custom_preset_subflow(state: WizardState) -> dict[str, dict]:
+    """Walk the user through defining custom presets. Returns the dict
+    of preset_name → preset_spec that will be written to presets.json.
+    """
+    console.print()
+    console.print("[bold]Define your own preset[/bold]")
+    console.print()
+
+    created: dict[str, dict] = {}
+    first = True
+    while True:
+        if first:
+            first = False
+        else:
+            console.print()
+            console.print("[dim]──────── Next preset ────────[/dim]")
+        console.print()
+        console.print(
+            "Pick a short name for this preset (lowercase, no spaces):"
+        )
+        name = _prompt_text("  name").strip().lower().replace(" ", "")
+        if not name:
+            console.print("[yellow]name required.[/yellow] try again.")
+            continue
+        if name in created:
+            console.print(
+                f"[yellow]\"{name}\" already defined this session — "
+                "pick a different name.[/yellow]"
+            )
+            continue
+
+        # Profile selection.
+        console.print()
+        console.print("[bold]Which profile should this preset use?[/bold]")
+        profile_options = state.profile_names or ["default"]
+        choice = _prompt_numeric_choice("Profile", options=profile_options)
+        profile_name = profile_options[choice - 1]
+
+        # Harness (only hermes today).
+        console.print()
+        console.print(
+            "Harness: hermes (the only supported harness today)"
+        )
+
+        # Attach folders (per-mount loop or single yes/no).
+        attached: list[str] = []
+        if state.mount_names:
+            console.print()
+            for mount_name in state.mount_names:
+                console.print(
+                    f"[bold]Attach your \"{mount_name}\" folder to this preset?[/bold]"
+                )
+                a_choice = _prompt_numeric_choice(
+                    f"Attach {mount_name}",
+                    options=["Yes", "No"],
+                )
+                if a_choice == 1:
+                    attached.append(mount_name)
+                console.print()
+
+        # Review.
+        console.print("[dim]──────── Review ────────[/dim]")
+        console.print(f"  name:     {name}")
+        console.print(f"  profile:  {profile_name}")
+        console.print("  harness:  hermes")
+        console.print(
+            "  folders:  "
+            + (", ".join(attached) if attached else "(none)")
+        )
+        console.print()
+        save_choice = _prompt_numeric_choice(
+            "Save this preset?",
+            options=["Yes, save and continue", "No, start over"],
+        )
+        if save_choice == 2:
+            console.print("[yellow]discarded.[/yellow] starting over.")
+            continue
+
+        created[name] = {
+            "profile": profile_name,
+            "harness": "hermes-cell",
+            "mounts": attached,
+            "description": "Custom preset created by `whiz init`",
+        }
+        console.print()
+        console.print(
+            f"  [green]✓[/green] preset \"{name}\" defined ({len(created)} total)"
+        )
+
+        console.print()
+        another = _prompt_numeric_choice(
+            "Add another preset?",
+            options=["Yes", "No, continue to step 5"],
+        )
+        if another == 2:
+            break
+
+    return created
+
+
+def _write_wizard_harnesses() -> None:
+    """Write a wizard-customized harnesses.json with just hermes-cell.
+
+    The bundled hermes-cell points at ~/.hermes-whizzard-cell by default
+    (Stage 10 era); the wizard overrides hermes_home to ~/.hermes-whizz
+    so it matches what step 1b created. The `generic` shell harness is
+    NOT written — per Stage 19 product decision, shell isn't a featured
+    user surface.
+    """
+    harnesses = {
+        "hermes-cell": {
+            "type": "agent",
+            "start_command": "hermes gateway run",
+            "wrap_up_command": "/quit",
+            "wrap_up_grace_seconds": 30,
+            "hermes_home": "~/.hermes-whizz",
+            "description": "Hermes (gateway mode) inside the Whizzard sandbox",
+        },
+    }
+    payload = {"schema_version": 1, "harnesses": harnesses}
+    HARNESSES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def _write_presets(presets: dict[str, dict]) -> None:
+    """Write the presets.json file."""
+    payload = {"schema_version": 1, "presets": presets}
+    PRESETS_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+
+
+def step_5_audit_log(state: WizardState) -> None:
+    """Step 5 — informational; explains the audit log location and shape."""
+    from whizzard.config import LOGS_DIR
+
+    log_path = LOGS_DIR / "sessions.jsonl"
+    console.print()
+    console.print("[bold]Step 5 of 5 — Audit log[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print("This step is informational — no choices to make.")
+    console.print()
+    console.print(
+        "Whizzard keeps a record of every agent session you run. The "
+        "record lives on your computer at:"
+    )
+    console.print()
+    console.print(f"  [green]{log_path}[/green]")
+    console.print()
+    console.print("For every session, Whizzard writes down:")
+    console.print()
+    console.print("  • when it started and stopped, and why it stopped")
+    console.print("  • which profile, harness, and folders it used")
+    console.print(
+        "  • the agent's own activity inside the sandbox, if it "
+        "chose to write any (an agent can announce what it's doing "
+        "through Whizzard's reporting channel)"
+    )
+    console.print()
+    console.print("Three things to know:")
+    console.print()
+    console.print("  • [italic]The record is yours.[/italic] Nothing is sent anywhere.")
+    console.print(
+        "  • [italic]The record is plain text.[/italic] One JSON entry per "
+        "line — you can grep it, open it in any editor, or feed it to a "
+        "script."
+    )
+    console.print(
+        "  • [italic]The record is append-only by Whizzard.[/italic] You "
+        "can delete or archive the file yourself, but Whizzard never "
+        "rewrites past entries."
+    )
+    console.print()
+    if not state.non_interactive:
+        _pause_for_enter("Press Enter to finish setup.")
+
+
+def step_done_summary(state: WizardState) -> None:
+    """Final page — recap what was set up and suggest first commands."""
+    from whizzard.config import LOGS_DIR
+
+    console.print()
+    console.print("[bold green]Setup complete.[/bold green]")
+    console.print("─" * 48)
+    console.print()
+    console.print("Here's what you set up:")
+    console.print()
+    image_status = "[green]✓ built[/green]" if state.hermes_image_built else "—"
+    console.print(f"  Sandbox image:     {WHIZZARD_HERMES_IMAGE}        {image_status}")
+    if state.hermes_profile_path is not None:
+        console.print(
+            f"  Hermes profile:    {state.hermes_profile_path}        "
+            "[green]✓ cloned[/green]"
+        )
+    elif state.hermes_branch == "B":
+        console.print(
+            "  Hermes profile:    [yellow](not yet — install Hermes "
+            "and run `whiz hermes profile create whizz`)[/yellow]"
+        )
+    profiles_str = ", ".join(state.profile_names) if state.profile_names else "(none)"
+    console.print(f"  Profiles:          {profiles_str}        [green]{len(state.profile_names)}[/green]")
+    if state.mount_names:
+        mounts_str = ", ".join(state.mount_names)
+        console.print(
+            f"  Mounted folders:   {mounts_str}        [green]{state.mount_count}[/green]"
+        )
+    else:
+        console.print("  Mounted folders:   (none)        [green]0[/green]")
+    presets_str = ", ".join(state.preset_names) if state.preset_names else "(none)"
+    console.print(f"  Preset:            {presets_str}        [green]{state.preset_count}[/green]")
+    console.print(f"  Audit log:         {LOGS_DIR / 'sessions.jsonl'}")
+    console.print()
+    console.print("A few first commands to try:")
+    console.print()
+    console.print(
+        "  [green]whiz[/green]              "
+        "show what's running and what you have set up"
+    )
+    if state.preset_count and "hermes" in state.preset_names:
+        console.print(
+            "  [green]whiz r hermes[/green]     launch a Hermes session"
+        )
+    console.print("  [green]whiz --help[/green]       list every command")
+    console.print()
+
+
 def _prompt_positive_int(label: str) -> int:
     """Prompt for a positive integer, re-prompting until valid."""
     while True:
@@ -912,7 +1310,9 @@ def run_wizard(
     step_1b_hermes_profile(state)
     step_2_profiles(state)
     step_3_mounts(state)
-    # Step 4, Step 5, Done land in the next commit.
+    step_4_presets(state)
+    step_5_audit_log(state)
+    step_done_summary(state)
 
     return state
 

@@ -398,6 +398,8 @@ def test_init_step_2_minimal_writes_safe_and_default(
         "",        # step 1b (Branch B) Press Enter
         "2",       # step 2: minimal subset
         "2",       # step 3: no folders
+        "1",       # step 4: bundled hermes preset
+        "",        # step 5 Press Enter
     ]) + "\n"
     result = runner.invoke(app, ["init"], input=user_input)
     assert result.exit_code == 0
@@ -444,7 +446,10 @@ def test_init_step_3_interactive_adds_one_folder(
         "scratch",               # name
         "scratch projects",      # description
         "2",                     # mode: read-write
-        "2",                     # add another? No
+        "2",                     # add another folder? No
+        "1",                     # step 4: bundled hermes preset
+        "2",                     # attach scratch? No
+        "",                      # step 5 Press Enter
     ]) + "\n"
 
     result = runner.invoke(app, ["init"], input=user_input)
@@ -460,6 +465,115 @@ def test_init_step_3_interactive_adds_one_folder(
     assert mount["description"] == "scratch projects"
 
 
+# ---------- step 4 + 5 + done ----------
+
+
+def test_init_yes_mode_full_flow_writes_all_four_config_files(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """End-to-end --yes run produces a valid first-time-user config."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    assert "Setup complete" in result.output
+
+    from whizzard import init_wizard as iw
+
+    assert iw.PROFILES_FILE.exists()
+    assert iw.MOUNTS_FILE.exists()
+    assert iw.HARNESSES_FILE.exists()
+    assert iw.PRESETS_FILE.exists()
+
+    presets = json.loads(iw.PRESETS_FILE.read_text())["presets"]
+    assert "hermes" in presets
+    assert presets["hermes"]["harness"] == "hermes-cell"
+    assert presets["hermes"]["profile"] == "default"
+    # No mounts registered in --yes mode, so the preset has no folders.
+    assert presets["hermes"]["mounts"] == []
+
+    harnesses = json.loads(iw.HARNESSES_FILE.read_text())["harnesses"]
+    assert "hermes-cell" in harnesses
+    assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-whizz"
+
+
+def test_init_step_4_attaches_registered_mount_in_full_interactive(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Full canonical trajectory: user adds one mount, attaches it to
+    the bundled hermes preset."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    user_input = "\n".join([
+        "",                      # welcome
+        "",                      # step 1
+        "",                      # step 1b (Branch B)
+        "1",                     # step 2: all 5
+        "1",                     # step 3: yes add folder
+        "~/code/scratch",        # path
+        "scratch",               # name
+        "scratch projects",      # description
+        "2",                     # mode: rw
+        "2",                     # add another? No
+        "1",                     # step 4: bundled hermes
+        "1",                     # attach scratch? Yes
+        "",                      # step 5 Press Enter
+    ]) + "\n"
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    presets = json.loads(iw.PRESETS_FILE.read_text())["presets"]
+    assert "hermes" in presets
+    assert presets["hermes"]["mounts"] == ["scratch"]
+    assert "scratch attached" in result.output or "scratch" in result.output
+
+
+def test_init_step_4_skip_writes_empty_presets(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Step 4 choice 3 (skip) writes an empty presets.json."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    user_input = "\n".join([
+        "",        # welcome
+        "",        # step 1
+        "",        # step 1b
+        "1",       # step 2: all 5
+        "2",       # step 3: no folders
+        "3",       # step 4: skip
+        "",        # step 5
+    ]) + "\n"
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    presets = json.loads(iw.PRESETS_FILE.read_text())["presets"]
+    assert presets == {}
+
+
+def test_init_done_summary_mentions_branch_b_state(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """In Branch B (no ~/.hermes/), the Done summary surfaces that
+    the user still needs to install Hermes + create a profile."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    assert "install Hermes" in result.output or "not yet" in result.output
+
+
 def test_init_step_2_custom_subflow_creates_one_profile(
     _isolated_whizzard_home: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -468,8 +582,7 @@ def test_init_step_2_custom_subflow_creates_one_profile(
     """Choice 3 (custom) walks the user through a single profile and saves."""
     _stub_through_step_1b(monkeypatch, tmp_path)
 
-    # Scripted user input: welcome-Enter, step1-Enter, step1b-Enter (Branch B),
-    # step2-choose-3, custom-profile sub-flow, then step 3 "no folders".
+    # Scripted user input: full canonical interactive trajectory.
     user_input = "\n".join([
         "",          # welcome Press Enter
         "",          # step 1 Press Enter
@@ -485,6 +598,8 @@ def test_init_step_2_custom_subflow_creates_one_profile(
         "1",         # save? Yes
         "2",         # add another profile? No
         "2",         # step 3: add a folder? No
+        "1",         # step 4: bundled hermes preset
+        "",          # step 5 Press Enter
     ]) + "\n"
 
     result = runner.invoke(app, ["init"], input=user_input)
