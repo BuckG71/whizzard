@@ -153,7 +153,6 @@ whizzard/
 - [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract, control layering
 - [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
 - [docs/decisions.md](docs/decisions.md) — append-only decisions index
-- [docs/examples/](docs/examples/) — integration recipes for wrapping `whiz` from agent harnesses (Claude Code, others)
 
 ## A note on naming
 

@@ -12,14 +12,6 @@ Whizzard is a local capability-governance layer for AI agents. Code-level orient
 
 - **[decisions.md](decisions.md)** — the canonical record for "why is it this way?". Append-only. Flat list of `D-NN` entries with a flat+tags schema (`Type:` for primary classification, `Tags:` from a curated vocabulary). Three navigation aids at the bottom: a `## Tag vocabulary` section, a `## Cross-references` section grouping decisions by their source doc, and an `## Open questions tracker` listing decisions currently in `open` status.
 
-## Deployment references
-
-- **[home_lab_deployment.md](home_lab_deployment.md)** — reference doc for a multi-machine, Tailscale-meshed deployment of Whizzard + a self-hosted agent on a home network. Captures architecture, sequencing, and constraints.
-
-## Harness integration examples
-
-- **[examples/](examples/)** — copy-paste recipes for using Whizzard inside specific harnesses. Currently ships `examples/claude_code/` (Claude Code skill files wrapping the CLI) and `examples/hermes/` (full Hermes adapter setup walkthrough). Other harnesses welcome via PR. See `examples/README.md` for contribution guidance and the design rationale.
-
 ## Architecture reference
 
 - **[reference/whizzard-architecture.html](reference/whizzard-architecture.html)** — self-contained architecture overview rendered for quick browsing.
