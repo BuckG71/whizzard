@@ -107,29 +107,25 @@ def ollama_reachable(whizzard_hermes_image: str) -> bool:
 
 @pytest.fixture(scope="session")
 def whizzard_hermes_image() -> str:
-    """Ensure `whizzard-hermes:latest` exists; build it from the bundled
-    `Dockerfile.hermes` with the project root as context if not.
-    Used by Tranche B smokes that need the in-cell MCP deployment per D-167.
+    """Ensure `whizzard-hermes:latest` exists; build it via `whiz hermes
+    image build` if not. Used by Tranche B smokes that need the in-cell
+    MCP deployment per D-167.
+
+    Stage 19 / M3.5: switched from raw ``docker build`` to the new
+    ``whiz hermes image build`` CLI verb so every integration run also
+    exercises the CLI path end-to-end (closes the M2 smoke gap).
     """
     if _image_present(WHIZZARD_HERMES_IMAGE):
         return WHIZZARD_HERMES_IMAGE
 
-    dockerfile = REPO_ROOT / "whizzard" / "_dockerfiles" / "Dockerfile.hermes"
-    if not dockerfile.exists():
-        pytest.skip(
-            f"Dockerfile.hermes not found at {dockerfile}",
-            allow_module_level=True,
-        )
-
-    # Context is the project root so `COPY whizzard/mcp_server.py` resolves.
     result = subprocess.run(
-        ["docker", "build", "-t", WHIZZARD_HERMES_IMAGE,
-         "-f", str(dockerfile), str(REPO_ROOT)],
+        ["whiz", "hermes", "image", "build", "--image", WHIZZARD_HERMES_IMAGE],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
         pytest.fail(
-            f"failed to build {WHIZZARD_HERMES_IMAGE}:\n"
+            f"failed to build {WHIZZARD_HERMES_IMAGE} via "
+            f"`whiz hermes image build`:\n"
             f"stdout: {result.stdout[-2000:]}\n"
             f"stderr: {result.stderr[-2000:]}"
         )
