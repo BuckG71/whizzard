@@ -80,7 +80,12 @@ pass. Pre-OSS-launch gate.
 
 ### Whizzard → Osmotiq rename
 Triggered after MVP operational, before Hermes migration. CLI becomes `oiq`;
-`osmotiq.ai` owned.
+`osmotiq.ai` owned. **Wizard rename ripple:** `whiz init`'s detect-and-clone
+flow creates `~/.hermes-whizz/` as the Hermes profile target; when the
+product name changes, that path needs to rename in lockstep (likely
+`~/.hermes-oiq/` or whatever the final CLI name becomes). User-facing
+migration: `mv ~/.hermes-whizz ~/.hermes-oiq` + update any presets that
+reference it.
 *Source:* D-158.
 
 ### `ADAPTER_SPEC.md` (OSS-launch artifact)
