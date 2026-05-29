@@ -24,7 +24,7 @@ Equivalents: `whiz sessions tail`, `whizzard sessions tail`. Until the OIQ renam
 
 ## Output to expect
 
-Raw JSONL lines from `~/.whizzard/logs/sessions.jsonl`. Each line is one event — `session_start`, `session_end`, or an agent-emitted event from the in-cell MCP server. Fields include timestamps, session IDs, profile, image, mounts, exit status, etc.
+Raw JSONL lines from `~/.whizzard/logs/sessions.jsonl`. Each line is one event — `session_start`, `session_end`, or an agent-emitted event from the in-sandbox MCP server. Fields include timestamps, session IDs, profile, image, mounts, exit status, etc.
 
 If the log file doesn't exist yet (no sessions ever launched), OIQ prints "no session log yet" with the expected path.
 

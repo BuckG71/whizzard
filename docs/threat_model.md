@@ -9,6 +9,11 @@ and adopters.
 Status: drafted as Stage 20 deliverable 1 (Security Review &
 Hardening Audit). See `docs/known_issues.md` for unresolved items.
 
+**Terminology:** "sandbox" throughout this document refers to the
+hardened Docker container Whizzard launches each agent session
+inside. Equivalent terms in earlier drafts ("cell", "execution
+cell") map to the same concept.
+
 ---
 
 ## 1. What Whizzard is protecting
@@ -56,10 +61,10 @@ and the README "Scope and limitations" section.
 │  User's credential stores (OneCLI vault, host env)         │
 │  User's filesystem (except registered mounts)              │
 │  - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
-│  Trust boundary: cell launch (one-way capability flow)     │
+│  Trust boundary: sandbox launch (one-way capability flow)     │
 │  - - - - - - - - - - - - - - - - - - - - - - - - - - - -  │
 │                                                            │
-│  CELL (execution plane — hardened container)               │
+│  SANDBOX (execution plane — hardened container)               │
 │                                                            │
 │  Agent runtime (Hermes, future adapters)                   │
 │  Tool execution                                            │
@@ -70,16 +75,16 @@ and the README "Scope and limitations" section.
 │  tmpfs at /home/whizzard (writable scratch)                │
 │  Non-root user (UID 1000)                                  │
 │  no-new-privileges set                                     │
-│  Whiz in-cell MCP server (cooperation layer)               │
+│  Whiz in-sandbox MCP server (cooperation layer)               │
 └────────────────────────────────────────────────────────────┘
 ```
 
-The cell-launch boundary is **one-way**: capabilities can only
+The sandbox-launch boundary is **one-way**: capabilities can only
 narrow after launch, never widen. A mid-session escalation requires
 stop+restart at the host, mediated by Whizzard, never by the agent
 acting alone (D-27).
 
-### Within the cell — control layering (D-architecture)
+### Within the sandbox — control layering (D-architecture)
 
 Whizzard's controls compose in three concentric layers; this
 threat model focuses on the **enforcement** layer (the outermost,
@@ -116,7 +121,7 @@ data outside the operator's intent. The agent may be:
 - Trained or fine-tuned with adversarial objectives (rare)
 
 The agent has access to whatever capabilities its profile + mounts
-grant. It can issue arbitrary shell commands within the cell. It
+grant. It can issue arbitrary shell commands within the sandbox. It
 cannot bypass the enforcement layer by issuing commands; that would
 require a kernel-level escape (§6).
 
@@ -137,7 +142,7 @@ the harness allows.
 Whizzard's enforcement layer — the threat is structurally identical
 because Whizzard never trusted the behavioral layer to be the only
 defense. The hardening differential (D-93) is the load-bearing
-mitigation here: a compromised harness inside the cell still cannot
+mitigation here: a compromised harness inside the sandbox still cannot
 break out of the kernel-surface constraints Whizzard imposes.
 
 ### 3.3 Indirect injection via mounted content
@@ -149,16 +154,16 @@ file, a malicious `Makefile` target, a binary the agent runs).
 
 **Risk posture:** Whizzard does not prevent the agent from running
 files it has read access to. The mount registry bounds *which*
-files can reach the cell; the harness's behavioral layer is
+files can reach the sandbox; the harness's behavioral layer is
 responsible for "should I actually run this." Once the agent runs
-something, it executes inside the cell's enforcement constraints
+something, it executes inside the sandbox's enforcement constraints
 (see deferred-execution residual risk in §6 — addressed at v1.0
 by D-135 overlay-quarantine).
 
 ### 3.4 Compromised supply chain
 
 A dependency of Whizzard (or of the agent harness, or of the base
-Debian image) ships malicious code that activates in the cell.
+Debian image) ships malicious code that activates in the sandbox.
 
 **Risk posture:** partially mitigated:
 
@@ -173,11 +178,11 @@ Residual risks tracked in §6.
 
 ### 3.5 Compromised host
 
-If the user's host is already controlled by an attacker (rootkit,
-compromised OS, malicious admin), Whizzard can no longer defend
-anything — the attacker controls the Docker daemon, the config
-files, the audit log, and the user's keystrokes. This is explicitly
-out of scope (SECURITY.md §Scope).
+If the user's host is already controlled by an attacker prior to
+installation of Whizzard (rootkit, compromised OS, malicious admin),
+Whizzard can no longer defend anything — the attacker controls the
+Docker daemon, the config files, the audit log, and the user's
+keystrokes. This is explicitly out of scope (SECURITY.md §Scope).
 
 ### 3.6 Insider / operator error
 
@@ -207,20 +212,20 @@ that establishes it.
 |---|---|
 | Mount registry is the ceiling, not a default — paths not declared cannot be reached, period | D-11 |
 | Mount validation rejects unsafe targets: `/`, `$HOME`, dotfile directories, credential paths, parent-of-registered traversal | D-42 / D-43 |
-| Symlinks are resolved before validation; the cell sees the resolved path, not the original symlink target | D-43 |
-| Cell rootfs is `--read-only`; writes go to declared rw mounts or to tmpfs at `/home/whizzard` | D-12 |
+| Symlinks are resolved before validation; the sandbox sees the resolved path, not the original symlink target | D-43 |
+| Sandbox rootfs is `--read-only`; writes go to declared rw mounts or to tmpfs at `/home/whizzard` | D-12 |
 | `--cap-drop=ALL` + `--security-opt no-new-privileges` prevents using kernel capabilities or setuid binaries to bypass mount constraints | D-93 |
-| Non-root cell user (UID 1000) means even an in-cell privilege escalation runs without host root | D-12 |
+| Non-root sandbox user (UID 1000) means even an in-sandbox privilege escalation runs without host root | D-12 |
 | Once a session starts, the mount list is locked for the session; no flag, agent request, or edit can change what's mounted (mid-session adjust requires stop+restart via D-27) | D-9 / D-11 / D-27 |
 
 ### 4.2 Credentials
 
 | Defense | Reference |
 |---|---|
-| OneCLI vault integration: credentials never enter the cell as plaintext env vars; cell-side HTTP traffic is mediated by an OneCLI proxy that injects credentials at the wire | D-91 / D-98 / D-134 |
+| OneCLI vault integration: credentials never enter the sandbox as plaintext env vars; sandbox-side HTTP traffic is mediated by an OneCLI proxy that injects credentials at the wire | D-91 / D-98 / D-134 |
 | Host env fallback path emits a warning visible in `active_capabilities()` so operators see when credentials originate from less-protected sources | D-89 / D-90 |
 | Hermes `auth.json` and per-instance runtime state are excluded from profile clones (D-80); Stage 8 / catch-up review F-C-01 closed bypass paths | D-80 / D-86 |
-| Whizzard's own config directory (`~/.whizzard/config/`) is structurally unreachable from the cell — no symlink, no parent-mount, no traversal trick reaches it | D-12 (config write-protection invariant) |
+| Whizzard's own config directory (`~/.whizzard/config/`) is structurally unreachable from the sandbox — no symlink, no parent-mount, no traversal trick reaches it | D-12 (config write-protection invariant) |
 | Harness `secrets:` blocks must declare credential env var **names**, not values; plaintext values in `harnesses.json` are rejected at parse time | D-162 |
 | Audit log writes redact known credential fields; no captured argv or env block emits secret values | Stage 5 / D-72 |
 
@@ -251,17 +256,17 @@ unrestricted egress.
 
 | Defense | Reference |
 |---|---|
-| Audit log is append-only by Whizzard; the cell cannot reach the host-side `~/.whizzard/logs/sessions.jsonl` to rewrite past entries | Stage 5 / D-12 |
-| In-cell agent events are merged into the host audit log **before** the `session_end` event is written, so temporal ordering is preserved even if the cell crashes mid-merge | Stage 9 / F-B-10 |
+| Audit log is append-only by Whizzard; the sandbox cannot reach the host-side `~/.whizzard/logs/sessions.jsonl` to rewrite past entries | Stage 5 / D-12 |
+| In-sandbox agent events are merged into the host audit log **before** the `session_end` event is written, so temporal ordering is preserved even if the sandbox crashes mid-merge | Stage 9 / F-B-10 |
 | Audit-log origin-forgery + cross-session request spoofing closed during the catch-up review (D-12 / D-9 alignment) | Catch-up review (2026-05-23) |
 
 ### 4.6 Host Docker control plane
 
 | Defense | Reference |
 |---|---|
-| `/var/run/docker.sock` is never mounted into the cell — explicit rejection | D-9 |
+| `/var/run/docker.sock` is never mounted into the sandbox — explicit rejection | D-9 |
 | Whizzard rejects Docker-in-Docker for the same reason | D-164 |
-| Cell runs as non-root with no Docker client and no permission to reach the host's Docker socket via any path | D-12 / D-93 |
+| Sandbox runs as non-root with no Docker client and no permission to reach the host's Docker socket via any path | D-12 / D-93 |
 | Future harnesses that themselves spawn containers (NanoClaw) use delegated nested-VM mechanisms (Docker Sandboxes / Sysbox) rather than docker-socket sharing — preserved at v1.0 | D-178 (planned for v1.0 per the NanoClaw build plan) |
 
 ---
@@ -292,17 +297,17 @@ new credential file patterns (a future password manager) would
 not be blocked until the list is updated. Tracked as Stage 20
 work.
 
-### 5.2 The in-cell MCP server
+### 5.2 The in-sandbox MCP server
 
-**Surface:** the agent talks to a Whiz MCP server inside the cell
+**Surface:** the agent talks to a Whiz MCP server inside the sandbox
 that exposes read tools (`whiz_status`, `whiz_audit_self`) and
 request tools (`whiz_request_mount`, `whiz_request_extend`).
 Mutation requests are gated by host-side approval (D-26).
 
 **Path the attack would take:**
-- Agent attempts a request the cell-side MCP server should reject
+- Agent attempts a request the sandbox-side MCP server should reject
 - Agent fabricates an inbound message claiming to come from another
-  cell or another session (cross-session spoofing)
+  sandbox or another session (cross-session spoofing)
 
 **Defenses:** request channel uses per-session ephemeral
 directories; host-side validation cross-references `session_id`
@@ -312,9 +317,9 @@ adjust pipeline (`AGENT_DENIED_CHANGES` per Stage 13). Cross-
 session request spoofing was closed during the catch-up review
 (2026-05-23).
 
-**Residual:** the in-cell `snapshot.json` is writable by the cell
+**Residual:** the in-sandbox `snapshot.json` is writable by the sandbox
 under D-156; the host-side audit log remains the source of truth,
-but the cell's "honest self-reflection" surface is compromisable.
+but the sandbox's "honest self-reflection" surface is compromisable.
 Tracked in `known_issues.md` (Stage 20 disposition).
 
 ### 5.3 Container env / command construction
@@ -364,7 +369,7 @@ performance or cause a parse error mid-session.
 intended to disrupt downstream readers.
 
 **Defenses:** the per-session event-file emission lives in a
-cell-writable area and is merged at session_end. Malformed entries
+sandbox-writable area and is merged at session_end. Malformed entries
 are skipped, not crashed on (Stage 5 / Stage 9 hardening).
 
 **Residual:** `whiz_audit_self` slurps the entire log on every
@@ -416,7 +421,7 @@ poisoned `package.json` `postinstall` scripts, source backdoors,
 pinned-bad dependencies in lockfiles.
 
 **Mitigation roadmap:** v1.0 ships `--strict-overlay` mode per
-D-135. Writes go to a cell-private upper layer; a `whiz merge`
+D-135. Writes go to a sandbox-private upper layer; a `whiz merge`
 review gate lets the operator inspect and accept changes
 explicitly before they land on the host filesystem.
 
@@ -442,7 +447,7 @@ advisories but does not invent novel sandboxing primitives.
 NanoClaw's v1.0 integration introduces nested microVMs (Docker
 Sandboxes / Sysbox) for the inner-container layer; that's an
 additional layer of hardware-virtualized isolation that mitigates
-some classes of escape, but the outer Whizzard cell still relies
+some classes of escape, but the outer Whizzard sandbox still relies
 on Docker's runtime.
 
 ### 6.4 Behavioral analysis of the agent
@@ -468,15 +473,15 @@ publishes a malicious release.
 - Sigstore signature attachment is a fast-follow per
   `launch_readiness.md`
 
-### 6.6 In-cell `snapshot.json` writable by the agent
+### 6.6 In-sandbox `snapshot.json` writable by the agent
 
 **Risk:** the per-session capability snapshot the agent reads via
-`whiz_status` lives in a cell-rw mount (`/run/whiz`). A compromised
-harness could rewrite it to lie about the cell's capabilities.
+`whiz_status` lives in a sandbox-rw mount (`/run/whiz`). A compromised
+harness could rewrite it to lie about the sandbox's capabilities.
 
 **Mitigation roadmap:** split `/run/whiz` into a `:ro` snapshot
 mount and a `:rw` events/requests mount, OR expose the snapshot
-through the in-cell MCP server instead of as a file. Either is a
+through the in-sandbox MCP server instead of as a file. Either is a
 D-156 amendment. Stage 20 audit will land one of them.
 
 ### 6.7 Unlimited-profile enforcer can hang on docker client wedge
@@ -522,7 +527,7 @@ time; currently held open (per `launch_readiness.md`).
 | D-9 | One-way capability flow (no docker socket; mid-session via stop+restart) |
 | D-10 | Harness-neutral core |
 | D-11 | Mount registry as permission model |
-| D-12 | Config write-protection invariant; cell-as-non-root; rootfs read-only |
+| D-12 | Config write-protection invariant; sandbox-as-non-root; rootfs read-only |
 | D-24 | Whizzard does not recreate harness behavioral controls |
 | D-27 | Mid-session = stop+restart |
 | D-38 | Default profile is SAFE-NET baseline |
@@ -536,7 +541,7 @@ time; currently held open (per `launch_readiness.md`).
 | D-93 | Hardening differential (the load-bearing architectural commitment) |
 | D-135 | Overlay-quarantine for writable mounts (v1.0) |
 | D-153 | Harness-specific identifiers in adapter modules |
-| D-156 | In-cell MCP server with launch-time snapshot |
+| D-156 | In-sandbox MCP server with launch-time snapshot |
 | D-162 | Declarative `secrets:` field; no plaintext credentials |
 | D-163 | Mid-session `whiz adjust` capability adjustment |
 | D-164 | Image provenance; explicit rejection of DIND / docker.sock |

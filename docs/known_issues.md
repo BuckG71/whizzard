@@ -10,6 +10,8 @@ Categories:
 - **Deferred features** — known-deliberate "not yet" items.
 - **Tech debt** — code/structure improvements desired.
 
+**Terminology:** "sandbox" throughout this document refers to the hardened Docker container Whizzard launches each agent session inside.
+
 ---
 
 ## Functional gaps
@@ -30,11 +32,11 @@ that `hermes -z` is wired, but does not drive a real chat against Ollama.
 Hermes-state files); the smoke doesn't currently provision one.
 *Source:* commit `aeaddb0` (Stage 8 smoke).
 *Disposition:* either bundle a smoke-test HERMES_HOME or document that the
-heavier smoke needs the user's `~/.hermes-whizzard-cell`. Tracked as the
+heavier smoke needs the user's `~/.hermes-whizzard-sandbox`. Tracked as the
 "next-level Hermes-integration smoke."
 
 ### Hermes `config.yaml` MCP auto-wiring is manual
-The Hermes adapter sets the WHIZ_* env vars for the in-cell MCP server, but
+The Hermes adapter sets the WHIZ_* env vars for the in-sandbox MCP server, but
 the harness-side `config.yaml` MCP-client entry pointing at
 `python /opt/whiz/mcp_server.py` is still a manual user step.
 *Source:* maintainer working notes.
@@ -96,17 +98,17 @@ Contributor-facing adapter Protocol artifact. Decided but not authored.
 
 ## Tech debt
 
-### In-cell `snapshot.json` is writable by the agent
-The per-session `/run/whiz` mount is `:rw` because the cell legitimately writes
+### In-sandbox `snapshot.json` is writable by the agent
+The per-session `/run/whiz` mount is `:rw` because the sandbox legitimately writes
 `events.jsonl` and `requests/*.json` there. `snapshot.json` (the agent's
-launch-time capability view, per D-156) lives in the same dir, so the cell
+launch-time capability view, per D-156) lives in the same dir, so the sandbox
 can overwrite it. The host-side audit log (mounted `:ro`) is still the source
 of truth — containment is intact — but the cooperation-layer "honest
 self-reflection" guarantee leaks: a compromised harness could lie to itself
 about its own permissions via `whiz_status`.
 *Source:* catch-up review 2026-05-23 finding F-B-05.
 *Fix shape:* split `/run/whiz` into a `:ro` snapshot mount and a `:rw`
-events/requests mount, OR expose the snapshot through the in-cell MCP server
+events/requests mount, OR expose the snapshot through the in-sandbox MCP server
 instead of as a file. Either is a D-156 amendment.
 *Disposition:* Stage 20 security review, or a decision-needed item earlier
 if it bothers us.
@@ -115,8 +117,8 @@ if it bothers us.
 `docker_cmd.build_run_argv` passes the adapter's `container_env()` and
 `mcp_env()` into `-e K=V` flags without filtering names. A user-edited
 `harnesses.json` could include `LD_PRELOAD`, `PATH`, `HOME`, etc. and the
-values would land verbatim in the cell. Not a containment escape (the cell
-is the cell), but a footgun for misconfig. Adapter code is core-trusted (D-10)
+values would land verbatim in the sandbox. Not a containment escape (the sandbox
+is the sandbox), but a footgun for misconfig. Adapter code is core-trusted (D-10)
 and `harnesses.json` is a Whizzard-owned surface (D-153) so no current path
 exercises this; the denylist is defensive hardening.
 *Source:* catch-up review 2026-05-23 finding F-B-07.
@@ -151,7 +153,7 @@ add when next touching the CLI flag layer.
 and parses every entry. No rotation, no head/tail bound. `whiz`
 (bare) and `whiz status` invoke it on every CLI launch. After months
 of daily use the file grows linearly and status will perceptibly
-stall. Parallel to F-E-05 (in-cell `whiz_audit_self` slurps the
+stall. Parallel to F-E-05 (in-sandbox `whiz_audit_self` slurps the
 whole log too). Both want the same eventual fix: audit-log rotation
 + streaming reads with optional `since=<ts>`.
 *Source:* catch-up review 2026-05-23 finding F-H-06.
@@ -186,26 +188,26 @@ the Stage 20 hardening pass.
 
 ### Sub-agent permission scoping — none today
 Whizzard's containment boundary is the docker container. Every process
-inside the cell — the parent agent, Hermes-spawned workers, tool
+inside the sandbox — the parent agent, Hermes-spawned workers, tool
 subprocesses — shares the parent's full permission set: mount list,
 network, time budget, credentials, request-channel access. A buggy or
 compromised sub-agent has the same blast radius as the parent. Adequate
 for the MVP threshold (D-101: single trusted user); becomes a real
 defense-in-depth question for OSS launch when users may run third-party
-agent code. The path forward is sub-cells via host request (one
-Whizzard cell per scoped sub-agent), which keeps D-9 and D-164 intact.
+agent code. The path forward is sub-sandboxes via host request (one
+Whizzard sandbox per scoped sub-agent), which keeps D-9 and D-164 intact.
 *Source:* D-171 (open); catch-up review 2026-05-23 Chunk E discussion.
 *Disposition:* defer to OSS-launch milestone planning (D-131).
 
 ### `whiz_audit_self` reads the entire host audit log per call
-The in-cell MCP tool `tool_whiz_audit_self` loads the full audit log
+The in-sandbox MCP tool `tool_whiz_audit_self` loads the full audit log
 with `read_text().splitlines()`, then filters in Python. The log is
 append-only and accumulates entries across every session for the
 lifetime of the install — no rotation. An agent polling
 `whiz_audit_self` on a long-lived install pays O(total-log-bytes) RAM
 per call. The Chunk D F-D-04 fix applied streaming to
 `merge_agent_events` on the host side for the same reason; the
-cell-side read deserves the same treatment plus an optional
+sandbox-side read deserves the same treatment plus an optional
 `since=<ts>` argument so the agent can ask for incremental tail.
 *Source:* catch-up review 2026-05-23 finding F-E-05.
 *Disposition:* defer — quality improvement when audit-log rotation

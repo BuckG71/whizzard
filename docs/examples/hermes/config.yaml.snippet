@@ -1,9 +1,9 @@
-# Ollama provider configuration for the OIQ-wrapped Hermes cell.
+# Ollama provider configuration for the OIQ-wrapped Hermes sandbox.
 #
-# Drop this into the cloned profile's config.yaml — ~/.hermes-whizzard-cell/config.yaml —
+# Drop this into the cloned profile's config.yaml — ~/.hermes-whizzard-sandbox/config.yaml —
 # replacing the existing `model:` and `providers:` blocks.
 #
-# Why host.docker.internal: the cell's network namespace can't reach the host's
+# Why host.docker.internal: the sandbox's network namespace can't reach the host's
 # 127.0.0.1 directly, but Docker Desktop on macOS resolves `host.docker.internal`
 # to the host. On native Linux without Docker Desktop, replace with the actual
 # host IP (often 172.17.0.1 for the default bridge) or run Ollama in a sibling

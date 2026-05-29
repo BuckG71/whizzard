@@ -22,7 +22,7 @@ This is the foundational trust model. It applies to profiles, mounts, harness ad
 
 ```text
 Whizzard         = the whole system: orchestrator, policy engine, containment layer
-Execution Cell   = the contained execution environment (Docker container in MVP)
+Execution Sandbox   = the contained execution environment (Docker container in MVP)
 Harness Adapter  = integration layer for Hermes / OpenClaw / NanoClaw / etc.
 ```
 
@@ -86,7 +86,7 @@ Future backends:
 - Podman
 - Firecracker
 - Apple Virtualization Framework
-- cloud execution cells
+- cloud execution sandboxes
 
 The execution backend is intentionally abstracted so that future migrations do not require changes to Whizzard Core or the Harness Adapter Layer.
 

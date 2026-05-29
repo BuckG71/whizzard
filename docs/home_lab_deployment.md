@@ -4,6 +4,8 @@
 
 **Captured:** 2026-05-19
 
+**Terminology:** "sandbox" throughout this document refers to the hardened Docker container Whizzard launches each agent session inside.
+
 ---
 
 ## TL;DR
@@ -45,7 +47,7 @@ The topology is hub-and-spoke over Tailscale; no machine exposes services to the
         +--------> |  2015 MBP      | <---------+
                    |  (Linux)       |
                    |  OIQ + Docker  |
-                   |  + Hermes cell |
+                   |  + Hermes sandbox |
                    +----------------+
                             |
                             | (eventually replaced by)
@@ -59,7 +61,7 @@ The topology is hub-and-spoke over Tailscale; no machine exposes services to the
 
 ## Why this shape
 
-**Threat-model alignment.** The autonomous agent (Hermes) lives on its own host, not on the workstation that holds development files and primary credentials. The agent is wrapped in OIQ cells, so even within its host, capabilities are explicit and per-session. This combines perimeter isolation (separate machine) with per-cell isolation (OIQ) — two boundaries instead of one. Aligns with the dep-careful + harness-yolo split threat model in `memory/user_dep_hygiene.md`.
+**Threat-model alignment.** The autonomous agent (Hermes) lives on its own host, not on the workstation that holds development files and primary credentials. The agent is wrapped in OIQ sandboxes, so even within its host, capabilities are explicit and per-session. This combines perimeter isolation (separate machine) with per-sandbox isolation (OIQ) — two boundaries instead of one. Aligns with the dep-careful + harness-yolo split threat model in `memory/user_dep_hygiene.md`.
 
 **Separation of concerns.** Each machine has one job:
 - Mac Studio = workstation + ad-hoc heavy-model inference.
@@ -102,7 +104,7 @@ The actual delta from current state to the four-machine topology is small:
 4. **Join Tailscale**: `curl -fsSL https://tailscale.com/install.sh | sh && sudo tailscale up`. Note the MagicDNS hostname.
 5. **Install Docker** (standard Linux Docker, not Docker Desktop).
 6. **Install OIQ** (the renamed package, post-D-158).
-7. **Migrate Hermes profile** from Mac Studio to MBP per the planned D-86 Migrate path — clone `~/.hermes-whizzard-cell` to the MBP via scp / git / rsync; update the harness config's `hermes_home`.
+7. **Migrate Hermes profile** from Mac Studio to MBP per the planned D-86 Migrate path — clone `~/.hermes-whizzard-sandbox` to the MBP via scp / git / rsync; update the harness config's `hermes_home`.
 8. **Configure Hermes** to point at local Ollama endpoints over Tailscale for the model calls that should route locally.
 9. **Wake-on-LAN setup** on the Gaming PC: enable WoL in BIOS + NIC settings; configure a small script that sends the magic packet when the agent on the MBP needs inference and the Gaming PC is asleep; auto-shutdown after N minutes idle.
 10. **Validate end-to-end**: start a Hermes session on the MBP, issue a Discord command, confirm Tailscale-routed inference works, confirm state persists across container restarts via the HERMES_HOME mount (M6 wiring).
@@ -113,7 +115,7 @@ Total estimate: one focused weekend.
 
 **Thermal management on the MBP.** Intel 2015 MBPs throttle under sustained load and have a decade of thermal-paste degradation. If the autonomous Hermes idles 99% of the time and spikes only on Discord commands, thermals are mostly a non-issue. A cooling pad ($20–30) is cheap insurance for sustained-load periods.
 
-**Disk mortality on the MBP.** 10-year-old SSD; treat state on it as disposable. Tailscale + git push back to Mac Studio + periodic snapshots of `~/.hermes-whizzard-cell` to a NAS or to the Mac Studio = adequate recovery path. Don't store anything load-bearing only on the MBP.
+**Disk mortality on the MBP.** 10-year-old SSD; treat state on it as disposable. Tailscale + git push back to Mac Studio + periodic snapshots of `~/.hermes-whizzard-sandbox` to a NAS or to the Mac Studio = adequate recovery path. Don't store anything load-bearing only on the MBP.
 
 **Power draw on the Gaming PC.** Idle 50–100W; under inference, 200–400W. If always-on, this is real money. The WoL-on-demand pattern eliminates the always-on tax: gaming PC stays off until the agent on the MBP needs it; wakes, serves the inference, idles for N minutes, shuts down.
 
@@ -127,7 +129,7 @@ Total estimate: one focused weekend.
 
 This topology is reproducible by any user with similar hardware. Three open-source tools (OIQ, Tailscale, Ollama) + three commonly-owned machine classes (workstation, secondary box, gaming/AI PC) + one weekend = a self-hosted agent stack with capability containment, private inference, and no cloud trust chain. Worth mentioning as a recommended deployment pattern in the OSS README and `docs/examples/` — likely as `docs/examples/deployments/home_lab/` with a copy-paste setup walkthrough.
 
-The narrative angle to lean into: "you already own most of this." Not "buy a Mac mini" or "rent a VM" — *use what's on your desk*. The differentiator from existing self-hosted-agent stories is OIQ's per-cell containment layer turning the hand-rolled isolation checklist (Docker, mounts, network policy, credential scoping, audit logs) into a single opinion-having tool.
+The narrative angle to lean into: "you already own most of this." Not "buy a Mac mini" or "rent a VM" — *use what's on your desk*. The differentiator from existing self-hosted-agent stories is OIQ's per-sandbox containment layer turning the hand-rolled isolation checklist (Docker, mounts, network policy, credential scoping, audit logs) into a single opinion-having tool.
 
 ## Open questions to revisit at execution time
 

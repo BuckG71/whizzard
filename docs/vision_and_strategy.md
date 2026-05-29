@@ -23,7 +23,7 @@ Useful autonomous agents can coexist with practical local security boundaries.
 | Component       | Role                                              |
 |-----------------|---------------------------------------------------|
 | Whizzard        | The whole system: orchestrator, policy engine, containment |
-| Execution Cell  | The contained execution environment (Docker container in MVP) |
+| Execution Sandbox  | The contained execution environment (Docker container in MVP) |
 | Harness Adapter | Integration layer for Hermes / OpenClaw / NanoClaw / etc. |
 | Breaker         | Behavioral interruption engine (post-MVP)         |
 | Quarantine      | High-risk execution mode (a profile name)         |
@@ -306,8 +306,8 @@ The Register (2026-05-17, "How AI agent harnesses like OpenClaw are changing LLM
 
 **Why this validates OIQ's thesis:**
 
-- **The vector is the skill/plugin layer, not the model layer.** No amount of alignment work on the underlying LLM stops a skill from doing exactly what the skill author wrote it to do. The harness loads the skill; the agent runs it; the agent's host-side capabilities are now the skill's capabilities. Containment has to live below the skill, at the execution-cell boundary — which is precisely where OIQ sits.
-- **The blast radius is the local capability surface.** A malicious skill is most dangerous when the agent runs with broad host access (full filesystem, network, credential stores). Cells with explicit mount lists, default-deny networking, and ephemeral state are the structural answer. The mount-list-IS-permission-model principle (D-11) is the right grain for this.
+- **The vector is the skill/plugin layer, not the model layer.** No amount of alignment work on the underlying LLM stops a skill from doing exactly what the skill author wrote it to do. The harness loads the skill; the agent runs it; the agent's host-side capabilities are now the skill's capabilities. Containment has to live below the skill, at the execution-sandbox boundary — which is precisely where OIQ sits.
+- **The blast radius is the local capability surface.** A malicious skill is most dangerous when the agent runs with broad host access (full filesystem, network, credential stores). Sandboxes with explicit mount lists, default-deny networking, and ephemeral state are the structural answer. The mount-list-IS-permission-model principle (D-11) is the right grain for this.
 - **The harness vendor cannot solve it alone.** A harness can vet its skill hub, but it cannot vet every locally-installed skill, every fork, every private extension. Cross-agent local capability governance is the architectural layer that survives a harness's individual vetting decisions.
 - **Confirms the harness-neutral bet.** The Register article lists Claude Code, OpenClaw, Codex, Pi Coding Agent, Cline as production harnesses. Each will face the same skill/plugin attack surface. A harness-neutral containment layer (D-10) is more durable than any single-harness security feature.
 

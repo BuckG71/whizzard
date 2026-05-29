@@ -132,7 +132,7 @@
     <p>Whizzard controls capabilities.</p>
     <p>Agents request capabilities.</p>
     <p>Agents do not grant themselves capabilities.</p>
-    <p class="why">Capability flow is one-way: host → cell, never cell → host (D-9). Every
+    <p class="why">Capability flow is one-way: host → sandbox, never sandbox → host (D-9). Every
       part of the system is a refinement of this one rule.</p>
   </div>
 </section>
@@ -145,7 +145,7 @@
 
   <h3>Host vs. container</h3>
   <table>
-    <tr><th>Host machine — control plane</th><th>Container — execution plane ("cell")</th></tr>
+    <tr><th>Host machine — control plane</th><th>Container — execution plane ("sandbox")</th></tr>
     <tr>
       <td>CLI &amp; policy engine, the config registry
         (<code>profiles.json</code>, <code>mounts.json</code>, <code>harnesses.json</code>,
@@ -178,8 +178,8 @@
     </tr>
     <tr>
       <td class="k">Execution Backend</td>
-      <td>Running the cell. Docker today; abstracted so Podman / Firecracker / Apple
-        Virtualization / cloud cells can be added without touching Core or adapters.</td>
+      <td>Running the sandbox. Docker today; abstracted so Podman / Firecracker / Apple
+        Virtualization / cloud sandboxes can be added without touching Core or adapters.</td>
       <td>—</td>
     </tr>
   </table>
@@ -207,7 +207,7 @@
         these</strong> — duplicating them would add surface the harness already maintains.</p>
 
       <div class="layer coop">
-        <div class="layer-h">Cooperation layer — Whizzard MCP, in-cell</div>
+        <div class="layer-h">Cooperation layer — Whizzard MCP, in-sandbox</div>
         <p>An agent-facing API to the host-side capability brain: introspect own
           constraints, write structured audit entries, and <em>request</em> structural
           changes. Requests are mediated host-side and applied via stop+restart. It never
@@ -262,7 +262,7 @@
 <section id="adapter">
   <h2><span class="num">5</span>Harness adapter contract</h2>
   <p class="lede">An adapter is the only seam between harness-specific behavior and the
-    harness-neutral Core. Whizzard decides <em>what capabilities the cell has</em>; the
+    harness-neutral Core. Whizzard decides <em>what capabilities the sandbox has</em>; the
     adapter decides <em>what runs inside it</em>.</p>
 
   <p>The contract is the <code>HarnessAdapter</code> Protocol in
@@ -273,19 +273,19 @@
 
   <table>
     <tr><th>Protocol method</th><th>Responsibility</th></tr>
-    <tr><td class="k">start_command()</td><td>Argv run inside the cell as the entrypoint.</td></tr>
+    <tr><td class="k">start_command()</td><td>Argv run inside the sandbox as the entrypoint.</td></tr>
     <tr><td class="k">container_env()</td><td>Env vars to inject — incl. harness-config
       credentials via OneCLI / env fallback (D-134, D-162).</td></tr>
-    <tr><td class="k">container_mounts()</td><td>Harness-required host→cell mounts
+    <tr><td class="k">container_mounts()</td><td>Harness-required host→sandbox mounts
       (e.g. Hermes <code>HERMES_HOME</code> for state persistence, D-79).</td></tr>
-    <tr><td class="k">working_dir()</td><td>Cell working directory, or none.</td></tr>
+    <tr><td class="k">working_dir()</td><td>Sandbox working directory, or none.</td></tr>
     <tr><td class="k">wrap_up()</td><td>Harness-native graceful shutdown before SIGTERM,
       bounded by a grace window. No-op for the generic shell.</td></tr>
     <tr><td class="k">preflight()</td><td>Pre-launch checks (e.g. Hermes refuses to launch
       over a live gateway, D-87).</td></tr>
     <tr><td class="k">active_capabilities()</td><td>Human-readable capability strings for
       the pre-launch banner.</td></tr>
-    <tr><td class="k">mcp_env()</td><td>Env wiring for the in-cell Whiz MCP server (D-156).</td></tr>
+    <tr><td class="k">mcp_env()</td><td>Env wiring for the in-sandbox Whiz MCP server (D-156).</td></tr>
     <tr><td class="k">health_check_command()</td><td>Optional readiness probe.</td></tr>
   </table>
   <p style="font-size:.85rem;color:var(--muted)">Adapters are built from declarative
@@ -329,7 +329,7 @@
       shared launch core.</td></tr>
     <tr><td class="k">config.py</td><td>Core</td><td>Profiles — network, duration cap,
       idle timeout, broad-mount permission.</td></tr>
-    <tr><td class="k">mounts.py</td><td>Core</td><td>The mount registry — named host→cell
+    <tr><td class="k">mounts.py</td><td>Core</td><td>The mount registry — named host→sandbox
       path grants with ro/rw modes.</td></tr>
     <tr><td class="k">safety.py</td><td>Core</td><td>The three-tier safety policy +
       config write-protection.</td></tr>
@@ -346,9 +346,9 @@
       capability requests; routes approved ones through <code>adjust</code> (D-165).</td></tr>
     <tr><td class="k">session_log.py</td><td>Core</td><td>Append-only JSONL audit log.</td></tr>
     <tr><td class="k">snapshot.py</td><td>Core</td><td>Per-session state snapshot the
-      in-cell MCP server reads.</td></tr>
-    <tr><td class="k">mcp_server.py</td><td>Cooperation</td><td>The in-cell Whiz MCP
-      server — read tools + request tools (runs inside the cell, D-156).</td></tr>
+      in-sandbox MCP server reads.</td></tr>
+    <tr><td class="k">mcp_server.py</td><td>Cooperation</td><td>The in-sandbox Whiz MCP
+      server — read tools + request tools (runs inside the sandbox, D-156).</td></tr>
     <tr><td class="k">adapters/</td><td>Adapter</td><td><code>base.py</code> (the Protocol),
       <code>generic.py</code>, <code>hermes.py</code>, <code>_credentials.py</code>.</td></tr>
   </table>
@@ -357,17 +357,17 @@
   <ul class="tight">
     <li><strong>Launch</strong> — <code>whiz run</code> / <code>whiz r &lt;preset&gt;</code>
       → <code>_perform_launch</code> resolves profile + mounts + adapter, runs safety
-      validation, writes the snapshot → <code>run_shell</code> launches the cell and hands
+      validation, writes the snapshot → <code>run_shell</code> launches the sandbox and hands
       it to the enforcement monitor.</li>
     <li><strong>Adjust</strong> — <code>whiz adjust &lt;session&gt;</code> →
-      <code>adjust_session</code> stops the cell and relaunches with new capabilities;
+      <code>adjust_session</code> stops the sandbox and relaunches with new capabilities;
       harness state persists across the restart via its bind mount.</li>
-    <li><strong>Agent request</strong> — the in-cell agent calls
+    <li><strong>Agent request</strong> — the in-sandbox agent calls
       <code>whiz_request_mount</code> / <code>whiz_request_extend</code> → a request file
-      lands in the cell's <code>/run/whiz/requests/</code> → the operator reviews it with
+      lands in the sandbox's <code>/run/whiz/requests/</code> → the operator reviews it with
       <code>whiz requests</code> → approval routes through <code>adjust_session</code>.</li>
     <li><strong>Enforcement</strong> — <code>monitor_and_enforce</code> polls the running
-      cell; on a duration cap or idle timeout it runs the adapter wrap-up and records the
+      sandbox; on a duration cap or idle timeout it runs the adapter wrap-up and records the
       expiry reason.</li>
   </ul>
 

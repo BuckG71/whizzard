@@ -2,6 +2,8 @@
 
 Manual validation steps for each MVP stage. Update this file as new stages land.
 
+**Terminology:** "sandbox" throughout this document refers to the hardened Docker container Whizzard launches each agent session inside.
+
 ---
 
 ## Stage 1 — Generic Docker Shell Launch
@@ -1071,15 +1073,15 @@ WHIZZARD_IMAGE=whizzard-hermes:latest whiz run --harness <hermes-harness-name>
 ### Stage-8 closeout (M8) — SHIPPED 2026-05-19
 
 - [x] **`pyproject.toml` Hermes extras** — closeout reframed: OIQ host-side imports zero Hermes-specific Python modules, so no `[project.optional-dependencies] hermes = [...]` extras block is needed; the install path is the Docker image built from `docker/Dockerfile.hermes`. Explanatory comment block in `pyproject.toml` documents this; README "Optional: Hermes adapter" section walks users through the two-step setup (image build + profile clone + harness config).
-- [x] **`whiz hermes <profile>` direct-launch sugar** — left unimplemented; `whiz r hermes` and `whiz run --harness hermes-cell` cover the same use case. Equivalent functionality; not a closeout blocker.
+- [x] **`whiz hermes <profile>` direct-launch sugar** — left unimplemented; `whiz r hermes` and `whiz run --harness hermes-sandbox` cover the same use case. Equivalent functionality; not a closeout blocker.
 
 ---
 
 ## Stage 9 — Whiz MCP Server (Read-Only Subset)
 
-Stage 9 ships an in-cell MCP server that exposes four read-only tools to
+Stage 9 ships an in-sandbox MCP server that exposes four read-only tools to
 the contained agent for introspection of Whizzard-imposed constraints
-(D-25, D-156). Architecture: in-cell Python child process, launch-time
+(D-25, D-156). Architecture: in-sandbox Python child process, launch-time
 state snapshot, mounted live audit log, event-file write-back merged into
 the host log at session_end.
 
@@ -1098,7 +1100,7 @@ the host log at session_end.
   (`test_snapshot.py`)
 - [ ] M3: Adapter Protocol has `mcp_env(session_id) -> dict[str, str]`.
   Generic shell returns `{}`. Hermes returns the four WHIZ_* env vars
-  pointing at the conventional in-cell `/run/whiz/` paths. Hermes's
+  pointing at the conventional in-sandbox `/run/whiz/` paths. Hermes's
   `active_capabilities` mentions MCP availability. (`test_adapters.py`,
   `test_hermes_adapter.py`)
 - [ ] M4: `session_log.merge_agent_events(session_id, event_log_path,
@@ -1113,16 +1115,16 @@ the host log at session_end.
   `mcp_env` is non-empty and `session_id` is present. `pyproject.toml`
   declares `mcp>=1.0` as a core dep. (`test_docker_cmd.py`)
 
-### Manual end-to-end smoke (requires built image + Hermes + mcp SDK in cell)
+### Manual end-to-end smoke (requires built image + Hermes + mcp SDK in sandbox)
 
 These steps prove the MCP server actually serves the agent inside the
-cell. They are NOT part of the automated suite.
+sandbox. They are NOT part of the automated suite.
 
 Prerequisites:
 - Whizzard execution image has `mcp` SDK installed (add to `docker/Dockerfile`).
 - Hermes is configured with the Whiz MCP server entry. Per D-156, the
   user adds an entry to their Hermes profile's `config.yaml` pointing
-  Hermes's MCP client at the in-cell Whiz server (auto-wiring is a
+  Hermes's MCP client at the in-sandbox Whiz server (auto-wiring is a
   follow-up):
 
 ```yaml
@@ -1139,7 +1141,7 @@ Steps:
 whizzard run --harness <hermes-harness-name>
 
 # Inside the agent's session, the agent should be able to call:
-#   whiz_status — returns the cell's profile, mounts, harness, session id
+#   whiz_status — returns the sandbox's profile, mounts, harness, session id
 #   whiz_audit_self — returns this session's audit-log entries
 #   whiz_emit_event(event_type, detail) — agent records a note
 #   whiz_list_presets — returns empty list (Stage 10 dependency)
@@ -1151,7 +1153,7 @@ cat ~/.whizzard/logs/sessions.jsonl | grep '"origin":"agent"'
 
 ### Outstanding for full closeout
 
-- [ ] Docker image build: install `mcp` in the cell image (probably part
+- [ ] Docker image build: install `mcp` in the sandbox image (probably part
   of Stage 18 image management when the Dockerfile gets its full overhaul).
 - [ ] Auto-wire Hermes's `config.yaml` MCP server entry (currently
   manual). Could be a `whiz hermes profile create` flag or a separate
@@ -1176,7 +1178,7 @@ preset slate, CLI shortcut shape, smart defaults, preset config schema.
   `_DEFAULT_PRESETS` (`hermes` + `shell`), strict `validate_references()`
   against profile/harness/mount/platform-ceiling. (`test_preset_config.py`)
 - [ ] **#3 preset CLI subapp.** `whiz preset list | show | init |
-  launch`. Bundled `hermes-cell` harness so `hermes` preset validates
+  launch`. Bundled `hermes-sandbox` harness so `hermes` preset validates
   out of the box. Preset launch passes `allow_broad_mount=True` to
   `_perform_launch` as the user's persistent intent declaration; profile
   gate (first gate per D-46) is the referenced profile's setting.
@@ -1232,7 +1234,7 @@ whiz p                     # list all
 
 ## Stage 14 — Whiz MCP Server (Request-Side Tools)
 
-Design: D-165. Agent-initiated capability requests via the in-cell MCP
+Design: D-165. Agent-initiated capability requests via the in-sandbox MCP
 request tools + the operator-invoked `whiz requests` command.
 
 ### Automated coverage
@@ -1252,7 +1254,7 @@ smoke. Once that lands:
 # 1. Launch a Hermes session; note the session id from the banner.
 whiz r hermes
 
-# 2. Inside the cell, have the agent call the MCP tool:
+# 2. Inside the sandbox, have the agent call the MCP tool:
 #      whiz_request_mount(name="documents", reason="need the docs")
 #    It returns {"status": "pending", "request_id": "..."}.
 
@@ -1260,7 +1262,7 @@ whiz r hermes
 whiz requests                      # pending request is listed
 whiz requests approve <request-id> # shows diff, [y/N], stop+restart
 
-# 4. Back in the cell, the agent polls:
+# 4. Back in the sandbox, the agent polls:
 #      whiz_check_request("<request-id>")  -> status "applied"
 #      whiz_status()                       -> "documents" now in mounts
 
@@ -1272,7 +1274,7 @@ whiz requests deny <request-id>          # decline without applying
 ### Outstanding for full closeout
 
 - [ ] Manual smoke above — blocked on the Stage 9 / Stage 8-M6 end-to-end
-  infra (cell image with `mcp` SDK + `config.yaml` MCP server entry).
+  infra (sandbox image with `mcp` SDK + `config.yaml` MCP server entry).
 - [ ] v1.0 revisit (D-165): host-side MCP server for synchronous round-trip
   request tools.
 

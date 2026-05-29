@@ -1,12 +1,12 @@
 ---
 name: oiq-launch
-description: "Launch an OIQ-contained agent session via a named preset. Use when the user asks to start a session, run an agent, fire up a harness, or launch a preset by name. Bare invocation launches the most-recently-used preset. OIQ wraps each session in a hardened Docker cell with capability boundaries per the preset's profile + mounts + harness config."
+description: "Launch an OIQ-contained agent session via a named preset. Use when the user asks to start a session, run an agent, fire up a harness, or launch a preset by name. Bare invocation launches the most-recently-used preset. OIQ wraps each session in a hardened Docker sandbox with capability boundaries per the preset's profile + mounts + harness config."
 ---
 
 ## Triggers
 
 - **Explicit:** `/oiq-launch`, `/oiq-launch <preset>`
-- **Conversational:** "launch hermes", "start a session", "fire up the agent", "run the X preset", "spin up an OIQ cell"
+- **Conversational:** "launch hermes", "start a session", "fire up the agent", "run the X preset", "spin up an OIQ sandbox"
 
 ## Action
 

@@ -8,13 +8,16 @@ Whizzard ships as `v0.1.0` because we expect to learn from users before
 committing to a `v1.0` API. The roadmap below is the working plan for that
 v1.0 milestone.
 
+**Terminology:** "sandbox" throughout this document refers to the hardened
+Docker container Whizzard launches each agent session inside.
+
 ---
 
 ## v0.1.0 — Initial OSS release
 
 The current shipping scope. The full MVP capabilities documented in the
 README — capability containment, profile + mount registry, audit logging,
-adapter contract, in-cell MCP server, session lifecycle (start / stop /
+adapter contract, in-sandbox MCP server, session lifecycle (start / stop /
 adjust / wake) — are all present.
 
 Known un-addressed classes, disclosed in the README "Scope and limitations"
@@ -47,8 +50,8 @@ template for adding new harnesses.
 
 ### 4. MCP gateway direction
 
-A second MCP server pattern — host-side, separate from the in-cell server
-— for queries that need access to data the cell isn't trusted with.
+A second MCP server pattern — host-side, separate from the in-sandbox server
+— for queries that need access to data the sandbox isn't trusted with.
 
 ### 5. Session duration as a first-class enforced primitive
 
@@ -87,7 +90,7 @@ mount are visible to the host immediately — and an agent can plant files
 that execute later in the user's normal workflow (`.git/hooks/pre-commit`,
 poisoned `package.json` postinstall scripts, source backdoors). v1.0
 introduces an opt-in overlay-quarantine pattern: agent writes land in a
-cell-private upper layer, host-side tools see the pre-session state, and
+sandbox-private upper layer, host-side tools see the pre-session state, and
 the user runs `whiz merge <session-id>` to review the diff before writes
 apply to the host. Risk-class flagging (`.git/hooks/`, `.github/workflows/`,
 lockfiles, build configs) bubbles the high-impact paths to the top of the
@@ -102,16 +105,16 @@ will be decided with user feedback in hand, not in isolation.
 Today's network policy is a per-profile boolean: `on` (full outbound
 access) or `off` (no network at all, including DNS). v1.0 adds a third
 posture — an **allowlist** mode — where a profile declares the specific
-destinations the cell is allowed to reach (model endpoint, package
+destinations the sandbox is allowed to reach (model endpoint, package
 index, configured webhooks). Everything else is dropped.
 
 The likely mechanical shape extends the OneCLI proxy pattern Whizzard
-already uses for credential mediation: the cell launches with
+already uses for credential mediation: the sandbox launches with
 `--network none` at the Docker layer (no direct egress) and routes
 outbound HTTPS through a host-side proxy that validates each
 destination against the profile's declared list. Same isolation
 primitive as `off`, with controlled egress added on top — no kernel
-capability changes inside the cell, no iptables rules to maintain.
+capability changes inside the sandbox, no iptables rules to maintain.
 
 Sub-track: DNS gating. The current `off` posture blocks DNS as a
 side-effect of `--network none`; the current `on` posture allows DNS

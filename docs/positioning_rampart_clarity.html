@@ -72,7 +72,7 @@ The announcement validates the broader thesis (agent safety needs dev-workflow-n
     <rect x="500" y="60" width="200" height="80" rx="6" fill="#1a1f2b" stroke="#7ee0a8"/>
     <text x="600" y="90"  text-anchor="middle" font-weight="700">RUNTIME</text>
     <text x="600" y="110" text-anchor="middle" fill="#7ee0a8">Whizzard</text>
-    <text x="600" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">capability cell, scoped grants</text>
+    <text x="600" y="128" text-anchor="middle" font-size="11" fill="#9aa3b2">capability sandbox, scoped grants</text>
 
     <rect x="740" y="60" width="160" height="80" rx="6" fill="#1a1f2b" stroke="#2a2f3a"/>
     <text x="820" y="90"  text-anchor="middle" font-weight="700" fill="#9aa3b2">POST-INCIDENT</text>
@@ -103,7 +103,7 @@ The announcement validates the broader thesis (agent safety needs dev-workflow-n
   <div class="card">
     <span class="tag rt">runtime</span>
     <h3>Whizzard</h3>
-    <p>Local capability-governance layer. Wraps an agent harness in a hardened, scoped, time-bounded execution cell (Docker today) with explicit, human-readable capability grants. Filesystem mounts, network, credentials, MCP surface all gated.</p>
+    <p>Local capability-governance layer. Wraps an agent harness in a hardened, scoped, time-bounded execution sandbox (Docker today) with explicit, human-readable capability grants. Filesystem mounts, network, credentials, MCP surface all gated.</p>
     <p><b>For:</b> solo devs, local agent operators<br/><b>Surface:</b> CLI + profiles, harness adapters (Hermes, generic shell)<br/><b>Status:</b> MVP in progress (stages 1–10, 12 shipped)</p>
   </div>
 </div>
@@ -116,7 +116,7 @@ The announcement validates the broader thesis (agent safety needs dev-workflow-n
   <tr><td><b>Mechanism</b></td><td>Guided markdown workflow</td><td>pytest + PyRIT evaluators</td><td>Container + capability policy + adapters</td></tr>
   <tr><td><b>Audience</b></td><td>Enterprise PMs/engineers/safety</td><td>Enterprise eng teams w/ CI</td><td>Solo devs, local OSS agent operators</td></tr>
   <tr><td><b>Failure mode it catches</b></td><td>Unquestioned design assumptions</td><td>Prompt-injection regressions, side-effect bugs</td><td>Blast-radius / unauthorized capability use</td></tr>
-  <tr><td><b>Trust model</b></td><td>Trust the process</td><td>Trust the tests</td><td>Trust nothing; constrain the cell</td></tr>
+  <tr><td><b>Trust model</b></td><td>Trust the process</td><td>Trust the tests</td><td>Trust nothing; constrain the sandbox</td></tr>
   <tr><td><b>Integration point</b></td><td>Repo docs</td><td>CI pipeline</td><td>Harness adapter (CLI shell-out)</td></tr>
 </table>
 
@@ -124,7 +124,7 @@ The announcement validates the broader thesis (agent safety needs dev-workflow-n
 
 <h3>1. Niche is unchanged — and arguably reinforced</h3>
 <p>Neither tool addresses runtime capability containment. Rampart can tell you the agent <i>shouldn't</i> exfiltrate
-<code>~/.ssh/</code> when prompt-injected; Whizzard ensures the <code>~/.ssh/</code> mount was never in the cell to begin with.
+<code>~/.ssh/</code> when prompt-injected; Whizzard ensures the <code>~/.ssh/</code> mount was never in the sandbox to begin with.
 That's a <b>defense-in-depth pairing</b>, not overlap.</p>
 
 <h3>2. Audience gap is real</h3>
@@ -136,7 +136,7 @@ Whizzard's <code>docs/vision_and_strategy.md</code> explicitly carves out the op
 <ul>
   <li><b>Rampart's pytest pattern for safety regressions</b> maps cleanly onto Whizzard's own policy: a future
       <code>tests/policies/</code> suite asserting "profile <code>quarantine</code> denies network", "credential X
-      never appears in cell env unless declared" — same shape, applied to capability policy rather than model behavior.</li>
+      never appears in sandbox env unless declared" — same shape, applied to capability policy rather than model behavior.</li>
   <li><b>Clarity's "markdown artifact per decision" pattern</b> already exists in this repo as <code>docs/decisions.md</code>
       (append-only D-XXX index). The Microsoft framing — failure analysis from multiple perspectives — could be a useful
       template addition for higher-risk decisions (e.g. new mount types, new adapter trust assumptions).</li>

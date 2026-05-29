@@ -25,11 +25,13 @@ These are best-effort timelines for a maintainer-driven open-source project, not
 
 ## Scope
 
+(In this document, "sandbox" refers to the hardened Docker container Whizzard launches each agent session inside.)
+
 In scope:
 
 - The Whizzard Python package and CLI (`whizzard/`)
-- The execution-cell containment model: container hardening, mount policy, network policy, capability enforcement, credential handling
-- The in-cell MCP surface and the agent-event channel
+- The sandbox containment model: container hardening, mount policy, network policy, capability enforcement, credential handling
+- The in-sandbox MCP surface and the agent-event channel
 - Distributed Docker images published by this project
 - Build, release, and CI workflows in `.github/workflows/`
 
