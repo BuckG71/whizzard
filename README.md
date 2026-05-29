@@ -2,9 +2,9 @@
 
 Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
 
-> **Status:** MVP under construction. Stages 1–15.5 shipped. See [ROADMAP.md](ROADMAP.md) for what's next.
+> **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — see [Install](#install) below.
 
-> **Naming:** "Whizzard" is a working name. The project may rename before OSS launch. See [docs/decisions.md](docs/decisions.md) D-144.
+> **Naming:** "Whizzard" is a working name. The project may rename before broader release. See [docs/decisions.md](docs/decisions.md) D-144.
 
 ---
 
@@ -62,9 +62,39 @@ This list is not exhaustive. It names the gaps most likely to surprise a user wh
 
 ## Prerequisites
 
-- macOS or Linux
+- macOS, Linux, or Windows (Windows is in pre-release verification for v0.1.0)
 - Python 3.11+
 - Docker Desktop (or any Docker daemon) running
+
+## Install
+
+### Pre-release (v0.1.0 reviewers)
+
+```sh
+pip install whizzard==0.1.0rc1
+whiz init
+```
+
+That's the entire flow. `whiz init` walks you through five short configuration steps, builds the execution container (about 2 minutes the first time), and sets up the configuration files at `~/.whizzard/config/`. Setup takes about five minutes total.
+
+### Hermes setup
+
+Whizzard currently supports the Hermes Agent harness by Nous Research only; additional harnesses are planned for future releases.
+
+`whiz init` detects whether you already have Hermes installed on your machine (`~/.hermes/`) and branches into one of two flows:
+
+- **If you have Hermes**: the wizard copies your existing setup into a Whizzard profile (`~/.hermes-whizz/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
+- **If you don't have Hermes**: the wizard prints install instructions and completes setup without it. To finish, install [Hermes from NousResearch](https://github.com/NousResearch/hermes-agent), then run `whiz hermes profile create whizz` to copy your fresh Hermes setup into `~/.hermes-whizz/`.
+
+### First session
+
+After `whiz init` completes:
+
+```sh
+whiz                  # show what's running and what you have set up
+whiz r hermes         # launch a Hermes session
+whiz --help           # list every command
+```
 
 ## Install (development)
 
@@ -88,84 +118,27 @@ Individual targets: `make test`, `make lint`, `make fmt` (auto-fix), `make typec
 
 Pre-commit hooks for the same checks: `pip install pre-commit && pre-commit install`. CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR.
 
-## First run
-
-Build the execution image:
-
-```sh
-whizzard image build
-whizzard image status
-```
-
-Launch a contained shell under the default profile:
-
-```sh
-whizzard run --profile default
-```
-
-You should see a `Whizzard Profile: DEFAULT` banner followed by a bash prompt inside the container. Confirm containment by trying to access the host home directory:
-
-```sh
-ls /Users/$USER   # should fail or show nothing — host home is not mounted
-whoami            # should print "whizzard", not your host user
-```
-
-Exit with `exit` or `Ctrl-D`.
-
-## Optional: Hermes adapter
-
-Whizzard ships a generic shell adapter (above) plus an optional Hermes adapter for the [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) harness. The Hermes adapter is bundled in the Python package — no separate `pip install` step — but the execution image needs Hermes layered on top of the base image:
-
-```sh
-docker build -f docker/Dockerfile.hermes -t whizzard-hermes:latest .
-```
-
-That image pins Hermes to a specific upstream commit; bump `HERMES_REF` in `docker/Dockerfile.hermes` to update.
-
-Then point Whizzard at the Hermes image and a harness entry:
-
-```sh
-# 1. Clone a Hermes profile into a sibling directory (auth.json + runtime state excluded).
-whiz hermes profile create whizzard-cell --clone-from default
-
-# 2. Configure ~/.whizzard/config/harnesses.json with a `hermes-cell` entry — see config/harnesses.json.example.
-
-# 3. Launch.
-WHIZZARD_IMAGE=whizzard-hermes:latest whiz run --harness hermes-cell
-```
-
-For non-Ollama providers (Anthropic, OpenAI, etc.), declare credential env-var names in the harness's `secrets:` field; values resolve from OneCLI or host env at launch (D-162). Never put plaintext credential values in `harnesses.json`.
-
-## Using OIQ inside your agent harness
-
-The OIQ CLI is the harness-neutral integration surface. Any agent harness that can shell out can wrap `oiq r`, `oiq s`, etc. — no harness-specific runtime lives in OIQ core.
-
-Copy-paste integration recipes live in **[`docs/examples/`](docs/examples/)**:
-
-- **[`docs/examples/claude_code/`](docs/examples/claude_code/)** — Claude Code skill files (`/oiq-launch`, `/oiq-status`, `/oiq-presets`, `/oiq-sessions-tail`). Drop into `~/.claude/skills/` to install.
-- **[`docs/examples/hermes/`](docs/examples/hermes/)** — Hermes adapter setup recipe (image build, profile clone, harness config, provider config).
-- Other harnesses welcome via PR — see [`docs/examples/README.md`](docs/examples/README.md) for contribution guidance.
-
-The design choice to ship integration as docs rather than as harness-specific code in OIQ core is captured in [`decisions.md`](docs/decisions.md) D-161.
-
 ## Available profiles
 
 ```sh
-whizzard profiles list
+whiz profiles list
 ```
 
-Profiles available in Stage 1: `safe`, `default`, `build`, `power`, `quarantine`. The `default` profile is the always-on baseline (network enabled, no mounts, no expiry); other profiles add or remove capabilities.
+Bundled profiles: `default` (network on, no time limit, no idle limit — everyday baseline), `safe` (network off, 30 min limit), `build` (network on, 2 hour limit), `power` (network on, 1 hour limit, broad access), `quarantine` (network off, 30 min limit, read-only folders only). `whiz init` writes the full five by default; you can customize during setup or edit `~/.whizzard/config/profiles.json` after.
 
 ## Repository layout
 
 ```
 whizzard/
-  whizzard/        # Python package
-  docker/          # execution image
-  config/          # JSON configs (populated in later stages)
-  scripts/         # profile wrapper scripts (populated in later stages)
-  docs/            # design docs (vision, architecture, build plans, decisions)
-  tests/           # tests
+  whizzard/                # Python package
+    _dockerfiles/          # bundled Dockerfile + Dockerfile.hermes (package data)
+    adapters/              # harness adapters (Hermes + generic Protocol reference)
+    cli/                   # per-subcommand CLI modules
+    init_wizard.py         # `whiz init` orchestration
+  config/                  # example JSON configs (user copies into ~/.whizzard/config/)
+  scripts/                 # maintenance tooling (decisions validator, dx lookup)
+  docs/                    # vision, architecture, decisions, examples
+  tests/                   # unit + integration tests
   README.md
   pyproject.toml
 ```
@@ -176,3 +149,4 @@ whizzard/
 - [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract, control layering
 - [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
 - [docs/decisions.md](docs/decisions.md) — append-only decisions index
+- [docs/examples/](docs/examples/) — integration recipes for wrapping `whiz` from agent harnesses (Claude Code, others)

@@ -15,6 +15,14 @@ planned through v1.0.
 
 ### Added
 
+- **`whiz init` first-run wizard.** Walks new users through five short
+  configuration steps + a Hermes profile sub-step. Builds both the base
+  and Hermes execution images, sets up profiles / mounts / harnesses /
+  presets, and detects existing Hermes installs to clone profiles
+  automatically. Non-interactive `--yes` mode for CI / scripted installs.
+- **`whiz hermes image build` CLI verb.** First-class command for
+  building `whizzard-hermes:latest` from the bundled `Dockerfile.hermes`.
+  Mirrors the existing `whiz image build` shape; called by `whiz init`.
 - `whiz image check` reports whether the local execution image is older
   than a configurable staleness threshold (default 30 days). Exits 0 fresh,
   1 stale, 2 not-built. CI-scriptable.
@@ -23,8 +31,13 @@ planned through v1.0.
 
 ### Changed
 
-- `docker/Dockerfile` now pins the base image by sha256 digest. A floating
-  tag silently rolls the containment surface; the digest is the integrity
+- **Dockerfiles are now bundled as package data.** Moved from `docker/`
+  at the repo root to `whizzard/_dockerfiles/` inside the Python package
+  so `pip install whizzard` distributes them. Runtime lookup uses
+  `importlib.resources`; works in both dev (editable install) and
+  installed (wheel) modes.
+- `Dockerfile` pins the base image by sha256 digest. A floating tag
+  silently rolls the containment surface; the digest is the integrity
   anchor session logs and `whiz image status` reference.
 
 ### Fixed
@@ -33,3 +46,12 @@ planned through v1.0.
   per-session cidfile is unlinked even if an exception interrupts the
   session (KeyboardInterrupt, monitor / audit errors). Prevents
   long-running installs accumulating stray files in STATE_DIR (F-B-09).
+
+### Packaging
+
+- GitHub Actions release workflow (`.github/workflows/release.yml`)
+  builds sdist + wheel on `v*` tag push and publishes to PyPI via
+  Trusted Publishing (OIDC; no API token storage). Pre-release tags
+  (`v0.1.0rc1`) route through the same workflow as stable tags;
+  PyPI's pre-release semantics keep them out of default `pip install`
+  resolution until promoted.
