@@ -282,7 +282,16 @@ fail downstream smokes mysteriously. Acceptable for the maintainer-on-Mac
 workflow today; needs hardening for CI.
 *Disposition:* defer; revisit if it bites.
 
----
+### GitHub Actions: Node.js 20 deprecation in release workflow
+`.github/workflows/release.yml` uses `actions/checkout@v4`,
+`actions/setup-python@v5`, and `actions/upload-artifact@v4` — each
+still on the Node.js 20 runtime. GitHub flagged these as deprecated
+during the v0.1.0rc1 publish run on 2026-05-29. Node 20 is removed
+from GitHub-hosted runners on 2026-09-16; Node 24 becomes the default
+on 2026-06-16. The same deprecation applies to `.github/workflows/ci.yml`.
+*Disposition:* defer until an upstream version of each action ships
+Node-24-native (most likely well before September). Bump action
+versions in one maintenance commit; no functional change expected.
 
 ## How to keep this doc useful
 
