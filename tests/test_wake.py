@@ -216,6 +216,33 @@ def test_check_mounts_exist_skips_malformed():
     assert wake.check_mounts_exist(mounts) == []  # type: ignore[arg-type]
 
 
+def test_check_mounts_exist_rejects_symlinked_host_path(tmp_path):
+    """F-G-14: mounts.py canonicalizes host_path at registration time;
+    a path that is now a symlink represents an inode change since
+    registration. Treat as missing rather than silently relaunching
+    onto an attacker-controlled target."""
+    target = tmp_path / "real-target"
+    target.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(target)
+    mounts = [
+        {"name": "a", "mode": "rw", "host_path": str(link), "container_path": "/work/a"},
+    ]
+    missing = wake.check_mounts_exist(mounts)
+    assert missing == [str(link)]
+
+
+def test_check_mounts_exist_rejects_broken_symlink(tmp_path):
+    """A symlink pointing at a missing target is doubly bad: the inode
+    changed AND the target is gone. Still surfaces as missing."""
+    link = tmp_path / "broken"
+    link.symlink_to(tmp_path / "does-not-exist")
+    mounts = [
+        {"name": "b", "mode": "ro", "host_path": str(link), "container_path": "/work/b"},
+    ]
+    assert wake.check_mounts_exist(mounts) == [str(link)]
+
+
 def test_missing_mount_names_returns_names_not_paths(tmp_path):
     real = tmp_path / "exists"
     real.mkdir()

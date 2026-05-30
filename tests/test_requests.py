@@ -525,9 +525,12 @@ def test_mark_resolved_does_not_raise_on_mirror_failure(sessions_dir, monkeypatc
     monkeypatch.setattr(session_log, "SESSIONS_LOG", audit_log)
 
     def failing_write_text(self, *args, **kwargs):
-        if self.name.startswith("."):  # the .tmp mirror file
+        # Fail only the cell-mirror tmp write (lives under the per-session
+        # requests/ dir), not the resolutions-store tmp write (lives under
+        # STATE_DIR/request-resolutions/). Both go through atomic_write_text
+        # now, so a name-prefix check alone is too broad.
+        if self.name.startswith(".") and "requests" in self.parts:
             raise OSError("disk full")
-        # Allow non-mirror writes through.
         return original_write_text(self, *args, **kwargs)
 
     original_write_text = reqs.Path.write_text

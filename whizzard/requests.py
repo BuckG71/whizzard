@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import whizzard.config as _config
+from whizzard._atomic import atomic_write_text
 from whizzard.adjust import (
     AdjustResult,
     Approver,
@@ -305,8 +306,7 @@ def mark_resolved(req: AgentRequest, status: str, detail: str) -> None:
     # resolved requests — the cell-writable file can no longer be used
     # to retroactively repaint a resolved request's apparent semantics.
     res_path = _resolutions_path(req.session_id, req.request_id)
-    res_path.parent.mkdir(parents=True, exist_ok=True)
-    res_path.write_text(json.dumps({
+    atomic_write_text(res_path, json.dumps({
         "request_id": req.request_id,
         "session_id": req.session_id,
         "kind": req.kind,

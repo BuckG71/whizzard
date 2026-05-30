@@ -31,6 +31,69 @@ from whizzard.adjust import (
     resolve_session,
 )
 
+# --- _stop_container soft-handle for already-gone containers (F-G-13) ------
+
+
+def test_stop_container_treats_no_such_container_as_success(monkeypatch):
+    """F-G-13: if the container exited between resolve_session and
+    _stop_container, docker stop's stderr says "No such container".
+    The operator's intent — stop the session — is already served;
+    return success with an informative detail."""
+    import subprocess as sp
+
+    from whizzard.adjust import _stop_container
+
+    class _FakeResult:
+        returncode = 1
+        stderr = "Error response from daemon: No such container: abc123"
+
+    monkeypatch.setattr(
+        sp, "run", lambda *a, **kw: _FakeResult()
+    )
+    code, detail = _stop_container("abc123")
+    assert code == 0
+    assert "already exited" in detail
+
+
+def test_stop_container_treats_not_running_as_success(monkeypatch):
+    """A container that exited cleanly between resolve and stop also
+    surfaces as ``"is not running"`` rather than "no such container"."""
+    import subprocess as sp
+
+    from whizzard.adjust import _stop_container
+
+    class _FakeResult:
+        returncode = 1
+        stderr = "Error response from daemon: Container abc123 is not running"
+
+    monkeypatch.setattr(
+        sp, "run", lambda *a, **kw: _FakeResult()
+    )
+    code, detail = _stop_container("abc123")
+    assert code == 0
+    assert "already exited" in detail
+
+
+def test_stop_container_surfaces_other_failures(monkeypatch):
+    """Unrelated docker failures (e.g. daemon down) still surface as
+    non-zero — the soft-handle only catches the specific "already
+    gone" tokens."""
+    import subprocess as sp
+
+    from whizzard.adjust import _stop_container
+
+    class _FakeResult:
+        returncode = 1
+        stderr = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
+
+    monkeypatch.setattr(
+        sp, "run", lambda *a, **kw: _FakeResult()
+    )
+    code, detail = _stop_container("abc123")
+    assert code == 1
+    assert "Cannot connect" in detail
+
+
 # --- Changes / MountAddition basics ----------------------------------------
 
 

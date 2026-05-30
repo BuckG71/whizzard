@@ -614,3 +614,109 @@ def test_init_step_2_custom_subflow_creates_one_profile(
     assert work["duration_seconds"] == 7200  # 2 hours
     assert work["idle_timeout_seconds"] == 1800  # 30 min
     assert work["description"] == "my work"
+
+
+# ---------- H3 review-finding tests: atomic-write integrity in the wizard ----
+
+
+def test_wizard_leaves_no_tmp_files_after_successful_run(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wizard routes every config write through ``atomic_write_text``
+    (H1). After a successful run, no ``.<name>.tmp`` siblings should
+    remain — they're created during writes and renamed away on success."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+
+    config = _isolated_whizzard_home / "config"
+    leftover_tmps = [p.name for p in config.iterdir() if p.name.startswith(".")]
+    assert leftover_tmps == [], (
+        f"atomic-write tmp files left behind in config dir: {leftover_tmps}"
+    )
+
+
+def test_wizard_crash_mid_config_write_leaves_original_intact(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the atomic helper raises mid-write, the destination file
+    keeps its previous content (or stays absent). Belt for the helper-
+    level test in test_atomic.py — proves the wizard's call sites
+    actually go through the helper rather than direct write_text.
+
+    Plant a sentinel ``profiles.json`` before the run, make every
+    ``atomic_write_text`` call raise, confirm the sentinel survived."""
+    from whizzard import init_wizard as iw
+
+    config = _isolated_whizzard_home / "config"
+    config.mkdir(parents=True, exist_ok=True)
+    sentinel = '{"sentinel": "survived"}'
+    iw.PROFILES_FILE.write_text(sentinel)
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+    def _exploding_atomic(path: Path, content: str) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(iw, "atomic_write_text", _exploding_atomic)
+
+    # --force lets the wizard past the idempotency check; it'll then
+    # crash on the first config write. The sentinel must survive.
+    runner.invoke(app, ["init", "--yes", "--force"])
+    assert iw.PROFILES_FILE.read_text() == sentinel
+
+
+def test_wizard_eof_during_prompt_does_not_traceback(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Ctrl-D / closed stdin during an interactive prompt must not
+    surface a raw Python traceback to the user — the wizard either
+    exits cleanly or surfaces a user-readable error.
+
+    Drive the interactive (non-`--yes`) flow with an input string
+    that ends abruptly (no terminating newline for the last prompt).
+    CliRunner's behavior with truncated input mirrors stdin closing."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+    # Empty input → first prompt hits EOFError immediately.
+    result = runner.invoke(app, ["init"], input="")
+
+    # Acceptable: any non-zero exit code OR clean exit, but NO Python
+    # traceback noise in the user-facing output.
+    assert "Traceback" not in result.output, (
+        f"raw traceback surfaced to the user:\n{result.output}"
+    )
+
+
+def test_wizard_image_build_failure_leaves_no_partial_config(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the docker build subprocess fails in step 1, the wizard
+    aborts before any config files land. Re-running after a fix is
+    clean (no leftover config trips the idempotency refusal)."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    # Base build fails immediately.
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 1)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code != 0
+
+    config = _isolated_whizzard_home / "config"
+    # No config files should have been written.
+    written = [
+        p.name for p in config.iterdir()
+        if p.is_file() and not p.name.startswith(".")
+    ] if config.exists() else []
+    assert written == [], (
+        f"failed image build still landed config files: {written}"
+    )

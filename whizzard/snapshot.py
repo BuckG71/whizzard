@@ -29,6 +29,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from whizzard._atomic import atomic_write_text
 from whizzard.config import WHIZZARD_HOME
 from whizzard.mounts import Mount, MountMode
 
@@ -133,5 +134,5 @@ def write_snapshot(
     if duration_override_seconds is not None:
         payload["profile"]["duration_override_active"] = True
 
-    target.write_text(json.dumps(payload, indent=2))
+    atomic_write_text(target, json.dumps(payload, indent=2))
     return target

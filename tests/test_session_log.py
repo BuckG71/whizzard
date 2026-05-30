@@ -1,6 +1,7 @@
 """Stage 5: session log tests."""
 
 import json
+import os
 from pathlib import Path
 
 from whizzard.session_log import (
@@ -30,6 +31,27 @@ def test_append_event_creates_parent_dir(tmp_path: Path):
     target = tmp_path / "deep" / "nested" / "log.jsonl"
     append_event({"event": "x"}, path=target)
     assert target.exists()
+
+
+def test_append_event_fsyncs_per_write(tmp_path: Path, monkeypatch):
+    """F-G-12: each append durable-syncs to disk. The wake + adjust
+    paths read the audit log immediately after writing session_start;
+    a missing fsync between buffer-flush and disk-commit makes a
+    running container an orphan on OS crash."""
+    target = tmp_path / "log.jsonl"
+    fsync_calls: list[int] = []
+    real_fsync = os.fsync
+
+    def _spy_fsync(fd: int) -> None:
+        fsync_calls.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr("whizzard.session_log.os.fsync", _spy_fsync)
+    append_event({"event": "x"}, path=target)
+    append_event({"event": "y"}, path=target)
+    assert len(fsync_calls) == 2, (
+        f"expected one fsync per append; got {len(fsync_calls)}"
+    )
 
 
 def test_append_event_one_object_per_line(tmp_path: Path):

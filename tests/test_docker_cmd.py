@@ -193,9 +193,15 @@ def test_argv_no_mcp_mounts_when_session_id_absent(tmp_path, monkeypatch):
     assert "/run/whiz" not in joined
 
 
-def test_argv_includes_mcp_mounts_for_hermes_with_session_id(tmp_path, monkeypatch):
+def test_argv_includes_mcp_mounts_for_hermes_with_session_id(
+    tmp_path, monkeypatch, request,
+):
     # Use a fresh WHIZZARD_HOME so the test doesn't write into the user's
-    # real ~/.whizzard. Reload modules that captured the env at import time.
+    # real ~/.whizzard. The four modules below capture env at import time;
+    # reload with the patched env, then reload AGAIN at teardown so the
+    # module-level constants don't bleed into later tests in the suite
+    # (M5 — caught during the S20 review when this leaked into the
+    # safety hard-block list assertion).
     import importlib
 
     import whizzard.config
@@ -203,11 +209,25 @@ def test_argv_includes_mcp_mounts_for_hermes_with_session_id(tmp_path, monkeypat
     import whizzard.session_log
     import whizzard.snapshot
     from whizzard.adapters import HermesAdapter
+
+    _reload_modules = (
+        whizzard.config,
+        whizzard.snapshot,
+        whizzard.session_log,
+        whizzard.docker_cmd,
+    )
+
+    def _restore_module_state() -> None:
+        # monkeypatch already restored the env var; reloading now picks
+        # up the original WHIZZARD_HOME the user's environment had.
+        for mod in _reload_modules:
+            importlib.reload(mod)
+
+    request.addfinalizer(_restore_module_state)
+
     monkeypatch.setenv("WHIZZARD_HOME", str(tmp_path))
-    importlib.reload(whizzard.config)
-    importlib.reload(whizzard.snapshot)
-    importlib.reload(whizzard.session_log)
-    importlib.reload(whizzard.docker_cmd)
+    for mod in _reload_modules:
+        importlib.reload(mod)
     from whizzard.docker_cmd import build_run_argv as build_run_argv_reloaded
 
     argv = build_run_argv_reloaded(

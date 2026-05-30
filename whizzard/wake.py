@@ -231,11 +231,19 @@ def find_wakeable(
 
 
 def check_mounts_exist(mounts: list[dict]) -> list[str]:
-    """Return paths of mounts whose `host_path` doesn't exist on disk.
+    """Return paths of mounts whose `host_path` is unreachable.
 
     Each mount dict in the session_start event carries `host_path`
     (per docker_cmd._mounts_for_log). Missing host_path field → skipped
     silently (defensive against older log entries pre-host-path schema).
+
+    F-G-14: a host_path that has since become a symlink is treated as
+    missing. mounts.py canonicalizes host_path at registration time via
+    ``Path.resolve()``, so a resolved path is the registry's source of
+    truth; if the same path is now a symlink, the underlying inode was
+    replaced between sessions and the registered capability no longer
+    points where the operator intended. Reject rather than silently
+    relaunch with a possibly-attacker-controlled target.
     """
     missing: list[str] = []
     for m in mounts or []:
@@ -244,7 +252,10 @@ def check_mounts_exist(mounts: list[dict]) -> list[str]:
         host_path = m.get("host_path")
         if not host_path:
             continue
-        if not Path(host_path).expanduser().exists():
+        p = Path(host_path).expanduser()
+        # Use lstat semantics: a symlink (even one pointing at a valid
+        # target) is a state change vs registration; reject.
+        if p.is_symlink() or not p.exists():
             missing.append(str(host_path))
     return missing
 

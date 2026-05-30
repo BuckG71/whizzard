@@ -19,7 +19,13 @@ from whizzard.adjust import _docker_label_lookup, _stop_container
 pytestmark = pytest.mark.integration
 
 
-def _await_container_id(reader, deadline_seconds: float = 15.0) -> str:
+def _await_container_id(reader, deadline_seconds: float = 30.0) -> str:
+    """Wait for the cidfile to appear with content.
+
+    L1 review finding: bumped from 15s to 30s — shared-runner Docker
+    daemons in GitHub Actions can stall under load and the test flaked
+    once at 15s. Local Docker Desktop is always sub-second.
+    """
     deadline = time.time() + deadline_seconds
     while time.time() < deadline:
         cid = reader()

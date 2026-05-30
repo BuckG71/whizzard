@@ -498,11 +498,22 @@ def detect_noops(changes: Changes, start_event: dict) -> tuple[Changes, list[str
 # --- Stop + relaunch --------------------------------------------------------
 
 
+_CONTAINER_ALREADY_GONE_TOKENS = ("no such container", "is not running")
+
+
 def _stop_container(container_id: str, grace_seconds: int = 30) -> tuple[int, str]:
     """Stop a running container via `docker stop --time=<grace>`. Returns
     (exit_code, detail). Non-zero exit means the stop call itself failed
-    (container missing, daemon unreachable, etc.). docker stop blocks
-    until the container exits or the grace window expires."""
+    (daemon unreachable, etc.). docker stop blocks until the container
+    exits or the grace window expires.
+
+    F-G-13: a container that exited between ``resolve_session`` and this
+    call (natural exit, OOM-kill, manual ``docker stop`` from another
+    terminal) surfaces in docker's stderr as "No such container" /
+    "is not running". The operator's intent — "stop this session" —
+    is already served; soft-handle as success with an "already exited"
+    detail so the caller doesn't show a confusing raw docker error.
+    """
     try:
         result = subprocess.run(
             ["docker", "stop", "--time", str(grace_seconds), container_id],
@@ -513,6 +524,9 @@ def _stop_container(container_id: str, grace_seconds: int = 30) -> tuple[int, st
     except subprocess.TimeoutExpired:
         return 1, f"docker stop did not return within {grace_seconds + 10}s"
     if result.returncode != 0:
+        stderr_lower = (result.stderr or "").lower()
+        if any(tok in stderr_lower for tok in _CONTAINER_ALREADY_GONE_TOKENS):
+            return 0, "container already exited"
         return result.returncode, (result.stderr or "").strip() or "docker stop failed"
     return 0, ""
 

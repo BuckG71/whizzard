@@ -12,6 +12,7 @@ already reserves room for them by being open-ended JSON.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -131,6 +132,14 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> None:
     line = json.dumps(event, separators=(",", ":"))
     with target.open("a") as f:
         f.write(line + "\n")
+        # F-G-12: durable-sync each append. The wake and adjust paths
+        # read the audit log immediately after writing a session_start
+        # event to recover the new session_id; without fsync, an OS
+        # crash between buffer-flush and disk-commit makes the running
+        # container an orphan with no audit anchor. Per-event fsync
+        # cost is negligible — audit writes are infrequent.
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def log_session_start(

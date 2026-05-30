@@ -49,6 +49,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from whizzard._atomic import atomic_write_text
 from whizzard.cli._shared import console
 from whizzard.config import (
     CONFIG_DIR,
@@ -409,7 +410,7 @@ def _write_profiles_subset(names: list[str]) -> list[str]:
             for name, p in selected.items()
         },
     }
-    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(PROFILES_FILE, json.dumps(payload, indent=2) + "\n")
     return list(selected.keys())
 
 
@@ -580,7 +581,7 @@ def _step_2_custom_profiles_subflow(state: WizardState) -> list[str]:
 
     # Write what we collected.
     payload = {"schema_version": 1, "profiles": created}
-    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(PROFILES_FILE, json.dumps(payload, indent=2) + "\n")
     return list(created.keys())
 
 
@@ -718,7 +719,7 @@ def step_3_mounts(state: WizardState) -> None:
 def _write_mounts(mounts: dict[str, dict]) -> None:
     """Write the mount registry JSON."""
     payload = {"schema_version": 1, "mounts": mounts}
-    MOUNTS_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(MOUNTS_FILE, json.dumps(payload, indent=2) + "\n")
 
 
 def step_4_presets(state: WizardState) -> None:
@@ -1015,13 +1016,13 @@ def _write_wizard_harnesses() -> None:
         },
     }
     payload = {"schema_version": 1, "harnesses": harnesses}
-    HARNESSES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(HARNESSES_FILE, json.dumps(payload, indent=2) + "\n")
 
 
 def _write_presets(presets: dict[str, dict]) -> None:
     """Write the presets.json file."""
     payload = {"schema_version": 1, "presets": presets}
-    PRESETS_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(PRESETS_FILE, json.dumps(payload, indent=2) + "\n")
 
 
 def step_5_audit_log(state: WizardState) -> None:
@@ -1339,7 +1340,7 @@ def _write_default_profiles() -> list[str]:
             for name, p in profiles.items()
         },
     }
-    PROFILES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(PROFILES_FILE, json.dumps(payload, indent=2) + "\n")
     return list(profiles.keys())
 
 
@@ -1350,7 +1351,7 @@ def _write_default_harnesses() -> int:
     """
     harnesses = default_harnesses()
     payload = {"schema_version": 1, "harnesses": harnesses}
-    HARNESSES_FILE.write_text(json.dumps(payload, indent=2) + "\n")
+    atomic_write_text(HARNESSES_FILE, json.dumps(payload, indent=2) + "\n")
     return len(harnesses)
 
 
