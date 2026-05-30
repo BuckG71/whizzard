@@ -46,6 +46,12 @@ class GenericShellAdapter:
         env = self.config.get("env", {}) or {}
         return {str(k): str(v) for k, v in env.items()}
 
+    def credential_env_keys(self) -> set[str]:
+        # Generic shell never resolves credentials — env values come
+        # straight from harness config as plaintext (and the schema
+        # rejects sensitive shell-loader names per S20.4).
+        return set()
+
     def working_dir(self) -> str | None:
         wd = self.config.get("working_dir")
         return wd if wd else None

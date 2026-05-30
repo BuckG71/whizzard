@@ -471,6 +471,17 @@ class HermesAdapter:
             env[str(k)] = str(v)
         return env
 
+    def credential_env_keys(self) -> set[str]:
+        """S20.5 / D-134: env keys whose values were resolved from a
+        credential source (OneCLI or host-env fallback). Whizzard scrubs
+        these from the argv recorded in the audit log so secrets don't
+        persist in plaintext on disk."""
+        # _credential_sources is populated by _populate_credential_sources()
+        # which container_env() / active_capabilities() / preflight() all
+        # trigger before launch. By the time the audit-log writer asks,
+        # the set is canonical for this session.
+        return set(self._credential_sources.keys())
+
     def working_dir(self) -> str | None:
         wd = self.config.get("working_dir")
         return wd if wd else None

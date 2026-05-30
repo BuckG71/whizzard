@@ -101,6 +101,18 @@ class HarnessAdapter(Protocol):
         """
         ...
 
+    def credential_env_keys(self) -> set[str]:
+        """Names of env vars in ``container_env()`` that hold secret
+        values. Whizzard scrubs the matching ``-e KEY=VALUE`` pairs
+        from the argv recorded in the audit log so secrets don't
+        persist in plaintext on disk (S20.5 / D-134).
+
+        Adapters with no secrets (generic shell) return ``set()``.
+        Adapters that resolve credentials (Hermes) return the set of
+        env-var names whose values came from a credential source.
+        """
+        ...
+
     def working_dir(self) -> str | None:
         """Container working directory, or None for the image default."""
         ...

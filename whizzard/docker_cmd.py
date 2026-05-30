@@ -380,6 +380,48 @@ def _mounts_for_log(
     ]
 
 
+_SCRUBBED_VALUE = "***"
+
+
+def _argv_for_log(argv: list[str], credential_env_keys: set[str]) -> list[str]:
+    """Scrub credential values from a launch argv before it lands in the
+    audit log (S20.5 / D-134).
+
+    The host's argv has ``-e KEY=VALUE`` pairs for every env var injected
+    into the cell. When KEY is a credential the adapter resolved (via
+    OneCLI or host-env fallback per D-134), VALUE is the plaintext
+    secret. Logging it verbatim to ``~/.whizzard/logs/sessions.jsonl``
+    persists the secret on disk in a place the user may not realize
+    contains credentials (backups, log-sharing, support snippets).
+
+    Walk argv looking for ``-e`` followed by ``KEY=VALUE`` where KEY
+    matches ``credential_env_keys``; replace VALUE with ``***``. The
+    original argv handed to ``docker run`` is untouched — only the
+    logged copy is scrubbed.
+    """
+    if not credential_env_keys:
+        return argv
+    scrubbed: list[str] = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        scrubbed.append(token)
+        if token == "-e" and i + 1 < len(argv):
+            pair = argv[i + 1]
+            if "=" in pair:
+                key, _ = pair.split("=", 1)
+                if key in credential_env_keys:
+                    scrubbed.append(f"{key}={_SCRUBBED_VALUE}")
+                else:
+                    scrubbed.append(pair)
+            else:
+                scrubbed.append(pair)
+            i += 2
+            continue
+        i += 1
+    return scrubbed
+
+
 def run_shell(
     profile: Profile,
     image: str = WHIZZARD_IMAGE,
@@ -473,7 +515,11 @@ def run_shell(
         image_tag=image,
         image_id=image_id,
         mounts=_mounts_for_log(resolved_mounts),
-        argv=argv,
+        # S20.5 / D-134: scrub credential -e KEY=VALUE pairs so secrets
+        # don't persist plaintext in ~/.whizzard/logs/sessions.jsonl.
+        # The container still receives the real values; only the
+        # logged copy is sanitized.
+        argv=_argv_for_log(argv, adapter.credential_env_keys()),
         start_time=wall_start_time,
         overrides_used=overrides_used or [],
         preset_name=preset_name,
