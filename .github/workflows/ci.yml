@@ -113,3 +113,53 @@ jobs:
           python-version: "3.12"
       - name: Run validator
         run: python3 scripts/validate_decisions.py
+
+  # S20.6 — Supply-chain hardening. Two checks per push:
+  #   1. pip-audit over the resolved dependency tree (PyPI advisories).
+  #   2. Dockerfile base images pinned by sha256 digest, not floating tag —
+  #      a floating tag silently rolls the containment surface (D-74/D-75
+  #      amended).
+  supply-chain:
+    name: Supply-chain audit (pip-audit + digest pins)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install runtime deps + pip-audit
+        # Install the runtime deps explicitly (NOT `pip install -e .`)
+        # so pip-audit doesn't try to look the local whizzard package
+        # up on PyPI. We audit our INPUTS, not the project itself.
+        run: |
+          pip install typer>=0.12.0 rich>=13.0.0 mcp>=1.0
+          pip install pip-audit
+      - name: pip-audit (PyPI advisories)
+        # --ignore-vuln entries: transitive issues outside our direct
+        # control. Each must be documented here with the upstream
+        # tracking pointer.
+        # - PYSEC-2026-161: starlette 1.0.0 (transitive via mcp). Fix
+        #   is starlette 1.0.1; will pick up automatically when mcp
+        #   bumps its pin.
+        run: |
+          pip-audit --strict \
+            --ignore-vuln PYSEC-2026-161
+      - name: Dockerfiles pinned by digest
+        run: |
+          # Every external-registry `FROM <image>` line must include
+          # `@sha256:<digest>`. A floating tag (`FROM debian:12-slim`)
+          # silently rolls the cell's containment surface (D-74/D-75
+          # amended). Local layered images (whizzard-base:latest in
+          # Dockerfile.hermes) are skipped — their integrity anchor is
+          # the underlying base's digest pin.
+          bad=$(grep -hE '^FROM ' whizzard/_dockerfiles/Dockerfile* \
+            | grep -vE '^FROM whizzard-' \
+            | grep -vE '@sha256:[0-9a-f]{64}' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::External Dockerfile FROM line missing sha256 digest pin:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "All external Dockerfile FROM lines are digest-pinned."
