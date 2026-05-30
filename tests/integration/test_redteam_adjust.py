@@ -113,7 +113,12 @@ def test_cell_poisoned_snapshot_overwritten_by_host_relaunch_write(
 
     cell_result = _launch_cell_with_session_dir(
         whizzard_base_image, sess_dir,
-        f"cat > /run/whiz/snapshot.json <<'__EOF__'\n{poison_json}\n__EOF__",
+        f"cat > /run/whiz/snapshot.json <<'__EOF__'\n{poison_json}\n__EOF__\n"
+        # chmod 666 so the host's subsequent write_snapshot (running as a
+        # different UID on Linux CI) can overwrite the file. A real
+        # attacker would do the same to avoid the host noticing a
+        # write-permission failure on the poisoned file.
+        f"chmod 666 /run/whiz/snapshot.json",
     )
     assert cell_result.returncode == 0, cell_result.stderr
 
