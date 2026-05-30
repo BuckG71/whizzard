@@ -323,3 +323,29 @@ def test_preflight_passes_hermes_when_allow_ephemeral(monkeypatch):
     ])
     # Dry-run gets past preflight; should succeed.
     assert result.exit_code == 0, result.output
+
+
+# S20.3 / D-133 — fail-closed on snapshot-write failure
+
+
+def test_launch_aborts_when_snapshot_write_fails(monkeypatch):
+    """A failed snapshot write must abort the launch with a clear error.
+    Per D-156 the snapshot is the agent's view of its own constraints;
+    a launch with no readable snapshot leaves the agent blind to its
+    own boundaries — fail-closed, not fail-open."""
+    def _exploding_snapshot(*args, **kwargs):
+        raise OSError("disk full")
+
+    with patch("whizzard.cli._launch.write_snapshot", side_effect=_exploding_snapshot), \
+         patch("whizzard.cli._launch.docker_available", return_value=True), \
+         patch("whizzard.cli._launch.image_exists", return_value=True), \
+         patch("whizzard.cli._launch.run_shell") as mock_run:
+        result = runner.invoke(app, ["run", "--profile", "default"])
+
+    # The launch must NOT have proceeded to run_shell.
+    assert mock_run.call_count == 0, (
+        "snapshot write failed but run_shell was still called — fail-open!"
+    )
+    # And the user must see a clear error.
+    assert result.exit_code == 2, result.output
+    assert "snapshot" in result.output.lower()

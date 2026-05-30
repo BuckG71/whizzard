@@ -201,16 +201,32 @@ def _perform_launch(
     # adapter's mcp_env). The same per-session directory holds the agent's
     # event file, which the cell writes and Whizzard merges into the audit
     # log at session_end (D-156 event-merge pattern, see docker_cmd).
-    write_snapshot(
-        session_id=session_id,
-        profile=prof,
-        resolved_mounts=resolved,
-        harness_name=adapter.name,
-        # F-D-06: pass the effective duration cap (from adjust --extend, if
-        # any) so the cell's whiz_status reflects what enforcement is using,
-        # not the underlying profile value.
-        duration_override_seconds=duration_override_seconds,
-    )
+    #
+    # S20.3 / D-133: fail-closed if the snapshot can't be written. The
+    # cooperation-layer contract (D-156) is that the agent's whiz_status
+    # reflects host-side constraints; a launch with no readable snapshot
+    # leaves the agent blind to its own boundaries. Treat write failure
+    # as an abort, not a soft-warning.
+    try:
+        write_snapshot(
+            session_id=session_id,
+            profile=prof,
+            resolved_mounts=resolved,
+            harness_name=adapter.name,
+            # F-D-06: pass the effective duration cap (from adjust --extend,
+            # if any) so the cell's whiz_status reflects what enforcement
+            # is using, not the underlying profile value.
+            duration_override_seconds=duration_override_seconds,
+        )
+    except OSError as e:
+        console.print(
+            f"[red]error: could not write the per-session snapshot: {e}[/red]"
+        )
+        console.print(
+            "[red]aborting launch — the agent's MCP status surface "
+            "requires the snapshot.[/red]"
+        )
+        raise typer.Exit(code=2) from e
 
     # F-A6 (catch-up review pass 2): wrap the launch in handlers for the
     # credential-fetch exceptions the Hermes adapter's `container_env()`
