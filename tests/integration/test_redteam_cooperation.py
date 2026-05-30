@@ -80,15 +80,27 @@ def _stage_fake_whizzard_home(tmp_path: Path) -> tuple[Path, Path, str, Path]:
         <tmp_path>/sessions/<sid>/requests/   (cell-writable)
         <tmp_path>/state/                     (host-only)
 
+    The bind-mounted dirs are chmod'd world-writable so the cell — which
+    runs as UID 1000 (whizzard) — can write through them on Linux CI,
+    where the host's tmp_path is owned by the runner UID (≠ 1000).
+    Local Docker Desktop is permissive about this; native Linux is not.
+
     Returns (sessions_dir, state_dir, session_id, sess_dir).
     """
+    import os
+
     fake_home = tmp_path
     sessions_dir = fake_home / _FAKE_SESSIONS_REL
     state_dir = fake_home / _FAKE_STATE_REL
     session_id = f"redteam-{uuid.uuid4().hex[:12]}"
     sess_dir = sessions_dir / session_id
-    (sess_dir / "requests").mkdir(parents=True)
+    requests_dir = sess_dir / "requests"
+    requests_dir.mkdir(parents=True)
     state_dir.mkdir(parents=True)
+    # World-writable so the cell (UID 1000) can write through the bind
+    # mount regardless of host-side ownership.
+    for d in (fake_home, sessions_dir, sess_dir, requests_dir):
+        os.chmod(d, 0o777)
     return sessions_dir, state_dir, session_id, sess_dir
 
 

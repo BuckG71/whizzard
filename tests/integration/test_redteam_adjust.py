@@ -66,6 +66,8 @@ def test_cell_poisoned_snapshot_overwritten_by_host_relaunch_write(
     Closes the integration-tier proof for residual risk 6.6 in the
     threat model: the cell *can* write the file, but writing it has no
     effect on the host's actual policy."""
+    import os
+
     from whizzard.config import Profile
     from whizzard.mounts import Mount
     from whizzard.snapshot import write_snapshot
@@ -75,6 +77,12 @@ def test_cell_poisoned_snapshot_overwritten_by_host_relaunch_write(
     sess_dir = fake_whizzard_home / "sessions" / session_id
     sess_dir.mkdir(parents=True)
     snapshot_path = sess_dir / "snapshot.json"
+    # World-writable on the bind-mount path so the cell (UID 1000) can
+    # write through on Linux CI where the host's tmp_path is owned by
+    # the runner UID (≠ 1000). Local Docker Desktop is permissive about
+    # this; native Linux is not.
+    for d in (tmp_path, fake_whizzard_home, fake_whizzard_home / "sessions", sess_dir):
+        os.chmod(d, 0o777)
 
     # Phase 1: Cell writes a poisoned snapshot claiming a wildly permissive
     # profile (network on, no duration cap, broad-mount enabled, fake
