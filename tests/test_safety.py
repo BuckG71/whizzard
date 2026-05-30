@@ -224,3 +224,43 @@ def test_override_record_is_frozen():
     o = OverrideRecord(path="/a", reason="x")
     with pytest.raises(dataclasses.FrozenInstanceError):
         o.path = "/b"  # type: ignore[misc]
+
+
+# Red-team / config write-protection — cluster 2 of the Stage 20 suite.
+# The static fact under test: the Whizzard config directory is on the
+# deep hard-block list, so check_mount_path rejects any mount that
+# intersects it without an override path. The intersection mechanism
+# itself is exercised by the earlier hard-block tests; here the assertion
+# is that the *specific* config-dir entry is in place.
+
+def test_whizzard_home_is_on_the_deep_hard_block_list():
+    """If WHIZZARD_HOME ever drops off _DEEP_HARD_BLOCKS the entire
+    config write-protection invariant collapses: a mount could expose
+    profiles.json, harnesses.json, etc. to the cell.
+
+    Source-inspects the list literal rather than checking the live
+    module attribute — other tests in the suite reload
+    ``whizzard.config`` with a tmp_path WHIZZARD_HOME, leaving
+    ``_DEEP_HARD_BLOCKS`` pointing at a stale value mid-run. The
+    invariant under test is "the literal lists WHIZZARD_HOME", which
+    is what source inspection actually checks."""
+    import inspect
+
+    import whizzard.safety
+
+    safety_source = inspect.getsource(whizzard.safety)
+    # Find the `_DEEP_HARD_BLOCKS = [` assignment (skip the type-annotation
+    # `list[Path]` which also matches `_DEEP_HARD_BLOCKS:` substring) and
+    # walk braces until the matching `]`.
+    marker = "_DEEP_HARD_BLOCKS: list[Path] = ["
+    block_start = safety_source.find(marker)
+    assert block_start >= 0, (
+        f"could not locate `{marker}` in safety.py — list literal shape changed?"
+    )
+    block_end = safety_source.find("]", block_start + len(marker))
+    block_literal = safety_source[block_start:block_end]
+
+    assert "WHIZZARD_HOME" in block_literal, (
+        "WHIZZARD_HOME missing from _DEEP_HARD_BLOCKS — config "
+        "write-protection invariant broken"
+    )
