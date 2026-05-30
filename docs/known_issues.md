@@ -93,17 +93,6 @@ decision (D-156).
 *Disposition:* security-review backlog, or a decision-needed item earlier
 if it bothers us.
 
-### No env-name denylist on adapter-supplied `container_env`
-`docker_cmd.build_run_argv` passes the adapter's `container_env()` and
-`mcp_env()` into `-e K=V` flags without filtering names. A user-edited
-`harnesses.json` could include `LD_PRELOAD`, `PATH`, `HOME`, etc. and the
-values would land verbatim in the sandbox. Not a containment escape (the sandbox
-is the sandbox), but a footgun for misconfig. Adapter code and
-`harnesses.json` are both trusted core surfaces today, so no current path
-exercises this; the denylist is defensive hardening.
-*Source:* internal code review.
-*Disposition:* security-review backlog.
-
 ### No test for agent-event merge ordering vs `session_end`
 `run_shell` documents in code that agent events MUST be merged into the
 audit log before the `session_end` event so the log is temporally

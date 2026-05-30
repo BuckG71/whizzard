@@ -278,3 +278,52 @@ def test_load_rejects_non_string_start_command(tmp_path: Path):
     })
     with pytest.raises(HarnessConfigError, match="non-empty string"):
         load_harnesses(f)
+
+
+# --- S20.4 / D-133: env-key denylist for process-loading vars --------------
+
+
+@pytest.mark.parametrize("denied_key", [
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "LD_AUDIT",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "PATH",
+    "PYTHONPATH",
+    "PYTHONSTARTUP",
+    "IFS",
+])
+def test_load_rejects_denied_env_keys(tmp_path: Path, denied_key: str):
+    """Env keys that affect process loading or tool resolution are
+    rejected at harness-config parse time. Defense-in-depth: even
+    though the cell is non-root with cap-drop=ALL, accepting these
+    from harness config is a misconfig footgun."""
+    f = _write(tmp_path / "harnesses.json", {
+        "evil": {
+            "type": "shell",
+            "start_command": "/bin/bash",
+            "env": {denied_key: "/tmp/attacker.so"},
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="denied"):
+        load_harnesses(f)
+
+
+def test_load_accepts_normal_env_keys(tmp_path: Path):
+    """Sanity: normal app-level env keys are fine — only the
+    process-loading / tool-resolution ones are denied."""
+    f = _write(tmp_path / "harnesses.json", {
+        "ok": {
+            "type": "shell",
+            "start_command": "/bin/bash",
+            "env": {
+                "HERMES_MODE": "contained",
+                "ANTHROPIC_LOG": "info",
+                "DEBUG": "1",
+            },
+        },
+    })
+    # Must not raise.
+    harnesses = load_harnesses(f)
+    assert harnesses["ok"]["env"]["HERMES_MODE"] == "contained"

@@ -59,6 +59,24 @@ class HarnessConfigError(Exception):
     pass
 
 
+# Env keys that affect process loading or tool resolution. A harness config
+# that sets any of these is almost certainly a misconfig; reject at parse
+# time so the user sees a clear error instead of silently weakened cell
+# behavior. Per S20.4 / the senior-engineer review.
+_DENIED_ENV_KEYS: frozenset[str] = frozenset({
+    "LD_PRELOAD",          # forces a shared library to load first
+    "LD_LIBRARY_PATH",     # overrides shared-library search
+    "LD_AUDIT",            # rtld auditing hook
+    "LD_BIND_NOW",         # alters lazy-bind behavior
+    "DYLD_INSERT_LIBRARIES",  # macOS LD_PRELOAD analog
+    "DYLD_LIBRARY_PATH",   # macOS LD_LIBRARY_PATH analog
+    "PATH",                # tool resolution
+    "PYTHONPATH",          # affects Python import search
+    "PYTHONSTARTUP",       # auto-runs at Python REPL launch
+    "IFS",                 # shell field-separator; classic injection vector
+})
+
+
 def _validate_spec(name: str, spec: dict) -> None:
     if not isinstance(spec, dict):
         raise HarnessConfigError(f"harness {name!r}: spec must be an object")
@@ -87,8 +105,27 @@ def _validate_spec(name: str, spec: dict) -> None:
             )
 
     # env must be a dict if present
-    if "env" in spec and not isinstance(spec["env"], dict):
-        raise HarnessConfigError(f"harness {name!r}: env must be an object")
+    if "env" in spec:
+        env = spec["env"]
+        if not isinstance(env, dict):
+            raise HarnessConfigError(f"harness {name!r}: env must be an object")
+        # S20.4 / D-133: reject env keys that affect process loading or
+        # tool resolution. The cell still has --cap-drop=ALL + non-root
+        # so even a planted LD_PRELOAD .so can't escape, but accepting
+        # these from harness config is a clear misconfig footgun (the
+        # senior-engineer review's "No env-name denylist on
+        # adapter-supplied container_env" finding).
+        for env_key in env:
+            if not isinstance(env_key, str):
+                raise HarnessConfigError(
+                    f"harness {name!r}: env keys must be strings"
+                )
+            if env_key in _DENIED_ENV_KEYS:
+                raise HarnessConfigError(
+                    f"harness {name!r}: env key {env_key!r} is denied — "
+                    "this name controls process loading or tool resolution "
+                    "and must not be set via harness config"
+                )
 
     # platforms (D-89, agent harnesses) must be a list of strings if present
     if "platforms" in spec:
