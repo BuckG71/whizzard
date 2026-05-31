@@ -437,7 +437,12 @@ class HermesAdapter:
             var = _env_var_for_platform(platform)
             result = fetch_secret(var)
             env[var] = result.value
-            self._credential_sources[platform] = result.source
+            # S20.7 bug-fix: key on the env-var NAME (the same string
+            # that lands in ``-e KEY=VALUE`` argv), not the platform
+            # name. credential_env_keys() returns this dict's keys to
+            # the audit-log scrubber; a mismatch (e.g. {"discord"} vs
+            # argv "DISCORD_BOT_TOKEN") silently bypasses the scrub.
+            self._credential_sources[var] = result.source
         for secret_name in self.config.get("secrets", []) or []:
             result = fetch_secret(secret_name)
             env[secret_name] = result.value

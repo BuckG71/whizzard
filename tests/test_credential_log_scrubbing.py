@@ -101,7 +101,9 @@ def test_hermes_adapter_returns_resolved_credential_keys(
     monkeypatch, tmp_path,
 ):
     """The Hermes adapter tracks resolved credentials in
-    _credential_sources; credential_env_keys() returns that set."""
+    _credential_sources; credential_env_keys() returns the env-var
+    names (NOT platform names — see test_platforms_credential_keys_use_env_var_names
+    below for the S20.7 regression that this distinction caused)."""
     from whizzard.adapters import _credentials
     from whizzard.adapters import hermes as hermes_module
     from whizzard.adapters._credentials import SecretFetchResult
@@ -121,7 +123,7 @@ def test_hermes_adapter_returns_resolved_credential_keys(
         config={
             "type": "agent",
             "start_command": "hermes start",
-            "platforms": ["DISCORD_BOT_TOKEN"],
+            "platforms": ["discord"],          # production-shape (lowercase platform)
             "secrets": ["ANTHROPIC_API_KEY"],
             "hermes_home": str(tmp_path),
         },
@@ -129,5 +131,62 @@ def test_hermes_adapter_returns_resolved_credential_keys(
     # Trigger credential resolution.
     adapter.container_env()
     keys = adapter.credential_env_keys()
+    # platform "discord" must resolve to env var "DISCORD_BOT_TOKEN" in
+    # the returned set so the audit-log scrubber matches the argv pair.
     assert "DISCORD_BOT_TOKEN" in keys
     assert "ANTHROPIC_API_KEY" in keys
+
+
+def test_platforms_credential_keys_use_env_var_names_not_platform_names(
+    monkeypatch, tmp_path,
+):
+    """S20.7 regression: the independent security review caught that
+    _populate_credential_sources keyed the dict on platform names
+    (e.g., "discord"), while the actual argv has -e DISCORD_BOT_TOKEN=
+    pairs. credential_env_keys() advertised a set the scrubber could
+    never match against — plaintext bot tokens leaked into the audit
+    log for every platforms-using harness.
+
+    Production-shape end-to-end test: lowercase platform name in
+    config → resolved env var in the returned credential set →
+    _argv_for_log actually scrubs the argv produced by build_run_argv."""
+    from whizzard.adapters import hermes as hermes_module
+    from whizzard.adapters._credentials import SecretFetchResult
+    from whizzard.adapters.hermes import HermesAdapter
+    from whizzard.config import get_profile
+    from whizzard.docker_cmd import _argv_for_log, build_run_argv
+
+    monkeypatch.setattr(
+        hermes_module, "fetch_secret",
+        lambda n: SecretFetchResult(
+            value=f"plaintext-secret-for-{n}", source="onecli",
+        ),
+    )
+
+    adapter = HermesAdapter(
+        name="hermes-prod",
+        config={
+            "type": "agent",
+            "start_command": "hermes start",
+            "platforms": ["discord"],   # lowercase platform name (production shape)
+            "hermes_home": str(tmp_path),
+        },
+    )
+
+    argv = build_run_argv(
+        get_profile("default"),
+        image="whizzard-hermes:latest",
+        session_id="s20-7-regression",
+        adapter=adapter,
+    )
+    scrubbed = _argv_for_log(argv, adapter.credential_env_keys())
+
+    # The plaintext token MUST NOT appear in the scrubbed argv —
+    # otherwise it lands in ~/.whizzard/logs/sessions.jsonl.
+    joined = " ".join(scrubbed)
+    assert "plaintext-secret-for-DISCORD_BOT_TOKEN" not in joined, (
+        f"S20.7 regression: platform-sourced credential leaked into "
+        f"audit-log argv. credential_env_keys()={adapter.credential_env_keys()!r}, "
+        f"scrubbed argv slice={[a for a in scrubbed if 'DISCORD' in a]!r}"
+    )
+    assert "DISCORD_BOT_TOKEN=***" in scrubbed

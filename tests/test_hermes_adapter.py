@@ -94,7 +94,14 @@ def test_hermes_container_env_records_credential_source(monkeypatch):
     adapter = HermesAdapter(config={"platforms": ["discord", "slack"]})
     adapter.container_env()
 
-    assert adapter._credential_sources == {"discord": "onecli", "slack": "host-env"}
+    # S20.7 / D-134: the dict is keyed on the env-var NAME (the same
+    # string that lands in `-e KEY=VALUE` argv), not the platform name,
+    # so credential_env_keys() advertises a set the audit-log scrubber
+    # can actually match against.
+    assert adapter._credential_sources == {
+        "DISCORD_BOT_TOKEN": "onecli",
+        "SLACK_BOT_TOKEN": "host-env",
+    }
 
 
 def test_hermes_container_env_passes_through_non_platform_env(monkeypatch):
@@ -577,9 +584,12 @@ def test_hermes_active_capabilities_warns_when_host_env_fallback_used(monkeypatc
     adapter.container_env()  # populates _credential_sources
     caps = adapter.active_capabilities()
 
-    assert any("WARNING" in c and "slack" in c for c in caps)
-    # discord came from OneCLI — should NOT appear in the warning.
-    assert not any("WARNING" in c and "discord" in c for c in caps)
+    # S20.7: post-fix, the warning surfaces env-var NAMES rather than
+    # platform names. More specific UX — the user can grep their env
+    # or OneCLI store for the exact var listed.
+    assert any("WARNING" in c and "SLACK_BOT_TOKEN" in c for c in caps)
+    # discord came from OneCLI — its env var should NOT appear.
+    assert not any("WARNING" in c and "DISCORD_BOT_TOKEN" in c for c in caps)
 
 
 def test_hermes_active_capabilities_no_warning_when_all_onecli(monkeypatch):
