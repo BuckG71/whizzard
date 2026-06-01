@@ -70,7 +70,7 @@
   /* host control-plane band */
   .hostband{background:var(--panel2);border:1px solid #3b4554;border-radius:14px;
     padding:16px 18px}
-  .hostband .bandhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+  .hostband .bandhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px;flex-wrap:wrap}
   .hostband .bandhead .name{display:flex;align-items:center;gap:.55rem;font-weight:600;font-size:.82rem;
     text-transform:uppercase;letter-spacing:.07em;color:#c6cedb;white-space:nowrap}
   .hostband .bandhead .where{font-family:var(--mono);font-size:.7rem;color:var(--faint);
@@ -78,6 +78,7 @@
   .dot{width:.62rem;height:.62rem;border-radius:50%;background:#9aa6b6;box-shadow:0 0 0 3px rgba(154,166,182,.16)}
   .hostgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
   @media(max-width:720px){.hostgrid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:480px){.hostgrid{grid-template-columns:1fr}}
   .hcell{background:#10131b;border:1px solid var(--line);border-top:2px solid #6f7a8c;
     border-radius:9px;padding:11px 12px}
   .hcell b{display:block;font-size:.86rem;font-weight:600;letter-spacing:-.01em}
