@@ -70,8 +70,10 @@ The wrap-up step is required from MVP, not deferred to v1. When a session is abo
 
 The generic shell adapter implements `wrap_up()` as a no-op (no agent state to preserve). Harness-specific adapters (Hermes, etc.) implement it meaningfully.
 
-Core-maintained adapters (intentionally capped — additions are governed via the decisions process):
-- generic shell adapter — shipped
+Core-maintained adapters:
+- generic shell adapter — shipped. A trivial baseline: launches `/bin/bash`, no agent CLI, no upstream to track, ~zero ongoing maintenance. It is *not* counted against the agent-harness slate cap below.
+
+The **agent-harness** slate is intentionally capped (additions governed via the decisions process), because each agent harness carries real upstream-change-tracking and adapter-maintenance cost:
 - Hermes adapter — shipped
 - NanoClaw adapter — v1.0
 - OpenClaw adapter — v1.0 (promoted from the community tier per D-180)

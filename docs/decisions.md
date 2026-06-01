@@ -2231,7 +2231,7 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 
 **Source:** conversation 2026-05-14 (during the maintenance-burden discussion that explored harness-vs-wrapper positioning).
 
-**Status:** active (amended by D-180 — OpenClaw promoted to the core slate at v1.0, making the slate four harnesses); supersedes D-35 and D-97.
+**Status:** active (amended by D-180 — OpenClaw promoted to the core slate at v1.0, making the agent-harness slate four: Hermes, NanoClaw, OpenClaw, native; the generic shell baseline is uncounted); supersedes D-35 and D-97.
 
 **Notes:**
 - The native harness commitment is deferred to v2.0 deliberately — it doesn't block MVP or v1.0 launches, and gives time for the wrapper position to prove out before adding a second product to the surface.
@@ -2926,9 +2926,9 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Door Type:** two-way — slate composition is explicitly reorganizable per D-155.
 
-**Decision:** The OpenClaw adapter moves from the community-maintained tier into the **core-maintained** slate, landing at **v1.0** alongside NanoClaw. The core slate at v1.0 becomes four harnesses: generic shell + Hermes (shipped), NanoClaw + OpenClaw (v1.0); the native harness remains at v2.0. This amends D-155's "fixed at three" cap (which had OpenClaw in the community long-tail).
+**Decision:** The OpenClaw adapter moves from the community-maintained tier into the **core-maintained** slate, landing at **v1.0** alongside NanoClaw. This brings the **agent-harness** slate to four — Hermes (shipped), NanoClaw + OpenClaw (v1.0), native (v2.0) — up from the three D-155 fixed. The generic shell adapter is *not* counted against the cap: it launches `/bin/bash` with no agent CLI, has no upstream to track, and carries effectively zero ongoing maintenance, so it's a trivial baseline rather than a slate slot. This amends D-155's three-harness cap (which had OpenClaw in the community long-tail).
 
-**Rationale:** Maintainer directive (2026-05-31). OpenClaw is a prominent production harness in the same category Whizzard targets; core-maintaining its adapter widens out-of-the-box reach at launch. The incremental maintenance burden D-155 sought to bound is accepted deliberately — D-155's cap was always framed as "current capacity," with its Notes explicitly allowing the slate to grow if overhead proves manageable. This is that growth, taken on purpose, not a reversal of the maintenance-burden reasoning.
+**Rationale:** Maintainer directive (2026-05-31). OpenClaw is a prominent production harness in the same category Whizzard targets; core-maintaining its adapter widens out-of-the-box reach at launch. The maintenance burden D-155 sought to bound is the per-*agent-harness* cost (upstream-change tracking, adapter upkeep) — which is exactly why the generic shell doesn't count toward it. D-155's cap was always framed as "current capacity," with its Notes explicitly allowing the slate to grow if overhead proves manageable; this is that growth, taken on purpose, not a reversal of the maintenance-burden reasoning.
 
 **Source:** conversation 2026-05-31.
 
