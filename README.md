@@ -1,5 +1,7 @@
 # Whizzard
 
+[![CI](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml/badge.svg)](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml)
+
 Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
 
 > **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — see [Install](#install) below.

@@ -1,0 +1,19 @@
+# Code owners — auto-requests maintainer review on PRs touching sensitive
+# paths (launch-readiness §B). The security boundary and the surfaces that
+# construct the container launch are the load-bearing files; a change there
+# should never merge without an explicit maintainer look.
+#
+# Syntax: <path-pattern> <@owner>. Last matching pattern wins.
+
+# Default: everything is maintainer-reviewed until co-maintainers exist.
+*                       @BuckG71
+
+# Security-critical surfaces — called out explicitly so they stay owned
+# even if the default above is later relaxed to a team.
+/whizzard/safety.py     @BuckG71
+/whizzard/docker_cmd.py @BuckG71
+/whizzard/mounts.py     @BuckG71
+/whizzard/requests.py   @BuckG71
+/whizzard/adapters/     @BuckG71
+/.github/               @BuckG71
+/whizzard/_dockerfiles/ @BuckG71

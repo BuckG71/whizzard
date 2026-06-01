@@ -1,0 +1,44 @@
+# Dependabot — automated dependency-update PRs (S20.6 supply-chain hardening,
+# OSS-launch readiness §D). Covers the three ecosystems this repo ships:
+#   - pip:            runtime + dev Python deps (pyproject.toml)
+#   - github-actions: workflow action pins (kept current as SHAs)
+#   - docker:         base image in the bundled Dockerfiles
+#
+# Enabling Dependabot *alerts* + *security updates* is a separate repo-settings
+# toggle (Settings → Code security); this file configures the version-update PRs.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+
+  # The bundled execution-image Dockerfiles live under whizzard/_dockerfiles/.
+  # Dependabot bumps the digest-pinned base image when a new debian:12-slim
+  # digest publishes; the S20.6 CI check enforces that the pin stays a digest.
+  - package-ecosystem: "docker"
+    directory: "/whizzard/_dockerfiles"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "docker"

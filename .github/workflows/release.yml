@@ -17,6 +17,11 @@ on:
     tags:
       - "v*"
 
+# S20.6 / launch-readiness §C: least-privilege floor. verify + build only
+# read the repo; the publish job opts up to id-token: write for OIDC below.
+permissions:
+  contents: read
+
 # Don't cancel in-progress releases. If two tags land in quick succession,
 # both should build and publish.
 concurrency:
@@ -34,8 +39,8 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -56,8 +61,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: verify
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install build
@@ -79,7 +84,7 @@ jobs:
           grep -q "whizzard/_dockerfiles/Dockerfile" /tmp/wheel-list
           grep -q "whizzard/_dockerfiles/Dockerfile.hermes" /tmp/wheel-list
       - name: Upload distribution as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
@@ -91,17 +96,21 @@ jobs:
     needs: build
     # Trusted Publishing requires `id-token: write` so the workflow can
     # mint an OIDC token for PyPI. No `PYPI_API_TOKEN` secret is set or
-    # needed.
+    # needed. A job-level permissions: block fully REPLACES the workflow
+    # default, so contents: read is restated here (download-artifact
+    # doesn't strictly need it, but keeping the floor explicit avoids a
+    # surprise if a checkout step is added later).
     permissions:
+      contents: read
       id-token: write
     steps:
       - name: Download distribution
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist/
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           # No `password:` — Trusted Publishing handles auth via OIDC.
           # `skip-existing: true` is intentionally NOT set: a re-tag with
