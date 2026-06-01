@@ -73,6 +73,26 @@ reviewer pass. Pre-OSS-launch gate. The consolidated threat model at
 ### `ADAPTER_SPEC.md` (OSS-launch artifact)
 Contributor-facing adapter Protocol artifact. Decided but not authored.
 
+### Network allowlist must handle the hostname parser-differential class
+ROADMAP goal 11's host-side egress proxy is the same shape as the
+allowlist Claude Code shipped a CVE-class bypass against in
+v2.0.24–v2.1.89: an attacker hostname `attacker.com\x00.google.com`
+passed JS `endsWith()` (saw `.google.com`) while libc's `getaddrinfo()`
+truncated at the null byte and resolved `attacker.com` — parser
+differential between matcher and resolver. Implementation invariants for
+our proxy:
+- Normalize through a single parser before matching, or keep matcher and
+  resolver in one language/stdlib end-to-end.
+- Reject `\x00`, `%`, CRLF, anything outside DNS-allowed characters
+  before matching.
+- Cap input length.
+- Adversarial test corpus: null injection, URL-encoded bypasses, IDN
+  lookalikes, trailing-dot quirks, SOCKS5 `DOMAINNAME` edge cases.
+*Source:* silent fix in Claude Code v2.1.90 / `sandbox-runtime 0.0.43`
+(2026-04-01); researcher Aonan Guan, HackerOne #3646509.
+*Disposition:* design constraint for goal 11 implementation; not
+actionable until that work begins.
+
 ---
 
 ## Tech debt
