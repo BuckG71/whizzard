@@ -122,6 +122,7 @@
   .legend{display:flex;gap:1.2rem;justify-content:center;flex-wrap:wrap;font-size:.78rem;
     color:var(--muted);margin-top:14px;font-family:var(--mono)}
   .legend span{display:inline-flex;align-items:center;gap:.4rem}
+  .fnote{text-align:center;color:var(--faint);font-size:.74rem;font-family:var(--mono);margin:.7rem 0 0;text-wrap:pretty}
   .sw{width:.7rem;height:.7rem;border-radius:3px;display:inline-block}
 
   /* ---------- lifecycle flows ---------- */
@@ -262,8 +263,8 @@
       <span><i class="sw" style="background:var(--behave)"></i>behavioral · harness</span>
       <span><i class="sw" style="background:var(--coop)"></i>cooperation · MCP</span>
       <span><i class="sw" style="background:var(--agent)"></i>contained agent</span>
-      <span style="color:var(--faint)">* <code>--network none</code> when the profile sets network off</span>
     </div>
+    <p class="fnote">* <code>--network none</code> when the profile sets network off</p>
   </section>
 
   <!-- PRINCIPLE -->
