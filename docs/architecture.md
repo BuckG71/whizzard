@@ -74,9 +74,10 @@ Core-maintained adapters (intentionally capped — additions are governed via th
 - generic shell adapter — shipped
 - Hermes adapter — shipped
 - NanoClaw adapter — v1.0
+- OpenClaw adapter — v1.0 (promoted from the community tier per D-180)
 - native Whizzard harness — v2.0
 
-Other harnesses (OpenClaw, Claude Code, Codex, Cursor, etc.) are community-maintained via the adapter Protocol; they are not part of the core slate.
+Other harnesses (Claude Code, Codex, Cursor, etc.) are community-maintained via the adapter Protocol; they are not part of the core slate.
 
 ### 3. Execution Backend Layer
 

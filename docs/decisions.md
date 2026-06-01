@@ -509,7 +509,7 @@ The canonical, append-only index of every decision made for the Whizzard project
 
 **Source:** docs/architecture.md; docs/post_mvp_spec.md §3
 
-**Status:** superseded by D-155 (which locks in the core-maintained slate as Hermes at MVP, NanoClaw at v1.0, native harness at v2.0; OpenClaw moves to the community-maintained tier).
+**Status:** superseded by D-155 (which locks in the core-maintained slate as Hermes at MVP, NanoClaw at v1.0, native harness at v2.0; OpenClaw later added to the core slate at v1.0 per D-180).
 
 ### D-36: MCP gateway adapter is post-v1 backlog
 
@@ -2231,7 +2231,7 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 
 **Source:** conversation 2026-05-14 (during the maintenance-burden discussion that explored harness-vs-wrapper positioning).
 
-**Status:** active; supersedes D-35 and D-97.
+**Status:** active (amended by D-180 — OpenClaw promoted to the core slate at v1.0, making the slate four harnesses); supersedes D-35 and D-97.
 
 **Notes:**
 - The native harness commitment is deferred to v2.0 deliberately — it doesn't block MVP or v1.0 launches, and gives time for the wrapper position to prove out before adding a second product to the surface.
@@ -2915,6 +2915,24 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 **Source:** conversation 2026-05-31 (launch-readiness §L sign-off; extends D-157, D-38).
 
 **Status:** active
+
+---
+
+### D-180: OpenClaw promoted to the core-maintained adapter slate at v1.0 (amends D-155)
+
+**Type:** scope
+
+**Tags:** adapter, post-mvp
+
+**Door Type:** two-way — slate composition is explicitly reorganizable per D-155.
+
+**Decision:** The OpenClaw adapter moves from the community-maintained tier into the **core-maintained** slate, landing at **v1.0** alongside NanoClaw. The core slate at v1.0 becomes four harnesses: generic shell + Hermes (shipped), NanoClaw + OpenClaw (v1.0); the native harness remains at v2.0. This amends D-155's "fixed at three" cap (which had OpenClaw in the community long-tail).
+
+**Rationale:** Maintainer directive (2026-05-31). OpenClaw is a prominent production harness in the same category Whizzard targets; core-maintaining its adapter widens out-of-the-box reach at launch. The incremental maintenance burden D-155 sought to bound is accepted deliberately — D-155's cap was always framed as "current capacity," with its Notes explicitly allowing the slate to grow if overhead proves manageable. This is that growth, taken on purpose, not a reversal of the maintenance-burden reasoning.
+
+**Source:** conversation 2026-05-31.
+
+**Status:** active; amends D-155.
 
 ---
 

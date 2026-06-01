@@ -46,9 +46,9 @@ hits a request gate while you're away from the desk.
 
 ### 3. Multi-harness adapter rollout
 
-Today's adapter contract supports Hermes and a generic shell. v1.0 expands
-the catalog — OpenClaw, NanoClaw integration patterns, and a contributor
-template for adding new harnesses.
+Today's adapter contract supports Hermes and a generic shell. v1.0 adds
+core-maintained OpenClaw and NanoClaw adapters, plus a contributor
+template for community-maintained harnesses.
 
 ### 4. MCP gateway direction
 
