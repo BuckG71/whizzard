@@ -62,6 +62,15 @@ CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR
 - Adding a new test file? Follow the existing per-module pattern (unit) or add to `tests/integration/` with the marker (integration).
 - Manual smoke tests (real Hermes + real harness) require user-specific config and aren't part of either automated tier; the maintainer keeps a private runbook.
 
+## Versioning and releases
+
+Whizzard is pre-1.0 and uses a `0.x.y` cadence: minor (`x`) bumps for
+features, patch (`y`) for fixes, with breaking changes allowed between
+`0.x` minors while the API settles. From `1.0.0` the project follows
+[SemVer](https://semver.org/). The full tag-and-publish runbook lives in
+[`RELEASING.md`](RELEASING.md); releases publish to PyPI automatically on a
+`v*` tag via Trusted Publishing.
+
 ## Decisions, handoffs, and process artifacts
 
 - **`docs/decisions.md`** is append-only. Add a new decision (next sequential ID) rather than editing prior entries. If your change supersedes a prior decision, update the prior entry's `Status:` to `superseded by <new-id>` in the same commit. Canonical tag vocabulary lives at the bottom of `docs/decisions.md`.

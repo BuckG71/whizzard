@@ -66,11 +66,24 @@ Whizzard does not claim to be a complete security solution. The list below names
 
 This list is not exhaustive. It names the gaps most likely to surprise a user who assumes a Docker wrapper fully isolates the agent's effect. If you find a gap not listed, please open an issue.
 
+## Telemetry
+
+**Whizzard collects no telemetry.** No usage analytics, no crash reporting, no phone-home of any kind — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config (`~/.whizzard/config/`) and your local audit log (`~/.whizzard/logs/`). A capability-governance tool that quietly exfiltrated usage data would be self-defeating; there is no analytics dependency in the codebase to disable.
+
 ## Prerequisites
 
 - macOS, Linux, or Windows (Windows is in pre-release verification for v0.1.0)
 - Python 3.11+
 - Docker Desktop (or any Docker daemon) running
+
+### Compatibility matrix
+
+| Component | Supported | Notes |
+|---|---|---|
+| Python | 3.11, 3.12 | CI runs the suite on both; 3.11 is the floor |
+| OS | macOS, Linux | primary dev + CI target |
+| OS | Windows | pre-release verification underway for v0.1.0 |
+| Docker | Docker Desktop or any Docker daemon | `host.docker.internal` routing (e.g. local Ollama) is Docker-Desktop only; on native Linux use the bridge gateway IP |
 
 ## Install
 
