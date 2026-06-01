@@ -234,7 +234,7 @@
         <div class="tags">
           <span class="tag">--cap-drop=ALL</span><span class="tag">no-new-privileges</span>
           <span class="tag">--read-only</span><span class="tag">--user 1000</span>
-          <span class="tag">--network none*</span><span class="tag">--tmpfs</span>
+          <span class="tag">--network none</span><span class="tag">--tmpfs</span>
           <span class="tag">scoped mounts</span><span class="tag">duration cap</span>
         </div>
 
@@ -264,7 +264,7 @@
       <span><i class="sw" style="background:var(--coop)"></i>cooperation · MCP</span>
       <span><i class="sw" style="background:var(--agent)"></i>contained agent</span>
     </div>
-    <p class="fnote">* <code>--network none</code> when the profile sets network off</p>
+    <p class="fnote"><code>--network none</code> is applied only on network-off profiles; network-on profiles get full egress.</p>
   </section>
 
   <!-- PRINCIPLE -->
