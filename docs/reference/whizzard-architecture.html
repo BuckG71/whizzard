@@ -92,6 +92,13 @@
     letter-spacing:.02em;white-space:nowrap}
   .boundary .bl svg{flex:0 0 auto}
 
+  /* sandbox plane header (mirrors the host band head) */
+  .sandhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:11px}
+  .sandhead .name{display:flex;align-items:center;gap:.55rem;font-weight:600;font-size:.82rem;
+    text-transform:uppercase;letter-spacing:.07em;color:#c6cedb;white-space:nowrap}
+  .sandhead .where{font-family:var(--mono);font-size:.7rem;color:var(--faint);
+    border:1px solid var(--line2);border-radius:999px;padding:.2em .7em;white-space:nowrap}
+
   /* nested layers */
   .nest{border-radius:16px;border:1.5px solid var(--enforce);background:var(--enforce-bg);padding:18px}
   .nest .behave{border-radius:14px;border:1.5px dashed var(--behave);background:var(--behave-bg);padding:16px;margin-top:15px}
@@ -227,9 +234,15 @@
         <div class="dl"></div>
       </div>
 
-      <!-- NESTED LAYERS -->
+      <!-- SANDBOX (execution plane) -->
+      <div class="sandhead">
+        <span class="name"><span class="dot"></span>Sandbox — execution plane</span>
+        <span class="where">one container / session</span>
+      </div>
+
+      <!-- NESTED CONTROL LAYERS -->
       <div class="nest">
-        <div class="lh"><span class="name">Sandbox — Enforcement layer</span><span class="owner">kernel + Docker</span></div>
+        <div class="lh"><span class="name">Enforcement layer</span><span class="owner">kernel + Docker</span></div>
         <div class="ld">Set at launch, before the agent exists. Changing any of it requires stop + restart.</div>
         <div class="tags">
           <span class="tag">--cap-drop=ALL</span><span class="tag">no-new-privileges</span>
