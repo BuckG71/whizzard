@@ -44,6 +44,29 @@ planned through v1.0.
   session (KeyboardInterrupt, monitor / audit errors). Prevents
   long-running installs accumulating stray files in STATE_DIR.
 
+### Security
+
+- **Credential values are redacted from the audit log.** Secret env
+  vars injected into a session (LLM / platform tokens resolved via
+  OneCLI or host-env fallback) are scrubbed to `***` in the `argv`
+  recorded in `~/.whizzard/logs/sessions.jsonl`. The container still
+  receives the real values; only the on-disk log is sanitized.
+- **Launches fail closed.** If the per-session capability snapshot
+  can't be written, the launch aborts rather than starting a session
+  whose in-cell status surface can't reflect its own constraints.
+- **Harness config rejects process-loader env keys.** `harnesses.json`
+  refuses `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `IFS`, and similar
+  names that could alter process loading or tool resolution in the
+  sandbox.
+- **Config writes are atomic.** Profiles, mounts, harnesses, presets,
+  the per-session snapshot, and request resolutions write via a
+  temp-file + rename, so a crash mid-write can't leave a truncated
+  config that locks you out.
+- Adversarial red-team test suite added for the containment invariants
+  (escape, config write-protection, network policy, cooperation-layer
+  forgery, snapshot poisoning); the dependency tree is scanned with
+  `pip-audit` in CI.
+
 ### Packaging
 
 - GitHub Actions release workflow (`.github/workflows/release.yml`)

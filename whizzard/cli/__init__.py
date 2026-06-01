@@ -69,8 +69,37 @@ app.command("wake")(wake_cmd)
 app.command("init")(init_cmd)
 
 
+def _version_callback(value: bool) -> None:
+    """Eager `--version` handler: print the installed package version and
+    exit before any subcommand resolution or config scaffolding runs.
+    Version comes from package metadata so it never drifts from
+    pyproject.toml."""
+    if not value:
+        return
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _pkg_version
+
+    try:
+        v = _pkg_version("whizzard")
+    except PackageNotFoundError:  # running from a source tree, not installed
+        v = "0.0.0+source"
+    console.print(f"whizzard {v}")
+    raise typer.Exit(code=0)
+
+
 @app.callback(invoke_without_command=True)
-def _bootstrap(ctx: typer.Context) -> None:
+def _bootstrap(
+    ctx: typer.Context,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the Whizzard version and exit.",
+        ),
+    ] = False,
+) -> None:
     """Runs before every subcommand. Ensures ~/.whizzard/ scaffold exists.
 
     Stage 10: bare `whiz` (no subcommand) defaults to `whiz status` rather

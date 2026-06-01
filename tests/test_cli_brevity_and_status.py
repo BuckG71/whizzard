@@ -365,3 +365,27 @@ def test_fmt_remaining_renders_units():
     assert _fmt_remaining(45) == "~45s"
     assert _fmt_remaining(720) == "~12m"
     assert _fmt_remaining(3 * 3600 + 600) == "~3h10m"
+
+
+# --- --version flag (launch-readiness §H) ----------------------------------
+
+
+def test_version_flag_prints_version_and_exits(isolated_whizzard_home: Path):
+    """`whiz --version` prints the package version and exits 0 — the
+    flag existed in no form before launch-readiness verification caught it."""
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "whizzard" in result.output.lower()
+    # Either a real installed version or the source-tree sentinel.
+    assert any(ch.isdigit() for ch in result.output)
+
+
+def test_version_flag_does_not_require_config(tmp_path, monkeypatch):
+    """`--version` is eager and must short-circuit before the bootstrap
+    scaffolds ~/.whizzard/ — it should work even pointed at a brand-new
+    home that doesn't exist yet."""
+    fresh = tmp_path / "nonexistent-home"
+    monkeypatch.setenv("WHIZZARD_HOME", str(fresh))
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "whizzard" in result.output.lower()
