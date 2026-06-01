@@ -14,7 +14,7 @@ Whizzard is a local capability-governance layer for AI agents. Code-level orient
 
 ## Architecture reference
 
-- **[reference/whizzard-architecture.html](reference/whizzard-architecture.html)** — self-contained architecture overview rendered for quick browsing.
+- **[reference/architecture-at-a-glance.html](reference/architecture-at-a-glance.html)** — self-contained visual overview, diagram-first. Companion to [architecture.md](architecture.md), which remains the canonical written source of truth.
 
 ## Conventions
 

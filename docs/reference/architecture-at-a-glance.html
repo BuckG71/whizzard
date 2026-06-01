@@ -92,7 +92,8 @@
     letter-spacing:.02em;white-space:nowrap}
   .boundary .bl svg{flex:0 0 auto}
 
-  /* sandbox plane header (mirrors the host band head) */
+  /* sandbox container (mirrors the host band) + its plane header */
+  .sandboxband{background:var(--panel2);border:1px solid #3b4554;border-radius:14px;padding:16px 18px}
   .sandhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:11px}
   .sandhead .name{display:flex;align-items:center;gap:.55rem;font-weight:600;font-size:.82rem;
     text-transform:uppercase;letter-spacing:.07em;color:#c6cedb;white-space:nowrap}
@@ -234,7 +235,8 @@
         <div class="dl"></div>
       </div>
 
-      <!-- SANDBOX (execution plane) -->
+      <!-- SANDBOX (execution plane) — its own container, mirroring the host band -->
+      <div class="sandboxband">
       <div class="sandhead">
         <span class="name"><span class="dot"></span>Sandbox — execution plane</span>
         <span class="where">one container / session</span>
@@ -268,6 +270,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
 
