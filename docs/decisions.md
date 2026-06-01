@@ -2900,6 +2900,24 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-179: `default` profile stays permissive (network on, unlimited duration, broad-mount allowed) — signed off for launch
+
+**Type:** product
+
+**Tags:** profiles, safety, oss-launch
+
+**Door Type:** two-way (the bundled default's fields are trivially re-tunable in a point release).
+
+**Decision:** The bundled `default` profile keeps `network_enabled: true`, `duration_seconds: null` (unlimited), and `allow_broad_mount: true` (the last per D-157) for the OSS launch. The launch-readiness "default is safe out of the box" gate is signed off on this basis rather than tightened.
+
+**Rationale:** `default` pre-binds **no mounts**, so the load-bearing guarantee — no host-filesystem exposure unless the user explicitly mounts a path — holds regardless of the other fields; the permissiveness is about *friction*, not *exposed surface*. Even at its most permissive, `default` is materially more contained than the out-of-the-box posture of the agent harnesses Whizzard wraps (Hermes / OpenClaw / NanoClaw run unconfined by default). Setup friction is an adoption risk: a default that forces override flags on first run is a default users route around. Locked-down `safe` and `quarantine` profiles ship for untrusted work; `default` is the low-friction everyday posture.
+
+**Source:** conversation 2026-05-31 (launch-readiness §L sign-off; extends D-157, D-38).
+
+**Status:** active
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
