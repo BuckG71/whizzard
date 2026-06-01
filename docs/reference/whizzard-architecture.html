@@ -1,322 +1,287 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html>
+<html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Whizzard — Architecture at a Glance</title>
+<!-- Self-contained: no external fonts/JS/CSS (opens by double-click,
+     works offline). Design uses IBM Plex where installed, else the
+     system sans/mono stack. To ship exact IBM Plex, self-host the
+     woff2 as base64 @font-face. -->
+
 <style>
   :root{
-    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --ink:#eef1f6; --muted:#aab3c2;
-    --faint:#727d8f; --line:#2a2f3a; --accent:#8b85ff;
-    --host:#3b82f6; --host-bg:#11203b; --host-line:#2c4f86;
-    --cell:#0d9488; --cell-bg:#0a2723;
-    --enforce:#3b82f6; --enforce-bg:#11203b;
-    --behave:#e0a020; --behave-bg:#2a2210;
-    --coop:#14b8a6; --coop-bg:#0a2723;
-    --agent:#c084fc; --agent-bg:#231832;
+    --bg:#0e1014; --panel:#161922; --panel2:#1b1f29; --ink:#eef1f6; --muted:#a6afbe;
+    --faint:#6f7a8c; --line:#262b36; --line2:#313847; --accent:#8b85ff;
+    --enforce:#3b82f6; --enforce-bg:#0e1a30; --enforce-ink:#8fb6f5; --enforce-line:#2c4f86;
+    --behave:#e0a020; --behave-bg:#241d0d; --behave-ink:#f0c46a;
+    --coop:#14b8a6; --coop-bg:#08221e; --coop-ink:#5eead4;
+    --agent:#c084fc; --agent-bg:#1f1430; --agent-ink:#d8b4fe;
     --ok:#34d399; --plan:#7c8699;
-    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1e28,#0f1115 60%);
-    color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
-  code,.mono{font-family:var(--mono);font-size:.86em}
-  code{background:#222734;padding:.06rem .35rem;border-radius:4px;color:#cdd5e3}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:
+      radial-gradient(1100px 560px at 50% -8%,#191d28,transparent 62%),
+      var(--bg);
+    color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  code,.mono{font-family:var(--mono)}
+  code{background:#1c212d;padding:.08em .42em;border-radius:5px;color:#cdd5e3;font-size:.88em}
+  em{color:var(--ink);font-style:italic}
 
-  header.hero{padding:54px 0 26px;text-align:center}
-  .badge{display:inline-block;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--accent);border:1px solid #3a3570;background:#1a1830;border-radius:999px;padding:.25rem .7rem;margin-bottom:1rem}
-  header.hero h1{font-size:2.1rem;margin:.2rem 0 .4rem;letter-spacing:-.02em;font-weight:700}
-  header.hero p{color:var(--muted);font-size:1.02rem;max-width:640px;margin:.2rem auto 0}
-  .meta{color:var(--faint);font-size:.78rem;margin-top:1rem}
+  /* ---------- hero ---------- */
+  header.hero{padding:72px 0 30px;text-align:center}
+  .badge{display:inline-block;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);border:1px solid #3a3570;background:#181630;border-radius:999px;
+    padding:.34em .9em;margin-bottom:1.4rem;font-weight:500;white-space:nowrap}
+  header.hero h1{font-size:3rem;margin:.1rem 0 .55rem;letter-spacing:-.025em;font-weight:700;line-height:1.05}
+  header.hero p{color:var(--muted);font-size:1.05rem;max-width:680px;margin:0 auto;text-wrap:pretty}
+  header.hero p.lead-strong{color:var(--ink);font-weight:600;margin-top:1rem}
+  .meta{color:var(--faint);font-size:.82rem;margin-top:1.5rem;font-family:var(--mono)}
 
-  section{margin:30px 0}
-  .eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
-    text-align:center;margin-bottom:.5rem}
-  h2.t{text-align:center;font-size:1.25rem;margin:.1rem 0 1.1rem;letter-spacing:-.01em;font-weight:650}
+  /* ---------- section scaffolding ---------- */
+  section{margin:46px 0}
+  .eyebrow{font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);
+    text-align:center;margin-bottom:.5rem;font-family:var(--mono)}
+  h2.t{text-align:center;font-size:1.5rem;margin:.1rem auto 1.4rem;letter-spacing:-.015em;
+    font-weight:600;max-width:680px;text-wrap:balance}
+  h2.t:has(+ .t-sub){margin-bottom:.5rem}
+  .t-sub{text-align:center;color:var(--muted);font-size:1.02rem;max-width:600px;
+    margin:0 auto 1.4rem;text-wrap:pretty}
 
-  /* principle ribbon */
-  .principle{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;
-    background:linear-gradient(90deg,var(--host-bg),var(--coop-bg));border:1px solid var(--line);
-    border-radius:14px;padding:18px 20px}
-  .principle .p{font-weight:650;font-size:1rem;padding:0 18px;white-space:nowrap}
-  .principle .arrow{color:var(--accent);font-size:1.3rem;opacity:.8}
-  .principle .why{flex-basis:100%;text-align:center;color:var(--muted);font-size:.86rem;
-    font-weight:400;margin-top:.7rem}
+  /* ---------- principle ribbon ---------- */
+  .principle{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.2rem;
+    background:linear-gradient(100deg,var(--enforce-bg),var(--coop-bg));
+    border:1px solid var(--line2);border-radius:16px;padding:22px 26px}
+  .principle .p{font-weight:600;font-size:1.02rem;padding:0 16px;white-space:nowrap}
+  .principle .arrow{color:var(--accent);font-size:1.2rem;opacity:.75}
+  .principle .why{flex-basis:100%;text-align:center;color:var(--muted);font-size:.92rem;
+    font-weight:400;margin-top:.85rem;text-wrap:pretty}
 
-  /* main diagram: host | boundary | sandbox */
-  .stage{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;overflow:hidden}
-  .planes{display:grid;grid-template-columns:1fr 1fr;gap:0}
-  @media(max-width:820px){.planes{grid-template-columns:1fr}}
-  .plane{padding:6px 4px}
-  .plane-h{display:flex;align-items:center;gap:.5rem;font-weight:700;font-size:.82rem;
-    text-transform:uppercase;letter-spacing:.06em;margin-bottom:.7rem}
-  .dot{width:.6rem;height:.6rem;border-radius:50%}
-  .host .dot{background:var(--host)} .cell .dot{background:var(--cell)}
-  .plane-sub{font-size:.72rem;color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0}
+  /* =====================================================
+     HERO DIAGRAM — host band (top) → boundary → nested layers
+     ===================================================== */
+  .stage{background:var(--panel);border:1px solid var(--line2);border-radius:20px;
+    padding:26px;overflow:hidden}
 
-  .boundary{position:relative;text-align:center;margin:4px 0}
-  .box{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.6rem .8rem;margin:.45rem 0}
-  .box .bt{font-weight:600;font-size:.9rem}
-  .box .bd{color:var(--muted);font-size:.78rem;margin-top:.15rem}
-  .host .box{border-color:var(--host-line)}
-  .box.lab{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
-  .tag{font-family:var(--mono);font-size:.68rem;background:#0e1626;border:1px solid var(--host-line);
-    color:#9ec1f0;border-radius:5px;padding:.08rem .4rem}
+  /* host control-plane band */
+  .hostband{background:var(--panel2);border:1px solid #3b4554;border-radius:14px;
+    padding:16px 18px}
+  .hostband .bandhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+  .hostband .bandhead .name{display:flex;align-items:center;gap:.55rem;font-weight:600;font-size:.82rem;
+    text-transform:uppercase;letter-spacing:.07em;color:#c6cedb;white-space:nowrap}
+  .hostband .bandhead .where{font-family:var(--mono);font-size:.7rem;color:var(--faint);
+    border:1px solid var(--line2);border-radius:999px;padding:.2em .7em;white-space:nowrap}
+  .dot{width:.62rem;height:.62rem;border-radius:50%;background:#9aa6b6;box-shadow:0 0 0 3px rgba(154,166,182,.16)}
+  .hostgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:720px){.hostgrid{grid-template-columns:repeat(2,1fr)}}
+  .hcell{background:#10131b;border:1px solid var(--line);border-top:2px solid #6f7a8c;
+    border-radius:9px;padding:11px 12px}
+  .hcell b{display:block;font-size:.86rem;font-weight:600;letter-spacing:-.01em}
+  .hcell span{display:block;font-size:.72rem;color:var(--faint);font-family:var(--mono);margin-top:.2rem;line-height:1.35}
 
-  /* concentric layers inside the sandbox */
-  .layer{border-radius:12px;padding:12px 13px;border:1.5px solid}
-  .layer .lh{font-weight:700;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;gap:.5rem}
-  .layer .ld{font-size:.76rem;color:var(--muted);margin-top:.3rem}
-  .layer .owner{font-weight:600;font-size:.64rem;opacity:.85}
-  .enforce{border-color:var(--enforce);background:var(--enforce-bg)} .enforce .lh{color:#7fb0ff}
-  .behave{border-color:var(--behave);background:var(--behave-bg);margin-top:11px} .behave .lh{color:#f0c46a}
-  .coop{border-color:var(--coop);background:var(--coop-bg);margin-top:11px} .coop .lh{color:#5eead4}
-  .agent{margin-top:11px;border:1.5px dashed var(--agent);background:var(--agent-bg);border-radius:10px;
-    padding:9px 12px;text-align:center}
-  .agent b{color:#d8b4fe;font-size:.82rem} .agent span{display:block;color:var(--muted);font-size:.72rem;margin-top:.15rem}
+  /* boundary divider */
+  .boundary{display:flex;align-items:center;gap:14px;color:var(--accent);margin:20px 6px}
+  .boundary .dl{flex:1;height:1px;
+    background:repeating-linear-gradient(90deg,var(--accent) 0 7px,transparent 7px 14px);opacity:.55}
+  .boundary .bl{display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.76rem;
+    letter-spacing:.02em;white-space:nowrap}
+  .boundary .bl svg{flex:0 0 auto}
 
-  .flowarrow{display:flex;align-items:center;justify-content:center;gap:.5rem;color:var(--accent);
-    font-size:.74rem;margin:14px 0 2px;font-weight:600}
-  .flowarrow svg{flex-shrink:0}
+  /* nested layers */
+  .nest{border-radius:16px;border:1.5px solid var(--enforce);background:var(--enforce-bg);padding:18px}
+  .nest .behave{border-radius:14px;border:1.5px dashed var(--behave);background:var(--behave-bg);padding:16px;margin-top:15px}
+  .nest .coop{border-radius:12px;border:1.5px solid var(--coop);background:var(--coop-bg);padding:15px;margin-top:14px}
+  .lh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .lh .name{font-weight:600;font-size:.82rem;text-transform:uppercase;letter-spacing:.07em}
+  .lh .owner{font-family:var(--mono);font-size:.68rem;color:var(--faint);
+    border:1px solid var(--line2);border-radius:999px;padding:.18em .7em;white-space:nowrap}
+  .nest > .lh .name{color:var(--enforce-ink)}
+  .behave > .lh .name{color:var(--behave-ink)}
+  .coop > .lh .name{color:var(--coop-ink)}
+  .ld{font-size:.85rem;color:var(--muted);margin-top:.4rem;text-wrap:pretty}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+  .tag{font-family:var(--mono);font-size:.7rem;background:#0b1426;border:1px solid var(--enforce-line);
+    color:#9ec1f0;border-radius:6px;padding:.18em .55em;line-height:1.3}
+  .agent{margin-top:14px;border-radius:11px;border:1.5px solid var(--agent);background:var(--agent-bg);
+    padding:14px 16px;display:flex;align-items:center;gap:14px}
+  .agent .puck{width:42px;height:42px;border-radius:11px;border:1.5px solid var(--agent);flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;color:var(--agent-ink);font-size:1.2rem}
+  .agent b{color:var(--agent-ink);font-size:.82rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+  .agent span{display:block;color:var(--muted);font-size:.82rem;margin-top:.15rem}
 
-  .callout{border-left:3px solid var(--accent);background:#171a2b;border-radius:0 8px 8px 0;
-    padding:.7rem 1rem;font-size:.86rem;color:var(--muted);margin:14px 0}
+  .callout{border-left:3px solid var(--accent);background:#16172a;border-radius:0 10px 10px 0;
+    padding:.85rem 1.1rem;font-size:.88rem;color:var(--muted);margin-top:20px;text-wrap:pretty}
   .callout b{color:var(--ink)}
-  .callout.warn{border-color:var(--behave);background:#221c10}
+  .callout.callout-top{margin:18px 0;border-left-color:#6f7a8c;background:var(--panel2)}
 
-  /* lifecycle flow strips */
-  .flows{display:grid;gap:12px}
-  .flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px}
-  .flow .fn{font-weight:650;font-size:.82rem;margin-bottom:.55rem;display:flex;align-items:center;gap:.45rem}
-  .flow .fn i{font-style:normal;font-size:.66rem;background:#222734;color:var(--faint);border-radius:5px;padding:.05rem .4rem;font-family:var(--mono)}
-  .chain{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
-  .node{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:.3rem .55rem;
-    font-size:.76rem;white-space:nowrap}
-  .node.mono{font-family:var(--mono);font-size:.7rem;color:#cdd5e3}
-  .sep{color:var(--accent);font-weight:700}
+  .legend{display:flex;gap:1.2rem;justify-content:center;flex-wrap:wrap;font-size:.78rem;
+    color:var(--muted);margin-top:14px;font-family:var(--mono)}
+  .legend span{display:inline-flex;align-items:center;gap:.4rem}
+  .sw{width:.7rem;height:.7rem;border-radius:3px;display:inline-block}
+
+  /* ---------- lifecycle flows ---------- */
+  .flows{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.flows{grid-template-columns:1fr}}
+  .flow{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .flow .fn{font-weight:600;font-size:.92rem;margin-bottom:.7rem;display:flex;align-items:center;
+    gap:.5rem;flex-wrap:wrap}
+  .flow .fn i{font-style:normal;font-size:.68rem;background:#1c212d;color:var(--faint);border-radius:6px;
+    padding:.12em .5em;font-family:var(--mono)}
+  .chain{display:flex;flex-direction:column;gap:.34rem}
+  .step{display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:var(--muted)}
+  .step .ix{font-family:var(--mono);font-size:.64rem;color:var(--accent);background:#1a1830;
+    border:1px solid #2f2b55;border-radius:5px;min-width:1.35rem;height:1.35rem;display:flex;
+    align-items:center;justify-content:center;flex:0 0 auto;margin-top:.05rem}
+  .step .sx code{font-size:.94em}
+  .step b{color:var(--ink);font-weight:500}
+
+  /* ---------- reference appendix ---------- */
+  .appdiv{display:flex;align-items:center;gap:14px;margin:54px 0 0;color:var(--faint)}
+  .appdiv .dl{flex:1;height:1px;background:var(--line)}
+  .appdiv span{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase}
+  .ref h3{font-size:.95rem;font-weight:600;margin:0 0 .7rem;color:var(--ink);
+    display:flex;align-items:center;gap:.5rem}
+  .ref h3 .num{font-family:var(--mono);font-size:.7rem;color:var(--faint)}
 
   /* adapter seam */
-  .seam{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:.6rem;
-    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  @media(max-width:720px){.seam{grid-template-columns:1fr;text-align:center}.seam .sarrow{transform:rotate(90deg)}}
-  .seam .cell{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:.7rem .8rem;text-align:center}
-  .seam .cell b{font-size:.85rem} .seam .cell span{display:block;color:var(--muted);font-size:.74rem;margin-top:.2rem}
-  .seam .mid{border-color:var(--accent);background:#1a1830}
-  .sarrow{color:var(--accent);font-size:1.3rem;text-align:center}
-  .slate{display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;margin-top:12px}
-  .chip{font-size:.74rem;border-radius:999px;padding:.18rem .7rem;border:1px solid var(--line)}
+  .seam{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:.7rem}
+  @media(max-width:680px){.seam{grid-template-columns:1fr;text-align:center}.seam .sarrow{transform:rotate(90deg)}}
+  .scell{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 15px}
+  .scell b{font-size:.88rem;font-weight:600} .scell span{display:block;color:var(--muted);font-size:.78rem;margin-top:.25rem;text-wrap:pretty}
+  .scell.mid{border-color:var(--accent);background:#18162b}
+  .sarrow{display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:1.2rem}
+  .slate{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:13px}
+  .chip{font-size:.78rem;border-radius:999px;padding:.22em .8em;border:1px solid var(--line);font-family:var(--mono)}
   .chip.ship{color:var(--ok);border-color:#1f6f52;background:#0c2018}
   .chip.plan{color:var(--plan);border-color:#3a3f4a;background:#1a1d24}
+  .protos{margin-top:13px;font-size:.82rem;color:var(--muted);text-wrap:pretty}
+  .protos.lead{margin:-.3rem 0 1rem}
+
+  /* safety tiers */
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:680px){.tiers{grid-template-columns:1fr}}
+  .tier{border-radius:12px;padding:15px;border:1px solid}
+  .tier.block{border-color:#7f3030;background:#1f1212} .tier.over{border-color:#7f6020;background:#1f1a0d}
+  .tier.ok{border-color:#1f6f52;background:#0c2018}
+  .tier .th{font-weight:600;font-size:.84rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.4rem}
+  .tier.block .th{color:#f08a8a} .tier.over .th{color:var(--behave-ink)} .tier.ok .th{color:#6ee7b7}
+  .tier .td{font-size:.8rem;color:var(--muted);text-wrap:pretty}
 
   /* constants */
-  .consts{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .consts{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
   @media(max-width:820px){.consts{grid-template-columns:repeat(2,1fr)}}
-  .const{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px;text-align:center}
-  .const .ci{font-size:1.3rem;margin-bottom:.3rem}
-  .const .ct{font-weight:650;font-size:.8rem}
-  .const .cd{color:var(--muted);font-size:.72rem;margin-top:.25rem}
+  @media(max-width:420px){.consts{grid-template-columns:1fr}}
+  .const{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 14px}
+  .const .ci{font-family:var(--mono);font-size:1.1rem;color:var(--accent);margin-bottom:.45rem}
+  .const .ct{font-weight:600;font-size:.86rem}
+  .const .cd{color:var(--muted);font-size:.76rem;margin-top:.3rem;text-wrap:pretty}
 
-  /* safety mini-table */
-  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  @media(max-width:720px){.tiers{grid-template-columns:1fr}}
-  .tier{border-radius:11px;padding:13px;border:1px solid}
-  .tier.block{border-color:#7f3030;background:#241313} .tier.over{border-color:#7f6020;background:#241f10}
-  .tier.ok{border-color:#1f6f52;background:#0c2018}
-  .tier .th{font-weight:700;font-size:.78rem;margin-bottom:.3rem}
-  .tier.block .th{color:#f08a8a} .tier.over .th{color:#f0c46a} .tier.ok .th{color:#6ee7b7}
-  .tier .td{font-size:.74rem;color:var(--muted)}
-
-  footer{border-top:1px solid var(--line);padding:22px 0 50px;color:var(--faint);font-size:.78rem;text-align:center;margin-top:36px}
-  .legend{display:flex;gap:1.1rem;justify-content:center;flex-wrap:wrap;font-size:.74rem;color:var(--muted);margin:10px 0 0}
-  .legend span{display:inline-flex;align-items:center;gap:.35rem}
-  .sw{width:.7rem;height:.7rem;border-radius:3px;display:inline-block}
+  footer{border-top:1px solid var(--line);padding:28px 0 64px;color:var(--faint);font-size:.82rem;
+    text-align:center;margin-top:56px;line-height:1.7}
 </style>
 </head>
 <body>
-
 <div class="wrap">
 
-  <header class="hero">
+  <header class="hero" data-screen-label="hero">
     <div class="badge">Architecture at a glance</div>
     <h1>Whizzard</h1>
-    <p>A harness-neutral containment layer that decides what a contained AI agent can see and do —
-       and proves the boundary holds.</p>
-    <div class="meta">Reflects <code>main</code> · source of truth: <code>docs/architecture.md</code> + <code>docs/decisions.md</code></div>
+    <p>Whizzard is a CLI tool that runs in your terminal. It builds a hardened Docker sandbox, with user-configured permissions and filesystem access scoping, in which the user can run third-party agent harnesses such as Hermes Agent (currently supported), NanoClaw (planned), OpenClaw (planned), etc.</p>
+    <p class="lead-strong">The host is the control plane; the sandbox is the execution plane.</p>
+    <div class="meta">Reflects <code>main</code> · source of truth: <code>docs/architecture.md</code></div>
   </header>
 
-  <!-- principle -->
-  <section>
+  <!-- HERO DIAGRAM -->
+  <section data-screen-label="boundary">
+    <div class="stage">
+
+      <!-- HOST BAND (top) -->
+      <div class="hostband">
+        <div class="bandhead">
+          <span class="name"><span class="dot"></span>Host — control plane</span>
+          <span class="where">your machine</span>
+        </div>
+        <div class="hostgrid">
+          <div class="hcell"><b>Whizzard CLI</b><span>run · adjust · wake · requests · status</span></div>
+          <div class="hcell"><b>Policy engine</b><span>profiles · mounts · 3-tier safety</span></div>
+          <div class="hcell"><b>Config registry</b><span>~/.whizzard · unreachable from sandbox</span></div>
+          <div class="hcell"><b>Monitor + audit</b><span>poll loop · append-only sessions.jsonl</span></div>
+        </div>
+      </div>
+
+      <div class="callout callout-top"><b>Config write-protection invariant.</b> The config directory is never reachable from any agent-writable mount — no symlink, traversal, or parent-mount trick. An agent that could write files Whizzard reads could rewrite its own policy. Enforced at the safety layer; no profile or preset can override it.</div>
+
+      <!-- BOUNDARY -->
+      <div class="boundary">
+        <div class="dl"></div>
+        <span class="bl">
+          <svg width="13" height="15" viewBox="0 0 13 15"><path d="M6.5,14 L1,6 L12,6 z" fill="#8b85ff"></path><rect x="5.5" y="0" width="2" height="7" fill="#8b85ff"></rect></svg>
+          the boundary · capabilities granted at launch, one-way
+        </span>
+        <div class="dl"></div>
+      </div>
+
+      <!-- NESTED LAYERS -->
+      <div class="nest">
+        <div class="lh"><span class="name">Sandbox — Enforcement layer</span><span class="owner">kernel + Docker</span></div>
+        <div class="ld">Set at launch, before the agent exists. Changing any of it requires stop + restart.</div>
+        <div class="tags">
+          <span class="tag">--cap-drop=ALL</span><span class="tag">no-new-privileges</span>
+          <span class="tag">--read-only</span><span class="tag">--user 1000</span>
+          <span class="tag">--network none*</span><span class="tag">--tmpfs</span>
+          <span class="tag">scoped mounts</span><span class="tag">duration cap</span>
+        </div>
+
+        <div class="behave">
+          <div class="lh"><span class="name">Behavioral layer</span><span class="owner">harness-owned</span></div>
+          <div class="ld">Dangerous-command approval, intent gating, <code>/yolo</code>. Whizzard <b style="color:var(--behave-ink)">deliberately does not recreate</b> these.</div>
+
+          <div class="coop">
+            <div class="lh"><span class="name">Cooperation layer</span><span class="owner">Whizzard MCP · in-sandbox</span></div>
+            <div class="ld">Gives the agent a read-only view of its granted capabilities — mounts, network, etc. — plus a host-mediated way to request more.</div>
+
+            <div class="agent">
+              <div class="puck">◉</div>
+              <div>
+                <b>contained agent</b>
+                <span>Sees only what was granted; reaches the host only through registered mounts.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i class="sw" style="background:var(--enforce)"></i>enforcement · Whizzard</span>
+      <span><i class="sw" style="background:var(--behave)"></i>behavioral · harness</span>
+      <span><i class="sw" style="background:var(--coop)"></i>cooperation · MCP</span>
+      <span><i class="sw" style="background:var(--agent)"></i>contained agent</span>
+      <span style="color:var(--faint)">* <code>--network none</code> when the profile sets network off</span>
+    </div>
+  </section>
+
+  <!-- PRINCIPLE -->
+  <section data-screen-label="principle">
     <div class="principle">
-      <div class="p" style="color:#7fb0ff">Whizzard controls capabilities</div>
+      <div class="p" style="color:var(--enforce-ink)">Whizzard grants capabilities</div>
       <div class="arrow">→</div>
-      <div class="p" style="color:#f0c46a">Agents request them</div>
+      <div class="p" style="color:var(--behave-ink)">Agents request them</div>
       <div class="arrow">→</div>
       <div class="p" style="color:#f08a8a">Agents never self-grant</div>
       <div class="why">Capability flow is one-way: host → sandbox, never sandbox → host. Every part of the system is a refinement of this single rule.</div>
     </div>
   </section>
 
-  <!-- MAIN DIAGRAM -->
-  <section>
-    <div class="eyebrow">The boundary</div>
-    <h2 class="t">Host is the control plane · the sandbox is the execution plane</h2>
-    <div class="stage">
-      <div class="planes">
-
-        <!-- HOST -->
-        <div class="plane host">
-          <div class="plane-h"><span class="dot"></span>Host — control plane
-            <span class="plane-sub">your machine</span></div>
-          <div class="box"><div class="bt">Whizzard CLI &nbsp;<span class="tag">whiz</span></div>
-            <div class="bd">run · adjust · wake · requests · status · init</div></div>
-          <div class="box"><div class="bt">Policy engine</div>
-            <div class="bd">profiles · mount registry · 3-tier safety validation · dry-run preview</div></div>
-          <div class="box"><div class="bt">Config registry &nbsp;<span class="tag">~/.whizzard/config</span></div>
-            <div class="bd">profiles · mounts · harnesses · presets — structurally unreachable from the sandbox</div></div>
-          <div class="box"><div class="bt">Enforcement monitor + audit log</div>
-            <div class="bd">duration / idle poll loop · append-only <span class="mono">sessions.jsonl</span></div></div>
-        </div>
-
-        <!-- SANDBOX -->
-        <div class="plane cell">
-          <div class="plane-h"><span class="dot"></span>Sandbox — execution plane
-            <span class="plane-sub">one Docker container per session</span></div>
-
-          <div class="layer enforce">
-            <div class="lh"><span>Enforcement layer</span><span class="owner">kernel + Docker</span></div>
-            <div class="ld">Set at launch, before the agent exists; changing any of it requires stop+restart.</div>
-            <div class="box lab" style="margin:.5rem 0 0;background:transparent;border:0;padding:0">
-              <span class="tag">--cap-drop=ALL</span><span class="tag">no-new-privileges</span>
-              <span class="tag">--read-only</span><span class="tag">--user 1000</span>
-              <span class="tag">--network none*</span><span class="tag">--tmpfs</span>
-              <span class="tag">scoped mounts</span><span class="tag">duration cap</span>
-            </div>
-
-            <div class="layer behave">
-              <div class="lh"><span>Behavioral layer</span><span class="owner">harness-owned</span></div>
-              <div class="ld">Dangerous-command approval, intent gating, <code>/yolo</code>. Whizzard <b style="color:#f0c46a">deliberately does not recreate</b> these.</div>
-
-              <div class="layer coop">
-                <div class="lh"><span>Cooperation layer</span><span class="owner">Whizzard MCP, in-sandbox</span></div>
-                <div class="ld">Read-only introspection + <em>requests</em> for more capability — mediated host-side.</div>
-                <div class="agent">
-                  <b>contained agent</b>
-                  <span>sees only what was granted · reaches host only through registered mounts</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="flowarrow">
-        <svg width="120" height="14" viewBox="0 0 120 14"><defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#8b85ff"/></marker></defs><line x1="0" y1="7" x2="112" y2="7" stroke="#8b85ff" stroke-width="2" marker-end="url(#ah)"/></svg>
-        capabilities flow one-way — granted at launch via the adapter + Docker flags
-      </div>
-
-      <div class="callout warn"><b>Config write-protection invariant.</b> The config directory is never reachable from any agent-writable mount — no symlink, traversal, or parent-mount trick. An agent that could write files Whizzard reads could rewrite its own policy. Enforced at the safety layer; no profile or preset can override it.</div>
-    </div>
-    <div class="legend">
-      <span><i class="sw" style="background:var(--enforce)"></i>enforcement (Whizzard)</span>
-      <span><i class="sw" style="background:var(--behave)"></i>behavioral (harness)</span>
-      <span><i class="sw" style="background:var(--coop)"></i>cooperation (MCP)</span>
-      <span style="color:var(--faint)">* <code>--network none</code> when the profile sets network off</span>
-    </div>
-  </section>
-
-  <!-- LIFECYCLE FLOWS -->
-  <section>
-    <div class="eyebrow">How it runs</div>
-    <h2 class="t">Four lifecycle flows</h2>
-    <div class="flows">
-
-      <div class="flow">
-        <div class="fn">Launch <i>whiz run · whiz r &lt;preset&gt;</i></div>
-        <div class="chain">
-          <span class="node mono">_perform_launch</span><span class="sep">→</span>
-          <span class="node">resolve profile + mounts + adapter</span><span class="sep">→</span>
-          <span class="node">safety validation</span><span class="sep">→</span>
-          <span class="node">write snapshot</span><span class="sep">→</span>
-          <span class="node mono">run_shell</span><span class="sep">→</span>
-          <span class="node">launch sandbox → enforcement monitor</span>
-        </div>
-      </div>
-
-      <div class="flow">
-        <div class="fn">Adjust / Wake <i>mid-session capability change</i></div>
-        <div class="chain">
-          <span class="node mono">whiz adjust / wake</span><span class="sep">→</span>
-          <span class="node mono">adjust_session</span><span class="sep">→</span>
-          <span class="node">stop container</span><span class="sep">→</span>
-          <span class="node">relaunch with new caps</span><span class="sep">→</span>
-          <span class="node">harness state persists via bind mount</span>
-        </div>
-      </div>
-
-      <div class="flow">
-        <div class="fn">Agent request <i>cooperation layer</i></div>
-        <div class="chain">
-          <span class="node mono">whiz_request_mount / _extend</span><span class="sep">→</span>
-          <span class="node mono">/run/whiz/requests/</span><span class="sep">→</span>
-          <span class="node">operator reviews <span class="mono">whiz requests</span></span><span class="sep">→</span>
-          <span class="node">approve → <span class="mono">adjust_session</span></span>
-        </div>
-      </div>
-
-      <div class="flow">
-        <div class="fn">Enforce <i>time-bounded sessions</i></div>
-        <div class="chain">
-          <span class="node mono">monitor_and_enforce</span><span class="sep">→</span>
-          <span class="node">poll running sandbox</span><span class="sep">→</span>
-          <span class="node">duration cap / idle timeout hit</span><span class="sep">→</span>
-          <span class="node">adapter wrap-up → SIGTERM</span><span class="sep">→</span>
-          <span class="node">record expiry reason</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ADAPTER SEAM -->
-  <section>
-    <div class="eyebrow">The only seam</div>
-    <h2 class="t">Harness adapters keep the core harness-neutral</h2>
-    <div class="seam">
-      <div class="cell"><b>Whizzard Core</b><span>harness-neutral — knows nothing about any specific harness</span></div>
-      <div class="sarrow">↔</div>
-      <div class="cell mid"><b>HarnessAdapter</b><span><code>adapters/base.py</code> Protocol — the seam</span></div>
-      <div class="sarrow">↔</div>
-      <div class="cell"><b>Harness</b><span>Hermes / shell / … — all harness-specific identifiers confined here</span></div>
-    </div>
-    <div class="slate">
-      <span class="chip ship">● generic shell — shipped</span>
-      <span class="chip ship">● Hermes — shipped</span>
-      <span class="chip plan">○ NanoClaw — v1.0</span>
-      <span class="chip plan">○ native Whizzard harness — v2.0</span>
-    </div>
-    <div class="callout">Protocol methods: <code>start_command</code> · <code>container_env</code> · <code>credential_env_keys</code> · <code>container_mounts</code> · <code>working_dir</code> · <code>wrap_up</code> · <code>preflight</code> · <code>active_capabilities</code> · <code>mcp_env</code> · <code>health_check_command</code>. Adapters are built from declarative <code>harnesses.json</code> entries (versioned schema). Whizzard decides <b>what the sandbox can do</b>; the adapter decides <b>what runs inside it</b>.</div>
-  </section>
-
-  <!-- SAFETY -->
-  <section>
-    <div class="eyebrow">Safety policy</div>
-    <h2 class="t">Every mount target falls into one of three tiers</h2>
-    <div class="tiers">
-      <div class="tier block"><div class="th">⛔ Hard block — no override</div>
-        <div class="td"><code>/</code>, <code>$HOME</code>, <code>~/.ssh</code>, <code>~/Library</code>, keychains, browser profiles, the Docker socket, the Whizzard config dir.</div></div>
-      <div class="tier over"><div class="th">⚠ Override-required</div>
-        <div class="td">Broad folders (<code>~/Documents</code>…), cloud-sync roots, parents of registered mounts. Needs <code>--allow-broad-mount</code> + a permitting profile (two gates). Every override is logged.</div></div>
-      <div class="tier ok"><div class="th">✓ Allowed</div>
-        <div class="td">Registered mounts in <code>mounts.json</code> whose paths fall outside the above. The mount list <em>is</em> the permission model.</div></div>
-    </div>
-  </section>
-
-  <!-- CONSTANTS -->
-  <section>
-    <div class="eyebrow">Cannot be relaxed by future work</div>
-    <h2 class="t">Five architectural constants</h2>
+  <!-- ARCHITECTURAL CONSTANTS -->
+  <section data-screen-label="constants">
+    <div class="eyebrow">The invariants</div>
+    <h2 class="t">Whizzard has five architectural constants</h2>
+    <p class="t-sub">These invariants that are the foundation of Whizzard's trust model.</p>
     <div class="consts">
       <div class="const"><div class="ci">↗</div><div class="ct">One-way flow</div><div class="cd">Agents request; Whizzard grants; never self-grant.</div></div>
       <div class="const"><div class="ci">◎</div><div class="ct">Neutral core</div><div class="cd">Harness behavior lives only in adapters.</div></div>
@@ -326,11 +291,95 @@
     </div>
   </section>
 
+  <!-- ===== REFERENCE APPENDIX ===== -->
+  <div class="appdiv"><div class="dl"></div><span>Reference</span><div class="dl"></div></div>
+
+  <!-- LIFECYCLE FLOWS -->
+  <section class="ref" data-screen-label="flows">
+    <h3><span class="num">01</span>Four lifecycle flows</h3>
+    <div class="protos lead">Capabilities only ever change at well-defined moments. Each flow is <b style="color:var(--ink)">host-driven</b> — the agent can request, but never act on its own grant.</div>
+    <div class="flows">
+
+      <div class="flow">
+        <div class="fn">Launch <i>whiz run · whiz r &lt;preset&gt;</i></div>
+        <div class="chain">
+          <div class="step"><span class="ix">1</span><span class="sx">Resolve <b>profile + mounts + adapter</b></span></div>
+          <div class="step"><span class="ix">2</span><span class="sx">Run <b>3-tier safety validation</b></span></div>
+          <div class="step"><span class="ix">3</span><span class="sx">Write session snapshot</span></div>
+          <div class="step"><span class="ix">4</span><span class="sx">Launch sandbox → start <b>enforcement monitor</b></span></div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="fn">Adjust / Wake <i>mid-session change</i></div>
+        <div class="chain">
+          <div class="step"><span class="ix">1</span><span class="sx"><code>whiz adjust / wake</code> → <code>adjust_session</code></span></div>
+          <div class="step"><span class="ix">2</span><span class="sx">Stop container</span></div>
+          <div class="step"><span class="ix">3</span><span class="sx">Relaunch with <b>new capabilities</b></span></div>
+          <div class="step"><span class="ix">4</span><span class="sx">Harness state persists via bind mount</span></div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="fn">Agent request <i>cooperation layer</i></div>
+        <div class="chain">
+          <div class="step"><span class="ix">1</span><span class="sx">Agent calls <code>whiz_request_mount / _extend</code></span></div>
+          <div class="step"><span class="ix">2</span><span class="sx">Lands in <code>/run/whiz/requests/</code></span></div>
+          <div class="step"><span class="ix">3</span><span class="sx">Operator reviews <code>whiz requests</code></span></div>
+          <div class="step"><span class="ix">4</span><span class="sx">Approve → <code>adjust_session</code></span></div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="fn">Enforce <i>time-bounded sessions</i></div>
+        <div class="chain">
+          <div class="step"><span class="ix">1</span><span class="sx"><code>monitor_and_enforce</code> polls the sandbox</span></div>
+          <div class="step"><span class="ix">2</span><span class="sx"><b>Duration cap</b> or idle timeout hit</span></div>
+          <div class="step"><span class="ix">3</span><span class="sx">Adapter wrap-up → SIGTERM</span></div>
+          <div class="step"><span class="ix">4</span><span class="sx">Record expiry reason to audit log</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADAPTER SEAM -->
+  <section class="ref" data-screen-label="adapters">
+    <h3><span class="num">02</span>Harness adapters keep the core neutral</h3>
+    <div class="protos lead">Whizzard decides <b style="color:var(--ink)">what the sandbox can do</b>; the adapter decides <b style="color:var(--ink)">what runs inside it</b>. Adapters are built from declarative <code>harnesses.json</code> entries.</div>
+    <div class="seam">
+      <div class="scell"><b>Whizzard Core</b><span>harness-neutral — knows nothing about any specific harness</span></div>
+      <div class="sarrow">↔</div>
+      <div class="scell mid"><b>HarnessAdapter</b><span><code>adapters/base.py</code> Protocol — the one seam</span></div>
+      <div class="sarrow">↔</div>
+      <div class="scell"><b>Harness</b><span>Hermes / shell / … — all harness-specific identifiers confined here</span></div>
+    </div>
+    <div class="slate">
+      <span class="chip ship">● generic shell — shipped</span>
+      <span class="chip ship">● Hermes — shipped</span>
+      <span class="chip plan">○ NanoClaw — v1.0</span>
+      <span class="chip plan">○ native Whizzard harness — v2.0</span>
+    </div>
+  </section>
+
+  <!-- SAFETY -->
+  <section class="ref" data-screen-label="safety">
+    <h3><span class="num">03</span>Every mount target falls into one of three tiers</h3>
+    <div class="protos lead">Every requested path is classified before launch. The tier — <b style="color:var(--ink)">not the agent</b> — decides whether a mount is allowed, gated, or refused.</div>
+    <div class="tiers">
+      <div class="tier block"><div class="th">⛔ Hard block — no override</div>
+        <div class="td"><code>/</code>, <code>$HOME</code>, <code>~/.ssh</code>, <code>~/Library</code>, keychains, browser profiles, the Docker socket, the Whizzard config dir.</div></div>
+      <div class="tier over"><div class="th">⚠ Override-required</div>
+        <div class="td">Broad folders (<code>~/Documents</code>…), cloud-sync roots, parents of registered mounts. Needs <code>--allow-broad-mount</code> + a permitting profile — two gates. Every override is logged.</div></div>
+      <div class="tier ok"><div class="th">✓ Allowed</div>
+        <div class="td">Registered mounts in <code>mounts.json</code> whose paths fall outside the above. The mount list <em>is</em> the permission model.</div></div>
+    </div>
+  </section>
+
   <footer>
     Whizzard architecture overview · regenerate against <code>docs/architecture.md</code> when the model changes.<br>
     Backend: Docker today; abstracted for Podman / Firecracker / Apple Virtualization / cloud sandboxes.
   </footer>
 
 </div>
-</body>
-</html>
+
+</body></html>
