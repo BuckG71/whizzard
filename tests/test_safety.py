@@ -264,3 +264,56 @@ def test_whizzard_home_is_on_the_deep_hard_block_list():
         "WHIZZARD_HOME missing from _DEEP_HARD_BLOCKS — config "
         "write-protection invariant broken"
     )
+
+
+# --- Windows exclusions (windows-portability) ------------------------------
+
+
+def test_windows_exclusions_cover_validated_paths():
+    """The validated Windows set must include AppData (the ~/Library
+    analog), system dirs, Videos, and the cloud roots led by OneDrive."""
+    from whizzard.safety import _windows_exclusions
+
+    home = Path("C:/Users/test")
+    ex = _windows_exclusions(home)
+    deep = ex["deep"]
+    assert home / "AppData" in deep, "AppData must be a hard block (browser creds, DPAPI, Credential Manager)"
+    assert home / ".azure" in deep and home / ".kube" in deep
+    # System dirs present (exact values come from env; just assert non-empty).
+    assert len(ex["exact"]) >= 1
+    assert any("Windows" in str(p) for p in deep)
+    assert any("ProgramData" in str(p) for p in deep)
+    assert home / "Videos" in ex["broad"]
+    cloud = ex["cloud"]
+    assert home / "OneDrive" in cloud
+    assert home / "iCloudDrive" in cloud
+
+
+def test_windows_appdata_is_hard_blocked(tmp_path, monkeypatch):
+    """Behavioral: an AppData path is a no-override hard block. Simulated
+    cross-platform by injecting the AppData entry into the deep block list
+    (the matcher is pure Path logic, so this validates the Windows entry
+    will actually trigger)."""
+    home = tmp_path
+    appdata = home / "AppData" / "Local" / "Google" / "Chrome"
+    appdata.mkdir(parents=True)
+    monkeypatch.setattr("whizzard.safety._DEEP_HARD_BLOCKS", [home / "AppData"])
+    with pytest.raises(SafetyViolation, match="hard-blocked"):
+        check_mount_path(appdata, PROFILE_PERMISSIVE, True)
+
+
+def test_business_onedrive_prefix_flagged_as_cloud_root(tmp_path, monkeypatch):
+    """`OneDrive - Acme` (business naming) is gated as a cloud root via the
+    prefix check even though it's a sibling of `~/OneDrive`, not inside it."""
+    monkeypatch.setattr("whizzard.safety.HOME", tmp_path)
+    monkeypatch.setattr("whizzard.safety._CLOUD_SYNC_ROOTS", [])  # force the prefix path
+    monkeypatch.setattr("whizzard.safety._DEEP_HARD_BLOCKS", [])
+    monkeypatch.setattr("whizzard.safety._BROAD_FOLDERS", [])
+    proj = tmp_path / "OneDrive - Acme" / "proj"
+    proj.mkdir(parents=True)
+    # Strict profile blocks the override → SafetyViolation naming OneDrive.
+    with pytest.raises(SafetyViolation, match="OneDrive"):
+        check_mount_path(proj, PROFILE_STRICT, True)
+    # Permissive profile + flag → allowed, returns the cloud-root override.
+    overrides = check_mount_path(proj, PROFILE_PERMISSIVE, True)
+    assert any("OneDrive" in o.reason for o in overrides)

@@ -27,12 +27,16 @@ Path containment semantics:
   Otherwise no path inside $HOME could ever be mounted, since every such
   path is "inside" $HOME by definition.
 
-This module is macOS-focused for MVP. Linux paths (e.g., ~/.config/google-chrome,
-~/.mozilla) and Windows paths can be added in a later pass.
+macOS is the primary target; the HOME-relative blocks also cover Linux and
+Windows by construction. Windows-specific exclusions (AppData, system dirs,
+OneDrive, etc.) are merged via `_windows_exclusions` when `os.name == "nt"`.
+Linux desktop paths (~/.config/google-chrome, ~/.mozilla) can be added in a
+later pass.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +84,61 @@ _CLOUD_SYNC_ROOTS: list[Path] = [
     HOME / "Google Drive",
     HOME / "iCloud Drive",  # some users have this as a symlink
 ]
+
+
+def _windows_exclusions(home: Path) -> dict[str, list[Path]]:
+    """Windows-specific path exclusions, validated 2026-06 (research in
+    `docs/known_issues.md` "Windows support is unverified").
+
+    Returned as a dict so the set is unit-testable on any platform; the
+    import-time guard below merges it into the live block lists only when
+    ``os.name == "nt"``, so macOS/Linux behavior is unchanged.
+
+    The HOME-relative dotfile/folder blocks (.ssh, .aws, .docker,
+    Documents…) already resolve correctly on Windows via ``Path.home()``;
+    this fills the gaps that are Windows-specific.
+    """
+    # Windows env-var lookups are case-insensitive; uppercase names keep
+    # the linter happy and still resolve %SystemRoot% etc. on Windows.
+    windir = Path(os.environ.get("SYSTEMROOT", r"C:\Windows"))
+    programdata = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
+    system_drive = os.environ.get("SYSTEMDRIVE", "C:")
+    return {
+        # exact-match hard blocks
+        "exact": [Path(system_drive + os.sep)],  # e.g. C:\ (drive root)
+        # deep hard blocks (no override)
+        "deep": [
+            # AppData (Roaming + Local + LocalLow) is the Windows analog of
+            # macOS ~/Library: browser password stores + keys (Chrome/Edge
+            # Login Data, Firefox profiles), the Credential Manager file
+            # store, DPAPI master keys, gnupg, gcloud, PowerShell history.
+            home / "AppData",
+            # Cloud/k8s creds — also relevant on POSIX; Windows-scoped for
+            # now (candidate to promote to the shared list).
+            home / ".azure",
+            home / ".kube",
+            windir,        # C:\Windows — OS tree
+            programdata,   # C:\ProgramData — system-wide app data
+        ],
+        # override-required broad folders
+        "broad": [home / "Videos"],  # Windows' name for macOS "Movies"
+        # override-required cloud sync roots (business OneDrive handled by
+        # the OneDrive-prefix check in check_mount_path)
+        "cloud": [
+            home / "OneDrive",     # personal — built into Windows
+            home / "iCloudDrive",  # iCloud for Windows
+        ],
+    }
+
+
+# On Windows, extend the block lists with the validated Windows set. On
+# macOS/Linux this branch never runs, so those platforms are untouched.
+if os.name == "nt":
+    _win = _windows_exclusions(HOME)
+    _EXACT_HARD_BLOCKS += _win["exact"]
+    _DEEP_HARD_BLOCKS += _win["deep"]
+    _BROAD_FOLDERS += _win["broad"]
+    _CLOUD_SYNC_ROOTS += _win["cloud"]
 
 
 @dataclass(frozen=True)
@@ -186,6 +245,7 @@ def check_mount_path(
             ))
             break  # one broad-folder reason is enough
 
+    cloud_flagged = False
     for cloud in _CLOUD_SYNC_ROOTS:
         c = _resolve_safe(cloud)
         if c is None:
@@ -195,7 +255,26 @@ def check_mount_path(
                 path=str(p),
                 reason=f"cloud sync root ({c})",
             ))
+            cloud_flagged = True
             break
+
+    # Business OneDrive uses an org-suffixed folder name (e.g.
+    # "OneDrive - Acme"), which the exact-name entry above misses. Treat any
+    # HOME-direct-child whose name is "OneDrive" or starts with "OneDrive -"
+    # as a cloud sync root. Cross-platform safe — it only adds override
+    # gating for a genuinely cloud-synced location.
+    if not cloud_flagged:
+        home_resolved = _resolve_safe(HOME)
+        if home_resolved is not None:
+            try:
+                first = p.relative_to(home_resolved).parts[0]
+            except (ValueError, IndexError):
+                first = ""
+            if first == "OneDrive" or first.startswith("OneDrive -"):
+                overrides.append(OverrideRecord(
+                    path=str(p),
+                    reason="cloud sync root (OneDrive)",
+                ))
 
     # Parent of any registered mount target
     for registered in other_registered_paths:
