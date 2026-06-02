@@ -226,6 +226,11 @@ def test_hermes_preflight_treats_lock_without_pid_as_no_lock(tmp_path):
     assert result.ok is True
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX ~ expansion via $HOME; on Windows expanduser uses "
+    "%USERPROFILE%, so setenv('HOME') doesn't drive it",
+)
 def test_resolve_hermes_home_expands_tilde(monkeypatch):
     monkeypatch.setenv("HOME", "/Users/testuser")
     result = hermes_module._resolve_hermes_home({"hermes_home": "~/.hermes-bot"})
@@ -247,11 +252,22 @@ def test_is_pid_alive_returns_false_for_dead_pid(monkeypatch):
     assert hermes_module._is_pid_alive(99999999) is False
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="exercises the POSIX os.kill(pid, 0) branch; Windows uses the "
+    "ctypes path (validated by test_is_pid_alive_posix_unaffected, which "
+    "runs the live probe on the Windows runner)",
+)
 def test_is_pid_alive_returns_true_for_signalable_pid(monkeypatch):
     monkeypatch.setattr(os, "kill", lambda pid, sig: None)
     assert hermes_module._is_pid_alive(1) is True
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX PermissionError branch; Windows has no equivalent in the "
+    "ctypes path",
+)
 def test_is_pid_alive_returns_true_when_permission_denied(monkeypatch):
     def fake_kill(pid, sig):
         raise PermissionError()
@@ -892,6 +908,12 @@ def test_clone_exclusion_matches_uppercase_variants(tmp_path):
 # --- F-C-03: symlinks preserved, not dereferenced -------------------------
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows symlink creation needs Developer Mode/admin and "
+    "readlink returns the \\\\?\\ extended-length prefix; symlink "
+    "preservation is validated on POSIX",
+)
 def test_clone_preserves_symlinks_instead_of_copying_target_content(tmp_path):
     """A symlink in the source profile is preserved as a symlink in the
     destination. The symlink's target is host-side and won't resolve

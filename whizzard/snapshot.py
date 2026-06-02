@@ -119,7 +119,7 @@ def write_snapshot(
         "mounts": [
             {
                 "name": m.name,
-                "host_path": str(m.host_path),
+                "host_path": m.host_path.as_posix(),
                 "container_path": m.container_path(),
                 "mode": str(mode),
             }

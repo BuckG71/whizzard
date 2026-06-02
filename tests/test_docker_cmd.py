@@ -1,6 +1,9 @@
 """Stages 1, 2, 5, 7: docker run argv construction."""
 
+import os
 from pathlib import Path
+
+import pytest
 
 from whizzard.adapters import GenericShellAdapter
 from whizzard.config import get_profile
@@ -287,6 +290,12 @@ def test_argv_no_harness_mount_for_generic_shell():
     assert "/home/whizzard/.hermes" not in joined
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="asserts POSIX uid:gid parity; os.getuid doesn't exist on Windows "
+    "(the Windows fallback is covered by "
+    "test_argv_uid_parity_falls_back_to_named_user_on_windows)",
+)
 def test_argv_uid_parity_overrides_user_and_tmpfs_when_hermes_mounted(tmp_path):
     import os
 

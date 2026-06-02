@@ -379,7 +379,7 @@ def _mounts_for_log(
         {
             "name": m.name,
             "mode": mode,
-            "host_path": str(m.host_path),
+            "host_path": m.host_path.as_posix(),
             "container_path": m.container_path(),
         }
         for m, mode in (resolved_mounts or [])

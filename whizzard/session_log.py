@@ -130,7 +130,12 @@ def append_event(event: dict[str, Any], path: Path | None = None) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     event["v"] = AUDIT_LOG_SCHEMA_VERSION
     line = json.dumps(event, separators=(",", ":"))
-    with target.open("a") as f:
+    # F-G-15: pin UTF-8 + LF. Default text mode on Windows translates "\n"
+    # to "\r\n", which (a) skews the byte offsets the wake/adjust recovery
+    # reads (find_session_start_after_offset) and (b) inflates line lengths;
+    # and the default cp1252 encoding on Windows could mangle non-ASCII
+    # audit content. LF + UTF-8 keeps the log byte-identical cross-platform.
+    with target.open("a", encoding="utf-8", newline="\n") as f:
         f.write(line + "\n")
         # F-G-12: durable-sync each append. The wake and adjust paths
         # read the audit log immediately after writing a session_start
@@ -278,7 +283,7 @@ def merge_agent_events(
         # F-D-04: stream line-by-line so a gigabyte file doesn't blow up
         # memory. The whole-file slurp this replaces meant `read_text()`
         # held the entire content before splitting.
-        fh = event_log_path.open()
+        fh = event_log_path.open(encoding="utf-8", newline="\n")
     except OSError:
         return 0
     try:
