@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
 import sys
 from collections.abc import Callable
@@ -68,6 +69,51 @@ from whizzard.preset_config import PRESETS_FILE
 # Config files the wizard creates. Existence of any → wizard refuses
 # unless --force is passed. Idempotency contract for first-run UX.
 _CONFIG_FILES = (PROFILES_FILE, MOUNTS_FILE, HARNESSES_FILE, PRESETS_FILE)
+
+
+def _host_platform() -> str:
+    """'windows' | 'macos' | 'linux' — drives OS-aware wizard guidance.
+
+    The wizard's *flow* is identical across platforms; this only tailors
+    a few hints (Docker-install link, the Windows Linux-container note,
+    example mount paths). It does not branch the steps themselves.
+    """
+    system = platform.system()
+    if system == "Windows":
+        return "windows"
+    if system == "Darwin":
+        return "macos"
+    return "linux"
+
+
+def _example_mount_path() -> str:
+    """An example folder path in the host OS's idiom, for the mount prompt."""
+    return {
+        "windows": r"C:\Users\you\projects",
+        "macos": "~/projects",
+    }.get(_host_platform(), "~/projects")
+
+
+def _docker_install_hint() -> str:
+    """OS-tailored Docker-install guidance for the missing-Docker error."""
+    plat = _host_platform()
+    if plat == "windows":
+        return (
+            "Install Docker Desktop for Windows "
+            "(https://docs.docker.com/desktop/install/windows-install/), "
+            "make sure it's set to the Linux-container / WSL2 backend, "
+            "then re-run `whiz init`."
+        )
+    if plat == "macos":
+        return (
+            "Install Docker Desktop for Mac "
+            "(https://docs.docker.com/desktop/install/mac-install/) "
+            "and re-run `whiz init`."
+        )
+    return (
+        "Install the Docker daemon (or Docker Desktop) and re-run "
+        "`whiz init`."
+    )
 
 
 @dataclass
@@ -206,9 +252,7 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
     # Pre-flight checks.
     if not docker_available():
         console.print(
-            "[red]error: docker not found on PATH.[/red] "
-            "Install Docker Desktop (mac/Windows) or the docker daemon "
-            "(Linux) and re-run `whiz init`."
+            f"[red]error: docker not found on PATH.[/red] {_docker_install_hint()}"
         )
         sys.exit(127)
     dockerfile = Path(str(files("whizzard._dockerfiles") / "Dockerfile"))
@@ -220,6 +264,12 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
 
     console.print("Checking prerequisites:")
     console.print("  [green]✓[/green] Docker is running")
+    if _host_platform() == "windows":
+        console.print(
+            "  [yellow]›[/yellow] [dim]Windows: ensure Docker Desktop is using the "
+            "Linux-container backend (WSL2) — Whizzard's sandbox is a Linux "
+            "container and won't run in Windows-container mode.[/dim]"
+        )
     console.print("  [green]✓[/green] Container recipe found")
     console.print()
     console.print(
@@ -653,7 +703,7 @@ def step_3_mounts(state: WizardState) -> None:
 
     while add_choice == 1:
         console.print()
-        path_raw = _prompt_text("  Path on your computer")
+        path_raw = _prompt_text(f"  Path on your computer (e.g. {_example_mount_path()})")
         if not path_raw:
             console.print("[yellow]path required.[/yellow] try again.")
             continue

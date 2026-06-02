@@ -720,3 +720,52 @@ def test_wizard_image_build_failure_leaves_no_partial_config(
     assert written == [], (
         f"failed image build still landed config files: {written}"
     )
+
+
+# ---------- OS-aware guidance (windows-portability) ----------
+
+
+def test_host_platform_detection(monkeypatch):
+    from whizzard import init_wizard as iw
+    monkeypatch.setattr(iw.platform, "system", lambda: "Windows")
+    assert iw._host_platform() == "windows"
+    monkeypatch.setattr(iw.platform, "system", lambda: "Darwin")
+    assert iw._host_platform() == "macos"
+    monkeypatch.setattr(iw.platform, "system", lambda: "Linux")
+    assert iw._host_platform() == "linux"
+
+
+def test_example_mount_path_is_os_idiomatic(monkeypatch):
+    from whizzard import init_wizard as iw
+    monkeypatch.setattr(iw, "_host_platform", lambda: "windows")
+    assert "C:\\Users" in iw._example_mount_path()
+    monkeypatch.setattr(iw, "_host_platform", lambda: "macos")
+    assert iw._example_mount_path().startswith("~")
+
+
+def test_docker_install_hint_windows_mentions_linux_container(monkeypatch):
+    from whizzard import init_wizard as iw
+    monkeypatch.setattr(iw, "_host_platform", lambda: "windows")
+    hint = iw._docker_install_hint()
+    assert "Windows" in hint and "Linux-container" in hint
+    monkeypatch.setattr(iw, "_host_platform", lambda: "macos")
+    assert "Mac" in iw._docker_install_hint()
+
+
+def test_step_1_shows_windows_linux_container_note(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """On Windows the Docker step warns about the Linux-container backend
+    (the #1 silent-failure mode); on macOS it doesn't."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+
+    monkeypatch.setattr(iw, "_host_platform", lambda: "windows")
+    result = runner.invoke(app, ["init", "--yes"])
+    assert "Linux-container backend (WSL2)" in result.output
+
+    monkeypatch.setattr(iw, "_host_platform", lambda: "macos")
+    result = runner.invoke(app, ["init", "--yes"])
+    assert "Linux-container backend (WSL2)" not in result.output

@@ -66,12 +66,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Launch-readiness §K: unit suite on Ubuntu + macOS × 3.11/3.12.
-        # The maintainer develops on macOS, so the mac legs catch
-        # platform-specific path/behavior drift the Linux legs miss.
+        # Launch-readiness §K: unit suite on Ubuntu + macOS + Windows ×
+        # 3.11/3.12. The mac/Windows legs catch platform-specific path and
+        # behavior drift the Linux legs miss (the Windows leg exercises the
+        # os.name=="nt" branches for real — safety._windows_exclusions, the
+        # uid-parity fallback, and _is_pid_alive's ctypes path).
         # Integration tests (real Docker) stay Ubuntu-only — GitHub's
-        # macOS runners don't ship a Docker daemon.
-        os: [ubuntu-latest, macos-latest]
+        # macOS/Windows runners don't provide a Linux-container Docker.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
