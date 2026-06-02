@@ -192,6 +192,23 @@
 
   footer{border-top:1px solid var(--line);padding:28px 0 64px;color:var(--faint);font-size:.82rem;
     text-align:center;margin-top:56px;line-height:1.7}
+
+  /* ---------- mobile tuning ----------
+     The hero diagram nests boxes 6 deep (wrap→stage→sandboxband→nest→
+     behavioral→cooperation→agent). On phones the cumulative padding
+     starves the innermost content column, so trim padding across the
+     nest and stack the agent box (its puck was stealing width from the
+     text). */
+  @media(max-width:600px){
+    .wrap{padding:0 14px}
+    .stage{padding:14px;border-radius:14px}
+    .hostband,.sandboxband{padding:12px 13px}
+    .nest{padding:13px}
+    .nest .behave{padding:12px}
+    .nest .coop{padding:11px}
+    .agent{flex-direction:column;align-items:flex-start;gap:10px;padding:12px 13px}
+    .agent .puck{width:36px;height:36px}
+  }
 </style>
 </head>
 <body>
