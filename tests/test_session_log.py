@@ -137,7 +137,9 @@ def test_session_log_size_returns_byte_size(tmp_path: Path):
     from whizzard.session_log import session_log_size
 
     target = tmp_path / "sessions.jsonl"
-    target.write_text("line one\nline two\n")
+    # write_bytes (not write_text) so the on-disk bytes are exact — text
+    # mode would translate "\n"→"\r\n" on Windows and inflate the count.
+    target.write_bytes(b"line one\nline two\n")
     assert session_log_size(target) == len(b"line one\nline two\n")
 
 
