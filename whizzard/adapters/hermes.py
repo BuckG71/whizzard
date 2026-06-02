@@ -380,15 +380,44 @@ def _read_gateway_lock(hermes_home: Path) -> dict | None:
 
 
 def _is_pid_alive(pid: int) -> bool:
-    """Probe whether `pid` exists. Signal 0 is a no-op delivery check."""
+    """Probe whether `pid` exists.
+
+    POSIX: signal 0 is a no-op delivery check. On Windows `os.kill`'s
+    "signal 0" is `CTRL_C_EVENT` (value 0) — not a liveness probe — so we
+    query the process via the Win32 API instead. Any unexpected error
+    degrades to "not alive" so the gateway-lock preflight treats a lock
+    as stale and proceeds rather than crashing the launch.
+    """
+    if os.name != "nt":  # POSIX
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # Process exists; we just can't signal it. Still alive.
+            return True
+        except OSError:
+            return False
+    # Windows: OpenProcess + GetExitCodeProcess (STILL_ACTIVE == 259).
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        k = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not handle:
+            return False
+        try:
+            code = wintypes.DWORD()
+            ok = k.GetExitCodeProcess(handle, ctypes.byref(code))
+            return bool(ok) and code.value == STILL_ACTIVE
+        finally:
+            k.CloseHandle(handle)
+    except Exception:
         return False
-    except PermissionError:
-        # Process exists; we just can't signal it. Still alive.
-        return True
 
 
 @dataclass

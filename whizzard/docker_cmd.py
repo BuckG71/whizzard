@@ -273,7 +273,13 @@ def build_run_argv(
     # the home-dir tmpfs ownership for the whole container (D-56).
     harness_mounts = adapter.container_mounts()
     needs_uid_parity = any(cm.uid_parity for cm in harness_mounts)
-    if needs_uid_parity:
+    # UID parity (D-56) matches the container user to the host user so
+    # bind-mounted files stay writable on Linux/macOS Docker. On Windows
+    # `os.getuid` does not exist (would raise AttributeError), and the
+    # parity trick doesn't apply anyway — Docker Desktop's WSL2 backend
+    # maps bind-mount ownership itself. So on Windows we fall back to the
+    # image's default user. (`os.name == "nt"` is the Windows guard.)
+    if needs_uid_parity and os.name != "nt":
         user_uid = os.getuid()
         user_gid = os.getgid()
         user_arg = f"{user_uid}:{user_gid}"

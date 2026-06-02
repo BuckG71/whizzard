@@ -16,6 +16,27 @@ Categories:
 
 ## Functional gaps
 
+### Windows support is unverified (containment boundary not validated)
+The codebase was developed and tested on macOS, with Ubuntu + macOS CI. The
+two known launch-time *crashes* on Windows are now guarded (`os.getuid` in
+the UID-parity path, and `_is_pid_alive`'s POSIX signal-0 idiom — both fall
+back / branch on `os.name == "nt"`), so a Windows install/run should no
+longer faceplant. But Windows is **not** validated end-to-end, and two real
+gaps remain:
+- **Safety policy is macOS-pathed.** `whizzard/safety.py` (docstring: "macOS-focused
+  for MVP") hard-blocks `~/Library`, `/var/run/docker.sock`, etc. Windows-sensitive
+  paths (`%APPDATA%`, the `\\.\pipe\docker_engine` Docker socket, `C:\Windows`) are
+  **not** in the blocklist — so the containment guarantee, the product's whole
+  point, is unvalidated on Windows.
+- **Bind-mount path translation untested.** `-v C:\Users\…:/container` relies on
+  Docker Desktop's path handling; the drive-letter colon vs the `-v` field
+  separator is a known fragility, not yet exercised.
+- **No Windows CI lane** — the unit suite has never run on Windows.
+*Source:* portability review 2026-06; `windows-portability` branch.
+*Disposition:* before any "Windows supported" claim — add a Windows-aware safety
+blocklist, a Windows CI lane, and an end-to-end launch verification on a real
+Windows box. Until then the README's "pre-release verification" wording stands.
+
 ### OneCLI integration is functionally inert
 Whizzard integrates with OneCLI (a separate command-line credential vault) to
 fetch secrets without writing them to disk. The integration's `fetch_secret`

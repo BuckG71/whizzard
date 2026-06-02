@@ -316,12 +316,59 @@ def test_argv_no_uid_parity_for_generic_shell_keeps_named_user():
     argv = build_run_argv(get_profile("default"), adapter=GenericShellAdapter())
     user_idx = argv.index("--user")
     assert argv[user_idx + 1] == "whizzard"
-
     home_tmpfs = next(
         (a for a in argv if a.startswith("/home/whizzard:")), None
     )
     assert home_tmpfs is not None
     assert "uid=1000,gid=1000" in home_tmpfs
+
+
+def test_argv_uid_parity_falls_back_to_named_user_on_windows(tmp_path, monkeypatch):
+    """Windows portability: `os.getuid` doesn't exist on Windows, and the
+    UID-parity trick doesn't apply (Docker Desktop/WSL2 maps ownership).
+    With os.name == 'nt', a uid_parity mount must fall back to the named
+    `whizzard` user instead of calling os.getuid (which would crash)."""
+    import whizzard.docker_cmd as dc
+    from whizzard.adapters import HermesAdapter
+
+    hermes_home = tmp_path / ".hermes-win"
+    hermes_home.mkdir()
+
+    # Simulate Windows. If the guard regresses, os.getuid() is still
+    # present on this macOS/Linux test host, so the test wouldn't catch a
+    # crash — so also assert getuid is NOT consulted.
+    monkeypatch.setattr(dc.os, "name", "nt")
+    called = {"getuid": False}
+    if hasattr(dc.os, "getuid"):
+        real = dc.os.getuid
+        def _tracking_getuid():
+            called["getuid"] = True
+            return real()
+        monkeypatch.setattr(dc.os, "getuid", _tracking_getuid)
+
+    argv = build_run_argv(
+        get_profile("default"),
+        adapter=HermesAdapter(config={"hermes_home": str(hermes_home)}),
+    )
+
+    user_idx = argv.index("--user")
+    assert argv[user_idx + 1] == "whizzard", "should fall back to named user on Windows"
+    assert called["getuid"] is False, "os.getuid must not be called on Windows"
+    # Home tmpfs falls back to the baked-in 1000:1000.
+    home_tmpfs = next((a for a in argv if a.startswith("/home/whizzard:")), None)
+    assert home_tmpfs is not None and "uid=1000,gid=1000" in home_tmpfs
+
+
+def test_is_pid_alive_posix_unaffected():
+    """Regression: the POSIX liveness path still works after the Windows
+    branch was added. (Windows ctypes branch is validated on the box.)"""
+    import os
+
+    from whizzard.adapters.hermes import _is_pid_alive
+
+    assert _is_pid_alive(os.getpid()) is True
+    # A pid that's almost certainly dead/unused.
+    assert _is_pid_alive(2_000_000_000) is False
 
 
 def test_argv_harness_mount_comes_after_user_mounts(tmp_path):
