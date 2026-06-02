@@ -343,10 +343,15 @@ def test_argv_uid_parity_falls_back_to_named_user_on_windows(tmp_path, monkeypat
     hermes_home = tmp_path / ".hermes-win"
     hermes_home.mkdir()
 
-    # Simulate Windows. If the guard regresses, os.getuid() is still
-    # present on this macOS/Linux test host, so the test wouldn't catch a
-    # crash — so also assert getuid is NOT consulted.
-    monkeypatch.setattr(dc.os, "name", "nt")
+    # Simulate Windows via the host-platform indirection rather than the
+    # global os.name. Monkeypatching os.name leaks into pytest's own path
+    # handling: on a failing assertion, pytest's failure-repr instantiates
+    # Path(os.getcwd()) -> WindowsPath, which raises NotImplementedError on
+    # POSIX and turns a clean test failure into an INTERNALERROR (seen on
+    # the 3.11 CI legs). Forcing the helper keeps the rest of the call under
+    # the real platform. If the guard regresses, os.getuid() is still
+    # present on this macOS/Linux test host, so also assert it isn't called.
+    monkeypatch.setattr(dc, "_host_is_windows", lambda: True)
     called = {"getuid": False}
     if hasattr(dc.os, "getuid"):
         real = dc.os.getuid

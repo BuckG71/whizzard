@@ -33,6 +33,18 @@ WHIZZARD_HERMES_IMAGE = os.environ.get("WHIZZARD_HERMES_IMAGE", "whizzard-hermes
 CONTAINER_USER = "whizzard"  # non-root, defined in whizzard/_dockerfiles/Dockerfile
 
 
+def _host_is_windows() -> bool:
+    """Whether the *host* running Whizzard is Windows.
+
+    Wrapped in a function (rather than inlining ``os.name == "nt"``) so the
+    UID-parity fallback can be exercised on Linux/macOS CI without
+    monkeypatching the global ``os.name`` — which would leak into pytest's
+    own path handling and crash failure reporting (``WindowsPath`` can't be
+    instantiated on POSIX).
+    """
+    return os.name == "nt"
+
+
 @dataclass
 class RunResult:
     container_id: str | None
@@ -279,7 +291,7 @@ def build_run_argv(
     # parity trick doesn't apply anyway — Docker Desktop's WSL2 backend
     # maps bind-mount ownership itself. So on Windows we fall back to the
     # image's default user. (`os.name == "nt"` is the Windows guard.)
-    if needs_uid_parity and os.name != "nt":
+    if needs_uid_parity and not _host_is_windows():
         user_uid = os.getuid()
         user_gid = os.getgid()
         user_arg = f"{user_uid}:{user_gid}"
