@@ -25,7 +25,7 @@ from whizzard.cli.adjust import tty_approver
 from whizzard.requests import find_request, mark_resolved, process_request, read_all_requests
 
 requests_app = typer.Typer(
-    help="Review agent-initiated capability requests (Stage 14).",
+    help="Review agent-initiated capability requests.",
     no_args_is_help=False,
 )
 
@@ -101,7 +101,7 @@ def requests_approve_cmd(
         ),
     ] = False,
 ) -> None:
-    """Approve an agent request and apply it via the Stage 13 stop+restart.
+    """Approve an agent request and apply it via the stop+restart flow.
 
     Like `whiz adjust`, this stops the existing container and re-launches it
     with the new capability; the harness's on-disk state survives the restart.

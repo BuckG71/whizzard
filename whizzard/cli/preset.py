@@ -26,7 +26,7 @@ from whizzard.preset_config import (
     validate_references,
 )
 
-preset_app = typer.Typer(help="Manage and launch presets (Stage 10).")
+preset_app = typer.Typer(help="Manage and launch presets.")
 
 
 def _harness_platforms_map() -> dict[str, set[str]]:

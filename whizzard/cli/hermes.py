@@ -21,7 +21,7 @@ from whizzard.docker_cmd import (
     docker_available,
 )
 
-hermes_app = typer.Typer(help="Hermes harness operations (Stage 8).")
+hermes_app = typer.Typer(help="Hermes harness operations.")
 hermes_profile_app = typer.Typer(help="Manage Hermes profiles for use in Whizzard cells.")
 hermes_image_app = typer.Typer(help="Manage the Hermes execution image.")
 hermes_app.add_typer(hermes_profile_app, name="profile")
@@ -76,7 +76,7 @@ def hermes_profile_create_cmd(
     Bare command clones from `default` (~/.hermes) if it exists; degrades to
     an empty profile otherwise. Explicit --clone-from selects a different
     source; --no-clone forces an empty profile. auth.json and per-instance
-    runtime state are always excluded from clones (D-80, D-86).
+    runtime state are always excluded from clones.
     """
     if clone_from is not None and no_clone:
         console.print("[red]--clone-from and --no-clone are mutually exclusive[/red]")

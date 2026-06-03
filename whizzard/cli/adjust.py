@@ -66,7 +66,7 @@ def adjust_cmd(
             "--allow-broad-mount",
             help="Permit broad-mount overrides for `--add-mount` paths that "
                  "would otherwise hit the safety policy. Requires the profile "
-                 "to permit broad mounts (D-46 first gate).",
+                 "to permit broad mounts.",
         ),
     ] = False,
     yes: Annotated[
@@ -81,7 +81,7 @@ def adjust_cmd(
     """Adjust a running session: add or remove mounts, extend duration,
     permit broad mounts. Stops the existing container and re-launches with
     the new capabilities; the cell's HERMES_HOME (or equivalent) bind mount
-    preserves the harness's on-disk state across the restart per D-79.
+    preserves the harness's on-disk state across the restart.
 
     Approval: a `[y/N]` prompt shows what's about to change unless `--yes`
     is passed or every change is unambiguously narrowing (`--remove-mount`
