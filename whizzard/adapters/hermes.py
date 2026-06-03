@@ -399,18 +399,20 @@ def _is_pid_alive(pid: int) -> bool:
             return True
         except OSError:
             return False
-    # Windows: OpenProcess + WaitForSingleObject. A running process is not
-    # signaled, so a zero-timeout wait returns WAIT_TIMEOUT; an exited process
-    # is signaled (WAIT_OBJECT_0). This avoids GetExitCodeProcess's documented
-    # STILL_ACTIVE (259) ambiguity — a process that genuinely exits with code
-    # 259 would otherwise read as alive. restype/argtypes are declared so the
-    # 64-bit HANDLE isn't truncated to ctypes' default c_int return type (which
-    # would mis-marshal it back into WaitForSingleObject/CloseHandle).
+    # Windows: OpenProcess(SYNCHRONIZE) + WaitForSingleObject. A running
+    # process is not signaled, so a zero-timeout wait returns WAIT_TIMEOUT; an
+    # exited one is signaled (WAIT_OBJECT_0). This avoids GetExitCodeProcess's
+    # documented STILL_ACTIVE (259) ambiguity — a process that genuinely exits
+    # with code 259 would otherwise read as alive. WaitForSingleObject requires
+    # the SYNCHRONIZE access right (query rights alone make the wait fail).
+    # restype/argtypes are declared so the 64-bit HANDLE isn't truncated to
+    # ctypes' default c_int return type (which would mis-marshal it back into
+    # WaitForSingleObject/CloseHandle).
     try:
         import ctypes
         from ctypes import wintypes
 
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        SYNCHRONIZE = 0x00100000  # required for WaitForSingleObject on the handle
         WAIT_TIMEOUT = 0x102  # still alive: the wait on the process timed out
         k = ctypes.windll.kernel32  # type: ignore[attr-defined]
         k.OpenProcess.restype = wintypes.HANDLE
@@ -419,7 +421,7 @@ def _is_pid_alive(pid: int) -> bool:
         k.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
         k.CloseHandle.restype = wintypes.BOOL
         k.CloseHandle.argtypes = (wintypes.HANDLE,)
-        handle = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        handle = k.OpenProcess(SYNCHRONIZE, False, int(pid))
         if not handle:
             return False
         try:
