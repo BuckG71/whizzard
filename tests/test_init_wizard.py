@@ -290,7 +290,7 @@ def test_init_step_1b_branch_a_clones_hermes_profile(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    """When ~/.hermes/ exists, Branch A triggers and clones to ~/.hermes-whizz/."""
+    """When ~/.hermes/ exists, Branch A triggers and clones to ~/.hermes-main/."""
     _stub_step_1_to_succeed(monkeypatch)
 
     # Fake host with ~/.hermes/ present.
@@ -315,9 +315,9 @@ def test_init_step_1b_branch_a_clones_hermes_profile(
     result = runner.invoke(app, ["init", "--yes"])
     assert result.exit_code == 0
     assert "Hermes detected" in result.output
-    assert "✓" in result.output and "whizz" in result.output
+    assert "✓" in result.output and "main" in result.output
     assert len(cloner_calls) == 1
-    assert cloner_calls[0][0] == "whizz"
+    assert cloner_calls[0][0] == "main"
     assert cloner_calls[0][1] == hermes
 
 
@@ -346,7 +346,7 @@ def test_init_step_1b_branch_b_shows_install_instructions(
     assert result.exit_code == 0
     assert "Hermes is not yet installed" in result.output
     assert "github.com/NousResearch/hermes-agent" in result.output
-    assert "whiz hermes profile create whizz" in result.output
+    assert "whiz hermes profile create main" in result.output
 
 
 def test_init_step_1b_clone_failure_does_not_abort_wizard(
@@ -523,7 +523,7 @@ def test_init_yes_mode_full_flow_writes_all_four_config_files(
 
     harnesses = json.loads(iw.HARNESSES_FILE.read_text())["harnesses"]
     assert "hermes-cell" in harnesses
-    assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-whizz"
+    assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-main"
 
 
 def test_init_step_4_attaches_registered_mount_in_full_interactive(

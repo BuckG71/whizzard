@@ -810,7 +810,7 @@ def step_4_presets(state: WizardState) -> None:
     """Step 4 — define a preset, optionally attaching registered folders.
 
     Writes both ``harnesses.json`` (the wizard-bundled hermes-cell entry
-    pointing at ``~/.hermes-whizz/``) and ``presets.json``.
+    pointing at ``~/.hermes-main/``) and ``presets.json``.
     """
     console.print()
     console.print("[bold]Step 4 of 5 — Presets[/bold]")
@@ -888,7 +888,7 @@ def step_4_presets(state: WizardState) -> None:
                 "profile": "default",
                 "harness": "hermes-cell",
                 "mounts": attached,
-                "description": "Hermes session (uses ~/.hermes-whizz profile)",
+                "description": "Hermes session (uses ~/.hermes-main profile)",
             }
         }
 
@@ -1084,7 +1084,7 @@ def _write_wizard_harnesses() -> None:
     """Write a wizard-customized harnesses.json with just hermes-cell.
 
     The bundled hermes-cell points at ~/.hermes-whizzard-cell by default
-    (Stage 10 era); the wizard overrides hermes_home to ~/.hermes-whizz
+    (Stage 10 era); the wizard overrides hermes_home to ~/.hermes-main
     so it matches what step 1b created. The `generic` shell harness is
     NOT written — per Stage 19 product decision, shell isn't a featured
     user surface.
@@ -1095,7 +1095,7 @@ def _write_wizard_harnesses() -> None:
             "start_command": "hermes gateway run",
             "wrap_up_command": "/quit",
             "wrap_up_grace_seconds": 30,
-            "hermes_home": "~/.hermes-whizz",
+            "hermes_home": "~/.hermes-main",
             "description": "Hermes (gateway mode) inside the Whizzard sandbox",
         },
     }
@@ -1175,7 +1175,7 @@ def step_done_summary(state: WizardState) -> None:
     elif state.hermes_branch == "B":
         console.print(
             "  Hermes profile:    [yellow](not yet — install Hermes "
-            "and run `whiz hermes profile create whizz`)[/yellow]"
+            "and run `whiz hermes profile create main`)[/yellow]"
         )
     profiles_str = ", ".join(state.profile_names) if state.profile_names else "(none)"
     console.print(f"  Profiles:          {profiles_str}        [green]{len(state.profile_names)}[/green]")
@@ -1229,7 +1229,7 @@ def step_1b_hermes_profile(
     """Step 1b — set up the Hermes profile sandbox sessions will use.
 
     Detects ``~/.hermes/`` on the host:
-    - Present (Branch A): offer to clone it into ``~/.hermes-whizz/``
+    - Present (Branch A): offer to clone it into ``~/.hermes-main/``
     - Absent (Branch B): print install instructions, continue setup
 
     Either branch leaves ``whiz init`` runnable to completion — Branch B
@@ -1265,8 +1265,8 @@ def step_1b_hermes_profile(
         console.print()
         console.print("  2. [bold]Create a Whizzard profile that points at it[/bold]")
         console.print("     Once Hermes is installed, run:")
-        console.print("       [green]whiz hermes profile create whizz[/green]")
-        console.print("     to copy your Hermes setup into ~/.hermes-whizz/, which")
+        console.print("       [green]whiz hermes profile create main[/green]")
+        console.print("     to copy your Hermes setup into ~/.hermes-main/, which")
         console.print("     is what the bundled \"hermes\" preset uses.")
         console.print()
         console.print(
@@ -1282,7 +1282,7 @@ def step_1b_hermes_profile(
 
     # Branch A — Hermes detected; offer to clone.
     state.hermes_branch = "A"
-    target = Path.home() / ".hermes-whizz"
+    target = Path.home() / ".hermes-main"
     console.print("[bold]Hermes detected on your computer.[/bold]")
     console.print()
     console.print(
@@ -1315,7 +1315,7 @@ def step_1b_hermes_profile(
         # User declined the clone — leave a footer note.
         console.print()
         console.print(
-            "  [dim]Skipped. Run `whiz hermes profile create whizz` "
+            "  [dim]Skipped. Run `whiz hermes profile create main` "
             "when you're ready.[/dim]"
         )
         return
@@ -1324,15 +1324,15 @@ def step_1b_hermes_profile(
     console.print()
     console.print(f"  [dim]cloning {detected} → {target} ...[/dim]")
     try:
-        path = _clone_hermes_profile("whizz", detected, cloner=cloner)
+        path = _clone_hermes_profile("main", detected, cloner=cloner)
     except Exception as e:  # noqa: BLE001 -- surface anything the cloner raises
         console.print(f"[red]profile clone failed:[/red] {e}")
         console.print(
-            "You can retry later with [green]whiz hermes profile create whizz[/green]."
+            "You can retry later with [green]whiz hermes profile create main[/green]."
         )
         return
     state.hermes_profile_path = path
-    console.print(f"  [green]✓[/green] profile \"whizz\" created at {path}")
+    console.print(f"  [green]✓[/green] profile \"main\" created at {path}")
     console.print()
     console.print(
         "  [dim italic]For the curious: the bundled \"hermes\" preset in "

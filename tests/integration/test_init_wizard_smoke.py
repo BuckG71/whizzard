@@ -83,10 +83,10 @@ def test_whiz_init_yes_force_end_to_end(tmp_path: Path) -> None:
     assert presets["hermes"]["harness"] == "hermes-cell"
     assert presets["hermes"]["profile"] == "default"
 
-    # Verify the customized harnesses entry points at ~/.hermes-whizz.
+    # Verify the customized harnesses entry points at ~/.hermes-main.
     harnesses = json.loads((config_dir / "harnesses.json").read_text())["harnesses"]
     assert "hermes-cell" in harnesses
-    assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-whizz"
+    assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-main"
 
     # Verify both images exist after the run (built or cache-hit).
     assert _image_present("whizzard-base:latest"), (
