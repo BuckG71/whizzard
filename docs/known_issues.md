@@ -527,6 +527,21 @@ fold init's `docker_daemon_status` and adjust's probe onto one classifier.
 *Disposition:* cleanup — fold into the launch-fixes batch's #6 (the
 "centralize" pass), not merge-blocking.
 
+### Flaky integration test: `test_docker_label_lookup_finds_running_cell`
+`tests/integration/test_adjust_smoke.py::test_docker_label_lookup_finds_running_cell`
+intermittently fails with "expected exactly one match, got []" on the
+Ubuntu integration runner (passed on every re-run; flaked ≥3× across this
+session's CI). Race: the test launches a cell (`sleep 3600`), waits for the
+**cidfile**, then does a single-shot `docker ps` label lookup — but the
+container's label can lag the cidfile write, so the lookup occasionally
+sees nothing. Image-independent (uses base image + sleep), so unrelated to
+the launch-fixes changes it keeps blocking.
+*Fix:* poll the label lookup with a short deadline (mirror
+`_await_container_id`'s retry loop) instead of one shot, so it tolerates
+the start-up lag. Small, contained test-only change.
+*Disposition:* fix soon — it's costing a CI re-run on nearly every
+launch-fixes push.
+
 ## How to keep this doc useful
 
 Add an entry when:
