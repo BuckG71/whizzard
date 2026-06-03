@@ -497,11 +497,14 @@ just idles ("No messaging platforms enabled") and ignores stdin. Surfaced
 on the Windows launch 2026-06-03: the maintainer notes interactive
 **terminal mode should be the default**, with gateway as an explicit
 opt-in the user selects and configures.
-*Fix:* default the cell command to Hermes's interactive terminal mode
-(exact command TBD — confirm with maintainer; the cell already passes
-`-it`, so an interactive command would give a real in-terminal session),
-and make gateway mode an opt-in — a preset/harness option or a launch
-flag — that the setup flow surfaces and the wizard helps configure.
+*Fix (command confirmed 2026-06-03):* default the cell command to bare
+`hermes` (the interactive terminal/chat mode — maintainer-confirmed; the
+cell already passes `-it`, so it gives a real in-terminal session).
+Change `_DEFAULT_START_COMMAND = ["hermes", "gateway", "run"]` →
+`["hermes"]`; this also revisits D-88 (which set gateway as the default
+invocation). Gateway mode is **not** a Whizzard flag — per the maintainer,
+the user starts gateway from within their Hermes session if they want it
+(keeps Whizzard harness-neutral; no harness-specific flag on `whiz`).
 Touches the adapter start command, the wizard's Hermes setup, and the
 preset/use-flow docs.
 *Open question:* the correct interactive Hermes command + how the user
