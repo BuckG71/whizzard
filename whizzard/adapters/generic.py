@@ -22,6 +22,7 @@ from whizzard.adapters.base import (
     WrapUpResult,
     WrapUpStatus,
 )
+from whizzard.images import WHIZZARD_IMAGE
 
 
 @dataclass
@@ -33,6 +34,7 @@ class GenericShellAdapter:
     """
 
     name: str = "generic"
+    default_image: str = WHIZZARD_IMAGE
     config: dict = field(default_factory=dict)
 
     def start_command(self) -> list[str]:

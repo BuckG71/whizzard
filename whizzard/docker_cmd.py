@@ -18,6 +18,10 @@ from pathlib import Path
 from whizzard.adapters import GenericShellAdapter, HarnessAdapter
 from whizzard.config import STATE_DIR, Profile
 from whizzard.enforcement import monitor_and_enforce
+
+# Re-exported from the dependency-free images module (avoids an import cycle:
+# docker_cmd imports adapters, and the adapters now reference these too).
+from whizzard.images import WHIZZARD_HERMES_IMAGE, WHIZZARD_IMAGE  # noqa: E402,F401
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
     SESSIONS_LOG,
@@ -28,8 +32,6 @@ from whizzard.session_log import (
 )
 from whizzard.snapshot import event_log_path, request_dir, session_dir
 
-WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
-WHIZZARD_HERMES_IMAGE = os.environ.get("WHIZZARD_HERMES_IMAGE", "whizzard-hermes:latest")
 CONTAINER_USER = "whizzard"  # non-root, defined in whizzard/_dockerfiles/Dockerfile
 
 

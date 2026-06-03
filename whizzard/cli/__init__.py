@@ -45,7 +45,6 @@ from whizzard.cli.sessions import sessions_app
 from whizzard.cli.wake import wake_cmd
 from whizzard.config import ensure_whizzard_home
 from whizzard.docker_cmd import (  # noqa: F401 -- re-export for `patch("whizzard.cli.run_shell")` tests
-    WHIZZARD_IMAGE,
     run_shell,
 )
 from whizzard.requests import read_all_requests
@@ -130,9 +129,12 @@ def run_cmd(
         ),
     ] = None,
     image: Annotated[
-        str,
-        typer.Option("--image", help="Container image to use."),
-    ] = WHIZZARD_IMAGE,
+        str | None,
+        typer.Option(
+            "--image",
+            help="Container image to use (default: the selected harness's image).",
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -277,9 +279,12 @@ def r_cmd(
         typer.Option("--mount", "-m", help="Mount spec (run-flag path)."),
     ] = None,
     image: Annotated[
-        str,
-        typer.Option("--image", help="Container image to use."),
-    ] = WHIZZARD_IMAGE,
+        str | None,
+        typer.Option(
+            "--image",
+            help="Container image to use (default: the selected harness's image).",
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Show what would happen without launching."),

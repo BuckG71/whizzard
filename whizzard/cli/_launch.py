@@ -43,7 +43,7 @@ def _perform_launch(
     *,
     profile_name: str,
     mount_specs: list[str],
-    image: str,
+    image: str | None,
     dry_run: bool,
     allow_broad_mount: bool,
     harness: str,
@@ -89,6 +89,13 @@ def _perform_launch(
     except UnknownHarnessTypeError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=2) from e
+
+    # Harness↔image coupling: with no explicit `--image`, use the image the
+    # selected harness needs (Hermes → the Hermes image), not the base. The
+    # base image has no `hermes` binary, so `whiz r hermes` on the base used
+    # to die inside the container with `exec hermes: No such file or directory`.
+    if image is None:
+        image = adapter.default_image
 
     # F-C-04: propagate the --allow-ephemeral opt-in into the adapter so
     # preflight knows whether the user is OK with no persistent HERMES_HOME.

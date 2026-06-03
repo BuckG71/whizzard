@@ -87,6 +87,12 @@ class HarnessAdapter(Protocol):
 
     name: str
 
+    # The container image this harness needs (its binary must live there).
+    # The launch path uses it when no explicit `--image` override is passed,
+    # so selecting a harness selects the right image (e.g. Hermes → the
+    # Hermes image) instead of silently keeping the base image.
+    default_image: str
+
     def start_command(self) -> list[str]:
         """Argv to run inside the container as the user-facing entrypoint.
 

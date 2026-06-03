@@ -54,6 +54,25 @@ def test_dry_run_output_contains_profile_summary():
     assert "Image" in result.output
 
 
+def test_dry_run_resolves_image_from_harness_when_not_overridden():
+    """Harness↔image coupling: with no --image, the launch uses the selected
+    harness's default_image (generic → base) rather than a hardcoded CLI
+    default. The bug was that the base image was used regardless of harness."""
+    from whizzard.images import WHIZZARD_IMAGE
+
+    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    assert result.exit_code == 0
+    assert WHIZZARD_IMAGE in result.output
+
+
+def test_dry_run_explicit_image_overrides_harness_default():
+    result = runner.invoke(
+        app, ["run", "--profile", "default", "--image", "custom:tag", "--dry-run"]
+    )
+    assert result.exit_code == 0
+    assert "custom:tag" in result.output
+
+
 def test_dry_run_output_contains_docker_argv():
     result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
     out = result.output

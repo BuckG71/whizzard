@@ -34,6 +34,7 @@ from whizzard.adapters.base import (
     WrapUpResult,
     WrapUpStatus,
 )
+from whizzard.images import WHIZZARD_HERMES_IMAGE
 from whizzard.mcp_server import (
     ENV_AUDIT_LOG_PATH,
     ENV_EVENT_LOG_PATH,
@@ -442,6 +443,7 @@ class HermesAdapter:
     """
 
     name: str = "hermes"
+    default_image: str = WHIZZARD_HERMES_IMAGE
     config: dict = field(default_factory=dict)
     # Records the credential source per platform after `container_env` runs,
     # so `active_capabilities` can surface which platforms came via OneCLI

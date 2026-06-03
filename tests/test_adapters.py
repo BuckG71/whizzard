@@ -24,6 +24,18 @@ def test_generic_adapter_satisfies_protocol():
     assert isinstance(adapter, HarnessAdapter)
 
 
+def test_adapters_declare_their_required_image():
+    """Harness↔image coupling: each adapter declares the image its binary
+    lives in, so selecting a harness selects the right image when no
+    explicit `--image` override is given. Hermes' `hermes` binary is only
+    in the Hermes image — running it on the base image dies with
+    `exec hermes: No such file or directory` (regression guard)."""
+    from whizzard.images import WHIZZARD_HERMES_IMAGE, WHIZZARD_IMAGE
+
+    assert GenericShellAdapter().default_image == WHIZZARD_IMAGE
+    assert HermesAdapter().default_image == WHIZZARD_HERMES_IMAGE
+
+
 def test_generic_default_start_command_is_bash():
     adapter = GenericShellAdapter()
     assert adapter.start_command() == ["/bin/bash"]

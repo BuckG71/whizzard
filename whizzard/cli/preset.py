@@ -15,7 +15,6 @@ from rich.table import Table
 from whizzard.cli._launch import _perform_launch
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, list_profiles
-from whizzard.docker_cmd import WHIZZARD_IMAGE
 from whizzard.harness_config import HarnessConfigError, load_harnesses
 from whizzard.mounts import MountRegistryError, load_mounts
 from whizzard.preset_config import (
@@ -192,9 +191,12 @@ def preset_launch_cmd(
         typer.Option("--dry-run", help="Preview without launching."),
     ] = False,
     image: Annotated[
-        str,
-        typer.Option("--image", help="Container image to use."),
-    ] = WHIZZARD_IMAGE,
+        str | None,
+        typer.Option(
+            "--image",
+            help="Container image to use (default: the selected harness's image).",
+        ),
+    ] = None,
     allow_ephemeral: Annotated[
         bool,
         typer.Option(
