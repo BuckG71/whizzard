@@ -317,6 +317,198 @@ on 2026-06-16. The same deprecation applies to `.github/workflows/ci.yml`.
 Node-24-native (most likely well before September). Bump action
 versions in one maintenance commit; no functional change expected.
 
+### Wizard Docker preflight checks PATH only, not daemon reachability
+`whiz init`'s only Docker check is `docker_available()` —
+`shutil.which("docker") is not None` (binary on PATH). It then
+unconditionally prints "✓ Docker is running". With Docker installed but
+the daemon down (the common Docker-Desktop-not-started state — surfaced
+live during the Windows clean-install test 2026-06-03), this asserts a
+green state it never verified, then fails confusingly at `docker build`.
+Violates fail-closed (D-133). Git needs no check (not a runtime dep);
+Python's floor is pip-enforced via `requires-python`.
+*Fix:* real preflight reusing the daemon-down detection that already
+exists in `adjust.py` / `image_exists()` (`DockerDaemonError`, F-B-01 /
+F-G-10). Four states: binary-missing → install hint; daemon-unreachable
+→ "start Docker Desktop and re-run" (OS-aware); Windows-containers mode
+→ "switch to Linux containers"; daemon-up-Linux → proceed. Folds in the
+previously-deferred "daemon-down message clarity" item. Optionally expose
+as `whiz doctor` (one preflight fn, two callers).
+*Rendering (surfaced 2026-06-03):* Step 1 lists the Windows Linux-backend
+requirement as a dim `›` advisory styled inline with two green `✓` checks,
+so it reads as a pending/grayed checklist item that never resolves — users
+assume it turns green after the build; it doesn't (it's a static print).
+Redesign so every prerequisite line is a *verified* state: daemon
+reachable ✓, Linux backend ✓ (or ✗ + abort on Windows-container mode),
+recipe found ✓ — no advisory-dressed-as-check; non-Windows hosts skip the
+backend line entirely rather than show a grayed item.
+*Disposition:* fix before launch; UX-shaped, so design noted here first.
+
+### Wizard Hermes-not-installed branch links the repo but gives no install steps
+Step 1b Branch B (`init_wizard.py:1228-1230`) prints "Install Hermes on
+your computer" + the bare `github.com/NousResearch/hermes-agent` URL —
+no command, no steps. The README claims it "prints install instructions";
+it only links. Surfaced during the Windows clean-install test 2026-06-03.
+*Fix (near-term — behavior decided 2026-06-03):* replace the bare URL with
+an explicit y/N "Install Hermes now?" prompt. On **yes**:
+- if `pipx` is present → Whizzard runs `pipx install hermes-agent`
+  (isolated CLI env; never touches Whizzard's own venv — the dep-hygiene
+  property, enforced by construction; [[user_dep_hygiene]]). Hermes is an
+  application you run, not a library Whizzard imports, so pipx is the
+  idiomatic mechanism.
+- if `pipx` is absent → do **not** silently fall back to `pip` (that would
+  pollute Whizzard's venv). Instead print clear, complete instructions to
+  run **in a separate terminal window** (keeping the wizard session
+  intact): install pipx (`py -m pip install --user pipx` then
+  `py -m pipx ensurepath`), then `pipx install hermes-agent`, then return
+  and run `whiz hermes profile create whizz`.
+Rejected plain auto-`pip install` (commingles Hermes' deps into Whizzard's
+venv). "Easier than yolo" without silent shared-env pulls.
+*Also (UX, surfaced 2026-06-03):* reorder Branch B — lead with why a
+harness is required ("Whizzard runs an agent harness in the sandbox; it
+needs at least one installed and configured to do its job"), then the
+"you can finish init now, but nothing launches until it's done"
+reassurance (currently buried at the bottom and worded to undersell the
+necessity). The y/N install prompt must carry this context so declining
+is an informed choice.
+*Considered and rejected:* having Whizzard generate a minimal `~/.hermes/`
+profile to drop the host-Hermes prerequisite. A synthesized profile the
+user didn't create would shadow or conflict with a real Hermes install
+later, with unclear provenance/authority — and we'd own a config format we
+don't control. The host profile must come from Hermes itself.
+*Disposition:* near-term fix (real command + opt-in + reorder) before launch.
+
+### BUG: `_prompt_numeric_choice` silently drops its question (wizard-wide)
+`init_wizard._prompt_numeric_choice(message, options)` accepts a `message`
+(the question) but never prints it — it renders the numbered options then
+`choose:`, discarding the question. Every numbered prompt in `whiz init`
+(network, time limit, idle limit, mounts, presets…) is therefore missing
+its question. Surfaced at the mount step during the Windows test
+2026-06-03: the prompt read as a bare "1) Yes  2) No  choose:" with no
+indication of what was being chosen.
+*Fix:* one line — print `message` (styled) above the options loop. Verify
+every call site reads sensibly once the question is shown. High impact,
+trivial fix.
+*Disposition:* fix before launch (bug, not polish).
+
+### Mount step has no directory-creation affordance + no early path validation
+Step 3's mount loop (`step_3_mounts`) stores the typed path verbatim
+(`host_path: path_raw`) without checking it exists, and offers no way to
+create a folder for users who don't already have one. Surfaced Windows
+test 2026-06-03.
+*Fix:* after the path is entered, resolve and check existence; if missing,
+offer to create it (`mkdir parents=True`) or re-enter. Critically, run the
+path through `safety.check_mount_path` *before* creating/registering, so
+the wizard never `mkdir`s (then mounts) a hard-blocked location — early
+validation also catches denylisted paths at wizard time instead of
+deferring the failure to launch.
+*Disposition:* fix before launch (bug + small feature).
+
+### CLI help legibility + the `whiz`/`whizz` naming collision
+Cluster surfaced during the Windows test 2026-06-03 (`whiz --help` review):
+- **Command ordering:** top-level commands render in an arbitrary order with
+  shortcuts interleaved. Regroup into function panels via Typer
+  `rich_help_panel` (one-line per command): Setup (init, image) · Launch
+  (run, preset, hermes) · Control a running session (status, adjust, wake,
+  requests) · Inspect (profiles, mounts, harnesses, sessions) · Shortcuts.
+  Alphabetical within each panel. (Grouping shape pending maintainer confirm.)
+- **`whiz` prefix + flag discovery not obvious:** bare command names don't
+  signal they're invoked as `whiz <command>`, nor that per-command flags are
+  found via `--help`. Add a Typer `epilog=` footer to `whiz --help`, rendered
+  below the panels: "Run any command as `whiz <command>`. See a command's
+  flags with `whiz <command> --help`." (Maintainer specifically wants the
+  flag-discovery line surfaced on the top-level help.)
+- **Shortcuts need descriptions:** `r/s/p/m/pr` listed bare are unguessable.
+  Their panel must annotate each (r → run/preset, s → status, p → preset
+  list/show, m → mounts list, pr → profiles list).
+- **Nested-command discoverability:** the wizard hands users the 4-deep
+  `whiz hermes profile create <name>`, which (correctly, per Typer) doesn't
+  appear in top-level help. Cross-reference `whiz hermes --help` in the
+  wizard's completion summary so the path is findable.
+- **`whiz` vs `whizz` collision (real bug):** the example/default Hermes
+  profile name `whizz` differs from the `whiz` command by one letter and sits
+  adjacent in `whiz hermes profile create whizz` — reads as a typo, obscures
+  which token is verb vs argument. Rename to a *role* name (proposed `main`
+  → `~/.hermes-main`); the token also lives in the bundled preset's
+  `hermes_home` (`~/.hermes-whizz`), so move both together. Not fixable by
+  the Whizzard→Osmotiq rename alone — `oiq … create oiq` would collide the
+  other way (command == argument), so a role name is correct regardless.
+- **Internal refs leaking into user-facing help:** `Stage N` / `D-NN`
+  tokens appear in command `help=` strings and command-function docstrings
+  (which Typer renders as help): `hermes` "(Stage 8)", `preset` "(Stage 10)",
+  `requests` "(Stage 14)", `adjust` docstring "per D-79", `adjust`
+  `--allow-broad-mount` help "(D-46 first gate)", `hermes profile create`
+  docstring "(D-80, D-86)", `requests approve` docstring "Stage 13". Scrub
+  these. Scope is help OUTPUT only — module docstrings and `#` comments
+  carry the same tokens as legit internal traceability and must be left
+  intact (~25 such, not user-facing).
+- **Profile name decided:** `whizz` → `main` (`~/.hermes-main`); update the
+  bundled preset `hermes_home` in lockstep.
+- **Grouping confirmed:** the five-panel shape is approved as-is.
+*Disposition:* fix before launch as one CLI-help + wizard-copy polish pass.
+
+### `whiz run` defaults to an unregistered `generic` harness → confusing failure
+`run_cmd`'s `--harness` defaults to `"generic"`, but the wizard registers
+only `hermes-cell` (the generic shell is internal-only per
+[[feedback_no_shell_harness_in_user_surfaces]]). So a bare `whiz run`
+fails with "unknown harness: 'generic'. Available: hermes-cell" — and the
+`--harness` help text advertises "default: generic shell", which both
+surfaces the internal shell *and* names a default that doesn't work.
+Surfaced during the Windows cell-launch test 2026-06-03.
+*Fix options:* (a) make the default harness the registered one / derive it
+from harnesses.json rather than hardcoding `generic`; or (b) if `whiz run`
+stays an internal/dev entry point, scrub the "generic shell" mention from
+help and make the error actionable ("no harness specified — try
+`whiz r hermes` or `--harness hermes-cell`"). Decide which `whiz run` is.
+*Disposition:* fix before launch (confusing first-touch error).
+
+### BUG (OS-agnostic, likely launch-blocking): harness not coupled to its image
+`_perform_launch` uses the passed `image` param directly in
+`build_run_argv(image=image, ...)`; there is **no harness→image
+resolution**, and neither the harness config nor the adapter carries an
+image. Both `run_cmd` and `preset_launch_cmd` default `image` to
+`WHIZZARD_IMAGE` (the base). So launching the `hermes-cell` harness keeps
+the *base* image (which has no `hermes` binary) and dies inside the
+container with `[FATAL tini] exec hermes failed: No such file or
+directory`. Surfaced on the Windows live launch 2026-06-03, but it is
+**not Windows-specific** — it reproduces on any OS.
+Critically, `preset.<x>` carries `.harness` but no image, and
+`preset_launch_cmd` also defaults to base — so **`whiz r hermes` (the
+command the wizard's "first commands to try" advertises) appears to fail
+the same way** unless `--image whizzard-hermes:latest` is passed. (Confirm
+by running `whiz r hermes` bare.) Workaround: explicit
+`--image whizzard-hermes:latest`.
+*Fix:* derive the image from the harness (the harness/adapter should
+declare its required image — e.g. Hermes → `WHIZZARD_HERMES_IMAGE`), or
+let a preset carry an image, so the headline launch path selects the
+correct image without the user knowing image names. Also add a fail-fast
+check: if the harness's expected binary isn't in the chosen image, error
+at the whiz layer rather than as a cryptic in-container tini failure.
+*Disposition:* fix before launch — this blocks the primary documented
+launch command. How did this pass the M7 smoke? (M7 likely ran with an
+explicit hermes image; worth confirming the smoke covers the bare
+preset path.)
+
+### Hermes default start command is gateway-mode, not interactive terminal
+`HermesAdapter._DEFAULT_START_COMMAND = ["hermes", "gateway", "run"]`
+(hermes.py:57) hardcodes the **gateway daemon** as the cell's command. The
+gateway is a messaging-platform listener (Discord/Telegram/etc.) — it
+requires platform config and is *not* interactive, so a default launch
+just idles ("No messaging platforms enabled") and ignores stdin. Surfaced
+on the Windows launch 2026-06-03: the maintainer notes interactive
+**terminal mode should be the default**, with gateway as an explicit
+opt-in the user selects and configures.
+*Fix:* default the cell command to Hermes's interactive terminal mode
+(exact command TBD — confirm with maintainer; the cell already passes
+`-it`, so an interactive command would give a real in-terminal session),
+and make gateway mode an opt-in — a preset/harness option or a launch
+flag — that the setup flow surfaces and the wizard helps configure.
+Touches the adapter start command, the wizard's Hermes setup, and the
+preset/use-flow docs.
+*Open question:* the correct interactive Hermes command + how the user
+opts into gateway (preset field? `whiz run --gateway`? wizard choice?).
+*Disposition:* fix before launch — the default launch UX is currently a
+dead-end idle daemon.
+
 ## How to keep this doc useful
 
 Add an entry when:
