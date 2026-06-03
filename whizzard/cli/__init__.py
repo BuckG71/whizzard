@@ -49,23 +49,36 @@ from whizzard.docker_cmd import (  # noqa: F401 -- re-export for `patch("whizzar
 )
 from whizzard.requests import read_all_requests
 
+# `whiz --help` groups commands by workflow via Typer's rich_help_panel,
+# so the important verbs surface and shortcuts don't interleave with them.
+_PANEL_SETUP = "Setup"
+_PANEL_LAUNCH = "Launch a session"
+_PANEL_CONTROL = "Control a running session"
+_PANEL_INSPECT = "Inspect your setup"
+_PANEL_SHORTCUTS = "Shortcuts"
+
 app = typer.Typer(
     name="whizzard",
     help="Whizzard — local capability governance for AI agents.",
     no_args_is_help=False,
     add_completion=False,
+    # Footer under the command panels: how to invoke a command and find flags.
+    epilog=(
+        "Run any command as  whiz <command>  ·  "
+        "see its flags with  whiz <command> --help"
+    ),
 )
-app.add_typer(profiles_app, name="profiles")
-app.add_typer(image_app, name="image")
-app.add_typer(mounts_app, name="mounts")
-app.add_typer(sessions_app, name="sessions")
-app.add_typer(harnesses_app, name="harnesses")
-app.add_typer(preset_app, name="preset")
-app.add_typer(hermes_app, name="hermes")
-app.add_typer(requests_app, name="requests")
-app.command("adjust")(adjust_cmd)
-app.command("wake")(wake_cmd)
-app.command("init")(init_cmd)
+app.add_typer(profiles_app, name="profiles", rich_help_panel=_PANEL_INSPECT)
+app.add_typer(image_app, name="image", rich_help_panel=_PANEL_SETUP)
+app.add_typer(mounts_app, name="mounts", rich_help_panel=_PANEL_INSPECT)
+app.add_typer(sessions_app, name="sessions", rich_help_panel=_PANEL_INSPECT)
+app.add_typer(harnesses_app, name="harnesses", rich_help_panel=_PANEL_INSPECT)
+app.add_typer(preset_app, name="preset", rich_help_panel=_PANEL_LAUNCH)
+app.add_typer(hermes_app, name="hermes", rich_help_panel=_PANEL_LAUNCH)
+app.add_typer(requests_app, name="requests", rich_help_panel=_PANEL_CONTROL)
+app.command("adjust", rich_help_panel=_PANEL_CONTROL)(adjust_cmd)
+app.command("wake", rich_help_panel=_PANEL_CONTROL)(wake_cmd)
+app.command("init", rich_help_panel=_PANEL_SETUP)(init_cmd)
 
 
 def _version_callback(value: bool) -> None:
@@ -114,7 +127,7 @@ def _bootstrap(
 # --- Top-level commands -----------------------------------------------------
 
 
-@app.command("run")
+@app.command("run", rich_help_panel=_PANEL_LAUNCH)
 def run_cmd(
     profile: Annotated[
         str,
@@ -192,7 +205,7 @@ def _fmt_remaining(secs: float | None) -> str:
     return f"~{int(secs)}s"
 
 
-@app.command("status")
+@app.command("status", rich_help_panel=_PANEL_CONTROL)
 def status_cmd() -> None:
     """Show session status: active sessions and recent history."""
     events = _read_session_events()
@@ -260,7 +273,7 @@ def status_cmd() -> None:
 # --- Brevity aliases: r, s, p, m, pr ----------------------------------------
 
 
-@app.command("r")
+@app.command("r", rich_help_panel=_PANEL_SHORTCUTS)
 def r_cmd(
     preset_name: Annotated[
         str | None,
@@ -353,13 +366,13 @@ def r_cmd(
     preset_launch_cmd(name=preset_name, dry_run=dry_run, image=image)
 
 
-@app.command("s")
+@app.command("s", rich_help_panel=_PANEL_SHORTCUTS)
 def s_cmd() -> None:
     """Shortcut: `whiz s` → status."""
     status_cmd()
 
 
-@app.command("p")
+@app.command("p", rich_help_panel=_PANEL_SHORTCUTS)
 def p_cmd(
     name: Annotated[
         str | None,
@@ -373,13 +386,13 @@ def p_cmd(
         preset_show_cmd(name)
 
 
-@app.command("m")
+@app.command("m", rich_help_panel=_PANEL_SHORTCUTS)
 def m_cmd() -> None:
     """Shortcut: `whiz m` → mounts list."""
     mounts_list_cmd()
 
 
-@app.command("pr")
+@app.command("pr", rich_help_panel=_PANEL_SHORTCUTS)
 def pr_cmd() -> None:
     """Shortcut: `whiz pr` → profiles list."""
     profiles_list_cmd()
