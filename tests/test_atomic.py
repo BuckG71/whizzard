@@ -41,7 +41,7 @@ def test_crash_mid_write_leaves_original_intact(
     target = tmp_path / "config.json"
     target.write_text("ORIGINAL")
 
-    def _exploding_write_text(self: Path, content: str) -> int:
+    def _exploding_write_text(self: Path, content: str, *args, **kwargs) -> int:
         raise OSError("disk full")
 
     monkeypatch.setattr(Path, "write_text", _exploding_write_text)

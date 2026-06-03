@@ -26,5 +26,7 @@ def atomic_write_text(path: Path, content: str) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(content)
+    # Pin utf-8 + LF so config/snapshot files are byte-identical cross-platform
+    # (Windows text mode would translate "\n"→"\r\n" and default to cp1252).
+    tmp.write_text(content, encoding="utf-8", newline="\n")
     tmp.replace(path)

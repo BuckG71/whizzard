@@ -77,7 +77,7 @@ def _read_events(path: Path | None = None) -> list[dict]:
     if not target.exists():
         return []
     out: list[dict] = []
-    for raw in target.read_text().splitlines():
+    for raw in target.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
             continue
@@ -370,7 +370,7 @@ def log_wake_event(
         # Tests still pass an explicit path; preserve the override.
         path.parent.mkdir(parents=True, exist_ok=True)
         payload["v"] = 1  # match append_event's stamp
-        with path.open("a") as fh:
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(payload) + "\n")
     else:
         append_event(payload)

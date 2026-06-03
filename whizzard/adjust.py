@@ -208,7 +208,7 @@ def _read_session_events() -> list[dict]:
     if not SESSIONS_LOG.exists():
         return []
     out: list[dict] = []
-    for raw in SESSIONS_LOG.read_text().splitlines():
+    for raw in SESSIONS_LOG.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line:
             continue
