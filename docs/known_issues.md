@@ -512,6 +512,21 @@ opts into gateway (preset field? `whiz run --gateway`? wizard choice?).
 *Disposition:* fix before launch — the default launch UX is currently a
 dead-end idle daemon.
 
+### Daemon-down detection is implemented three ways across two modules
+`_DAEMON_DOWN_INDICATORS` + `_looks_like_daemon_error` live in
+`docker_cmd.py`; `adjust.py:56-60` carries a **verbatim copy** (with a
+drifted comment); and `docker_daemon_status()` now reuses the matcher but
+the duplication remains. Surfaced by the #3 code review 2026-06-03. Risk:
+Docker changes its unreachable-stderr wording (it has historically), a
+maintainer updates the `docker_cmd` tuple + tests green, and `adjust.py`'s
+copy silently goes stale — regressing the F-G-10 "daemon down vs no match"
+fix in `whiz adjust` with nothing failing CI.
+*Fix:* have `adjust.py` import `_DAEMON_DOWN_INDICATORS` /
+`_looks_like_daemon_error` from `docker_cmd` (single source). Optional:
+fold init's `docker_daemon_status` and adjust's probe onto one classifier.
+*Disposition:* cleanup — fold into the launch-fixes batch's #6 (the
+"centralize" pass), not merge-blocking.
+
 ## How to keep this doc useful
 
 Add an entry when:

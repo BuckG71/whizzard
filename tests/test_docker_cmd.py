@@ -528,6 +528,63 @@ def test_image_exists_raises_when_daemon_unreachable(monkeypatch):
         dc.image_exists("any:tag")
 
 
+def _fake_info(returncode: int, stdout: str = "", stderr: str = ""):
+    def run(argv, **kwargs):
+        return type("R", (), {
+            "returncode": returncode, "stdout": stdout, "stderr": stderr
+        })()
+    return run
+
+
+def test_docker_daemon_status_classifies_states(monkeypatch):
+    """The wizard preflight relies on a verified daemon state, not a PATH
+    check. 'not running' must be distinguished from other docker failures
+    (e.g. permission denied) so the wizard doesn't misadvise."""
+    import whizzard.docker_cmd as dc
+
+    monkeypatch.setattr(dc, "docker_available", lambda: False)
+    assert dc.docker_daemon_status()[0] == "missing"
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+
+    # daemon-down signature → unreachable
+    monkeypatch.setattr(dc.subprocess, "run", _fake_info(
+        1, stderr="Cannot connect to the Docker daemon. Is the docker daemon running?"))
+    assert dc.docker_daemon_status()[0] == "unreachable"
+
+    # other non-zero (e.g. permission denied) → daemon_error, surfacing stderr
+    monkeypatch.setattr(dc.subprocess, "run", _fake_info(
+        1, stderr="permission denied while trying to connect to the Docker daemon socket"))
+    status, detail = dc.docker_daemon_status()
+    assert status == "daemon_error"
+    assert "permission denied" in detail
+
+    monkeypatch.setattr(dc.subprocess, "run", _fake_info(0, stdout="windows\n"))
+    assert dc.docker_daemon_status()[0] == "windows_containers"
+
+    monkeypatch.setattr(dc.subprocess, "run", _fake_info(0, stdout="linux\n"))
+    assert dc.docker_daemon_status()[0] == "ok"
+
+    # unexpected OSType is not silently accepted as ok
+    monkeypatch.setattr(dc.subprocess, "run", _fake_info(0, stdout="freebsd\n"))
+    assert dc.docker_daemon_status()[0] == "daemon_error"
+
+
+def test_docker_daemon_status_timeout_is_unreachable(monkeypatch):
+    """A mid-startup or unreachable-remote daemon must not hang the wizard."""
+    import whizzard.docker_cmd as dc
+
+    monkeypatch.setattr(dc, "docker_available", lambda: True)
+
+    def _timeout(argv, **kwargs):
+        raise dc.subprocess.TimeoutExpired(argv, 15)
+
+    monkeypatch.setattr(dc.subprocess, "run", _timeout)
+    status, detail = dc.docker_daemon_status()
+    assert status == "unreachable"
+    assert "timed out" in detail
+
+
 def test_image_exists_returns_false_for_missing_image(monkeypatch):
     """Image-missing case still returns False — caller knows to suggest build."""
     import whizzard.docker_cmd as dc

@@ -92,6 +92,57 @@ def docker_available() -> bool:
     return shutil.which("docker") is not None
 
 
+def docker_daemon_status() -> tuple[str, str]:
+    """Classify Docker readiness for launching a Linux-container cell.
+
+    Returns ``(status, detail)`` where ``detail`` carries docker's stderr (or
+    a short note) for the error states and is empty otherwise. ``status`` is:
+      ``"missing"``            — the docker CLI is not on PATH
+      ``"unreachable"``        — daemon not running (start Docker Desktop)
+      ``"daemon_error"``       — docker ran but failed for another reason
+                                 (e.g. permission denied / not in the docker
+                                 group, a bad context); ``detail`` is the real
+                                 error so the wizard doesn't misadvise
+      ``"windows_containers"`` — daemon up but in Windows-container mode (our
+                                 sandbox is a Linux container and won't run)
+      ``"ok"``                 — daemon up, Linux-container mode
+
+    Unlike ``docker_available`` (a PATH check only), this talks to the daemon.
+    It reuses ``_looks_like_daemon_error`` (the same matcher ``image_exists``
+    uses) so "not running" is distinguished from other failures, and bounds
+    the call with a ``timeout`` so a mid-startup or unreachable-remote daemon
+    can't hang the wizard (matching adjust.py's docker-probe timeout). Used by
+    the ``whiz init`` preflight to render a *verified* prerequisite state
+    instead of asserting "Docker is running" after only a binary check.
+    """
+    if not docker_available():
+        return ("missing", "")
+    try:
+        result = subprocess.run(
+            ["docker", "info", "--format", "{{.OSType}}"],
+            capture_output=True,
+            text=True,
+            env=_docker_env(),
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            "unreachable",
+            "docker info timed out — the daemon may be starting up or a "
+            "remote docker context is unreachable",
+        )
+    if result.returncode != 0:
+        if _looks_like_daemon_error(result.stderr):
+            return ("unreachable", result.stderr.strip())
+        return ("daemon_error", result.stderr.strip())
+    ostype = result.stdout.strip().lower()
+    if ostype == "windows":
+        return ("windows_containers", "")
+    if ostype == "linux":
+        return ("ok", "")
+    return ("daemon_error", f"unexpected container OSType: {ostype!r}")
+
+
 def image_exists(image: str = WHIZZARD_IMAGE) -> bool:
     """True if the local daemon has the image, False if it doesn't.
 

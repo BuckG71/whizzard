@@ -60,7 +60,7 @@ from whizzard.config import (
 from whizzard.docker_cmd import (
     WHIZZARD_HERMES_IMAGE,
     WHIZZARD_IMAGE,
-    docker_available,
+    docker_daemon_status,
 )
 from whizzard.harness_config import HARNESSES_FILE, default_harnesses
 from whizzard.mounts import MOUNTS_FILE
@@ -249,12 +249,47 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
     )
     console.print()
 
-    # Pre-flight checks.
-    if not docker_available():
+    # Pre-flight checks — every prerequisite is *verified*, not asserted.
+    # docker_daemon_status() actually talks to the daemon (not just a PATH
+    # check), so we never print "Docker is running" without confirming it,
+    # and the Windows Linux-backend requirement is a real check rather than a
+    # dim advisory styled like one (fail-closed, D-133).
+    host = _host_platform()
+    status, detail = docker_daemon_status()
+    if status == "missing":
         console.print(
             f"[red]error: docker not found on PATH.[/red] {_docker_install_hint()}"
         )
         sys.exit(127)
+    if status == "unreachable":
+        start_hint = (
+            "Start Docker Desktop and wait for it to finish starting"
+            if host in ("windows", "macos")
+            else "Start the Docker daemon (e.g. `systemctl start docker`)"
+        )
+        console.print(
+            "[red]error: Docker is installed but not running.[/red] "
+            f"{start_hint}, then re-run `whiz init`."
+        )
+        if detail:
+            console.print(f"  [dim]{detail}[/dim]")
+        sys.exit(1)
+    if status == "daemon_error":
+        # Docker ran but failed for a non-daemon-down reason (e.g. permission
+        # denied / not in the docker group). Surface the real error rather
+        # than misadvising "start the daemon".
+        console.print(
+            "[red]error: Docker is installed but the daemon check failed.[/red] "
+            f"{detail or 'see docker output above'}"
+        )
+        sys.exit(1)
+    if status == "windows_containers":
+        console.print(
+            "[red]error: Docker is in Windows-container mode.[/red] "
+            "Whizzard's sandbox is a Linux container — switch Docker Desktop to "
+            "Linux containers (WSL2 backend), then re-run `whiz init`."
+        )
+        sys.exit(1)
     dockerfile = Path(str(files("whizzard._dockerfiles") / "Dockerfile"))
     if not dockerfile.exists():
         console.print(
@@ -263,13 +298,12 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
         sys.exit(2)
 
     console.print("Checking prerequisites:")
-    console.print("  [green]✓[/green] Docker is running")
-    if _host_platform() == "windows":
-        console.print(
-            "  [yellow]›[/yellow] [dim]Windows: ensure Docker Desktop is using the "
-            "Linux-container backend (WSL2) — Whizzard's sandbox is a Linux "
-            "container and won't run in Windows-container mode.[/dim]"
-        )
+    console.print("  [green]✓[/green] Docker daemon reachable")
+    if host == "windows":
+        # On Windows this is a real, verified state (status == "ok" means
+        # docker info reported OSType=linux). Non-Windows hosts skip the line
+        # rather than show a grayed advisory.
+        console.print("  [green]✓[/green] Linux-container backend (WSL2)")
     console.print("  [green]✓[/green] Container recipe found")
     console.print()
     console.print(

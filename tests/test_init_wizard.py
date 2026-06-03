@@ -103,7 +103,7 @@ def test_init_force_overrides_idempotency_check(
     # Stub docker so step 1 doesn't actually try to build anything.
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
     result = runner.invoke(app, ["init", "--yes", "--force"])
@@ -121,10 +121,37 @@ def test_init_exits_127_when_docker_missing(
     """Step 1's pre-flight surfaces the docker-not-found case clearly."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: False)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("missing", ""))
     result = runner.invoke(app, ["init", "--yes"])
     assert result.exit_code == 127
     assert "docker not found" in result.output
+
+
+def test_init_errors_when_docker_daemon_unreachable(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Docker installed but daemon down: the preflight must say so (not
+    falsely claim 'Docker is running') and abort."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("unreachable", ""))
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 1
+    assert "not running" in result.output
+    assert "Docker is running" not in result.output
+
+
+def test_init_errors_on_windows_container_mode(
+    _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Daemon up but in Windows-container mode: our sandbox is a Linux
+    container, so abort with the switch-to-Linux guidance."""
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("windows_containers", ""))
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 1
+    assert "Windows-container mode" in result.output
 
 
 # ---------- step 1: image build (build_runner mocked) ----------
@@ -137,7 +164,7 @@ def test_init_step_1_invokes_two_builds_in_order(
     one "Building sandbox..." line, the runner is invoked twice."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
 
     invocations: list[list[str]] = []
 
@@ -167,7 +194,7 @@ def test_init_step_1_propagates_base_build_failure(
     the wizard exits with the docker exit code."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
 
     invocations: list[list[str]] = []
 
@@ -254,7 +281,7 @@ def _stub_step_1_to_succeed(monkeypatch: pytest.MonkeyPatch) -> None:
     """Helper: skip Step 1 so a test can focus on later steps."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
 
@@ -627,7 +654,7 @@ def test_wizard_leaves_no_tmp_files_after_successful_run(
     remain — they're created during writes and renamed away on success."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
     result = runner.invoke(app, ["init", "--yes"])
@@ -657,7 +684,7 @@ def test_wizard_crash_mid_config_write_leaves_original_intact(
     sentinel = '{"sentinel": "survived"}'
     iw.PROFILES_FILE.write_text(sentinel)
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
     def _exploding_atomic(path: Path, content: str) -> None:
@@ -683,7 +710,7 @@ def test_wizard_eof_during_prompt_does_not_traceback(
     CliRunner's behavior with truncated input mirrors stdin closing."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
     # Empty input → first prompt hits EOFError immediately.
@@ -704,7 +731,7 @@ def test_wizard_image_build_failure_leaves_no_partial_config(
     clean (no leftover config trips the idempotency refusal)."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     # Base build fails immediately.
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 1)
 
@@ -759,7 +786,7 @@ def test_step_1_shows_windows_linux_container_note(
     (the #1 silent-failure mode); on macOS it doesn't."""
     from whizzard import init_wizard as iw
 
-    monkeypatch.setattr(iw, "docker_available", lambda: True)
+    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
 
     monkeypatch.setattr(iw, "_host_platform", lambda: "windows")
