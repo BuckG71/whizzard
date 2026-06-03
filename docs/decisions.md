@@ -2936,6 +2936,24 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-181: Hermes cell default invocation is interactive `hermes`, not gateway (amends D-88)
+
+**Type:** adapter
+
+**Tags:** hermes, oss-launch
+
+**Door Type:** two-way — the default `start_command` is a one-line change, trivially revertible.
+
+**Decision:** The Hermes cell's default command is bare `hermes` (interactive terminal chat), not `hermes gateway run`. Gateway mode — a messaging-platform daemon that needs platform config and ignores stdin — is opted into via the harness config's `start_command`, or started by the user from within their Hermes session. It is deliberately **not** a `whiz` flag. Amends D-88, which set gateway as the default invocation.
+
+**Rationale:** Surfaced on the Windows cell-launch test (2026-06-03): a bare `whiz r hermes` dropped the user into an idle gateway that ignored typed input — a dead-end first-run UX. Interactive chat is what a new user expects from "launch a Hermes session." Keeping gateway off the `whiz` flag surface preserves harness-neutrality (no harness-specific flags on the core CLI); a power user who wants gateway-mode cells sets `start_command` in their harness config.
+
+**Source:** Windows cell-launch test, 2026-06-03.
+
+**Status:** active; amends D-88.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

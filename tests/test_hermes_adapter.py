@@ -42,9 +42,11 @@ def test_hermes_adapter_satisfies_protocol():
     assert isinstance(HermesAdapter(), HarnessAdapter)
 
 
-def test_hermes_default_start_command_is_gateway_run():
-    # D-88: gateway is the default mode for the Hermes adapter.
-    assert HermesAdapter().start_command() == ["hermes", "gateway", "run"]
+def test_hermes_default_start_command_is_interactive():
+    # D-181 (amends D-88): bare `hermes` (interactive terminal chat) is the
+    # default cell invocation, not gateway mode. Gateway is opted into via
+    # the harness config's start_command, never a whiz flag.
+    assert HermesAdapter().start_command() == ["hermes"]
 
 
 def test_hermes_start_command_can_be_overridden_via_config():

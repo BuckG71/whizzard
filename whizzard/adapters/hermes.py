@@ -55,7 +55,12 @@ _IN_CELL_EVENT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/events.jsonl"
 _IN_CELL_REQUEST_DIR = f"{_IN_CELL_WHIZ_DIR}/requests"
 
 
-_DEFAULT_START_COMMAND: list[str] = ["hermes", "gateway", "run"]
+# Bare `hermes` drops the user into Hermes's interactive terminal chat — the
+# default cell invocation (D-181, amending D-88). Gateway mode (a messaging-
+# platform daemon that needs platform config and ignores stdin) is NOT the
+# default and is NOT a whiz flag: a user who wants it either starts it from
+# within their Hermes session or sets `start_command` in their harness config.
+_DEFAULT_START_COMMAND: list[str] = ["hermes"]
 _GATEWAY_LOCK_FILENAME = "gateway.lock"
 
 # In-cell HERMES_HOME path. Matches Hermes's own convention ($HOME/.hermes)
@@ -437,9 +442,11 @@ def _is_pid_alive(pid: int) -> bool:
 class HermesAdapter:
     """Adapter for the Hermes agent harness.
 
-    Gateway mode is the default invocation (D-88); interactive mode is opted
-    into via harness config or the `--interactive` CLI flag (handled in the
-    `whiz hermes` subcommand surface, not here).
+    Interactive terminal mode (bare `hermes`) is the default invocation
+    (D-181, amending D-88). Gateway mode is opted into via the harness
+    config's `start_command`, or started by the user from within their
+    Hermes session — it is deliberately not a `whiz` flag (keeps Whizzard
+    harness-neutral; no harness-specific flags on the core CLI).
     """
 
     name: str = "hermes"
