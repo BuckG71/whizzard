@@ -279,7 +279,10 @@ def test_argv_emits_hermes_home_mount_when_configured(tmp_path):
     )
     joined = " ".join(argv)
 
-    assert f"{hermes_home}:/home/whizzard/.hermes:rw" in joined
+    # as_posix(): the harness mount renders host paths with forward slashes
+    # for Docker on Windows (str() would be backslashes there). Identical on
+    # POSIX. Matches ContainerMount.docker_volume_arg.
+    assert f"{hermes_home.as_posix()}:/home/whizzard/.hermes:rw" in joined
     assert "whizzard.harness_mount=/home/whizzard/.hermes=rw" in joined
 
 
@@ -407,7 +410,7 @@ def test_argv_harness_mount_comes_after_user_mounts(tmp_path):
         i for i in v_positions if "/host/alpha:" in argv[i + 1]
     )
     harness_pos = next(
-        i for i in v_positions if str(hermes_home) in argv[i + 1]
+        i for i in v_positions if hermes_home.as_posix() in argv[i + 1]
     )
     assert user_pos < harness_pos
 
