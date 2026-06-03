@@ -137,6 +137,35 @@ def test_docker_volume_arg_uses_effective_mode():
     assert m.docker_volume_arg(mode="ro") == "/host/alpha:/mounts/alpha:ro"
 
 
+def test_docker_volume_arg_renders_windows_paths_with_forward_slashes():
+    """Windows portability: Docker's -v parser needs forward-slash host
+    paths; a raw Path stringifies a WindowsPath with backslashes, which
+    breaks alongside the drive-letter colon. Uses PureWindowsPath so the
+    str()→backslash vs as_posix()→slash divergence is exercised on POSIX CI
+    runners too (a plain Path is already forward-slash there and wouldn't
+    catch a regression). Covers both volume-arg renderers — the user Mount
+    and the harness ContainerMount (HERMES_HOME), the latter being the site
+    that was missed and surfaced on the live Windows dry-run 2026-06-03."""
+    from pathlib import PureWindowsPath
+
+    from whizzard.adapters.base import ContainerMount
+
+    m = Mount(name="proj", host_path=PureWindowsPath(r"C:\Users\x\proj"),
+              default_mode="rw")
+    arg = m.docker_volume_arg()
+    assert "\\" not in arg
+    assert arg == "C:/Users/x/proj:/mounts/proj:rw"
+
+    cm = ContainerMount(
+        host_path=PureWindowsPath(r"C:\Users\x\.hermes-main"),
+        container_path="/home/whizzard/.hermes",
+        mode="rw",
+    )
+    cm_arg = cm.docker_volume_arg()
+    assert "\\" not in cm_arg
+    assert cm_arg == "C:/Users/x/.hermes-main:/home/whizzard/.hermes:rw"
+
+
 # --- F-A-02: mount-name validation ---------------------------------------
 
 

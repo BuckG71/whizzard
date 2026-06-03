@@ -367,13 +367,15 @@ def build_run_argv(
         # no extra `-v`; pre-creating it means `whiz requests` finds an empty
         # dir rather than a missing one before the agent writes anything.
         request_dir(session_id).mkdir(parents=True, exist_ok=True)
-        argv += ["-v", f"{sess_dir}:/run/whiz:rw"]
+        # as_posix(): forward-slash host path for Docker on Windows (see
+        # ContainerMount.docker_volume_arg / mounts.Mount.docker_volume_arg).
+        argv += ["-v", f"{sess_dir.as_posix()}:/run/whiz:rw"]
         # Touch the audit log so the bind mount has a target file even on
         # first-ever run. The host writes to it normally; the cell sees a
         # read-only overlay at /run/whiz/audit.jsonl.
         SESSIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
         SESSIONS_LOG.touch(exist_ok=True)
-        argv += ["-v", f"{SESSIONS_LOG}:/run/whiz/audit.jsonl:ro"]
+        argv += ["-v", f"{SESSIONS_LOG.as_posix()}:/run/whiz/audit.jsonl:ro"]
 
     wd = adapter.working_dir()
     if wd:
