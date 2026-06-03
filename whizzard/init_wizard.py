@@ -157,6 +157,7 @@ def _prompt_numeric_choice(
 
     Re-prompts on invalid input. Returns 1-based choice (1 = first option).
     """
+    console.print(f"[bold]{message}[/bold]")
     for i, label in enumerate(options, 1):
         console.print(f"  {i}) {label}")
     while True:
@@ -445,9 +446,8 @@ def step_2_profiles(state: WizardState) -> None:
     if state.non_interactive:
         choice = 1
     else:
-        console.print("[bold]How do you want to set up profiles?[/bold]")
         choice = _prompt_numeric_choice(
-            "Profile setup",
+            "How do you want to set up profiles?",
             options=[
                 "Use all five defaults [dim](recommended for first run)[/dim]",
                 "Use only \"safe\" and \"default\" [dim](minimal — add more later)[/dim]",
@@ -540,11 +540,8 @@ def _step_2_custom_profiles_subflow(state: WizardState) -> list[str]:
 
         # Internet
         console.print()
-        console.print(
-            "[bold]Should sessions using this profile have internet access?[/bold]"
-        )
         net_choice = _prompt_numeric_choice(
-            "Internet",
+            "Should sessions using this profile have internet access?",
             options=[
                 "Yes [dim](agent can fetch web pages, call APIs, install packages)[/dim]",
                 "No  [dim](fully offline — only what's in the sandbox is reachable)[/dim]",
@@ -555,15 +552,12 @@ def _step_2_custom_profiles_subflow(state: WizardState) -> list[str]:
         # Time limit
         console.print()
         console.print(
-            "[bold]Should sessions using this profile have a time limit?[/bold]"
-        )
-        console.print(
             "A time limit auto-stops the session after the time runs out, "
             "even if it's still doing useful work. Useful as a safety net; "
             "not always wanted."
         )
         duration_choice = _prompt_numeric_choice(
-            "Time limit",
+            "Should sessions using this profile have a time limit?",
             options=[
                 "No time limit [dim](sessions run until you stop them)[/dim]",
                 "Yes, set one",
@@ -583,14 +577,11 @@ def _step_2_custom_profiles_subflow(state: WizardState) -> list[str]:
         # Idle limit
         console.print()
         console.print(
-            "[bold]Should sessions stop automatically if idle?[/bold]"
-        )
-        console.print(
             "\"Idle\" means no agent activity, no CPU work, no file changes. "
             "Useful for sessions you might forget about."
         )
         idle_choice = _prompt_numeric_choice(
-            "Idle limit",
+            "Should sessions stop automatically if idle?",
             options=[
                 "No idle limit",
                 "Yes, set one",
@@ -758,9 +749,8 @@ def step_3_mounts(state: WizardState) -> None:
             "  Description (optional — a note for your own reference)"
         )
         console.print()
-        console.print("  [bold]Read-only or read-write?[/bold]")
         mode_choice = _prompt_numeric_choice(
-            "Mode",
+            "Read-only or read-write?",
             options=[
                 "read-only   [dim](agent can look at the files but can't change them)[/dim]",
                 "read-write  [dim](agent can both look at and change the files)[/dim]",
@@ -781,7 +771,7 @@ def step_3_mounts(state: WizardState) -> None:
         )
         console.print()
         add_choice = _prompt_numeric_choice(
-            "Add another?",
+            "Add another folder?",
             options=["Yes", "No"],
         )
 
@@ -855,9 +845,8 @@ def step_4_presets(state: WizardState) -> None:
     if state.non_interactive:
         choice = 1
     else:
-        console.print("[bold]Use the bundled \"hermes\" preset?[/bold]")
         choice = _prompt_numeric_choice(
-            "Preset setup",
+            "Use the bundled \"hermes\" preset?",
             options=[
                 "Yes [dim](recommended)[/dim]",
                 "No — let me define my own now",
@@ -938,8 +927,6 @@ def _step_4_attach_mounts_prompt(state: WizardState) -> list[str]:
     if len(state.mount_names) == 1:
         name = state.mount_names[0]
         console.print()
-        console.print("[bold]Attach a folder to your preset?[/bold]")
-        console.print()
         console.print(
             f"Your \"{name}\" folder is registered (from step 3). You can "
             "attach it to the preset, which means it'll be mounted every "
@@ -948,7 +935,7 @@ def _step_4_attach_mounts_prompt(state: WizardState) -> list[str]:
         )
         console.print()
         choice = _prompt_numeric_choice(
-            "Attach folder",
+            "Attach a folder to your preset?",
             options=[
                 f"Yes, attach \"{name}\"",
                 "No, leave the preset without a folder",
@@ -969,9 +956,8 @@ def _step_4_attach_mounts_prompt(state: WizardState) -> list[str]:
     )
     console.print()
     for name in state.mount_names:
-        console.print(f"[bold]Attach \"{name}\" to the \"hermes\" preset?[/bold]")
         choice = _prompt_numeric_choice(
-            f"Attach {name}",
+            f"Attach \"{name}\" to the \"hermes\" preset?",
             options=["Yes", "No"],
         )
         if choice == 1:
@@ -1013,9 +999,10 @@ def _step_4_custom_preset_subflow(state: WizardState) -> dict[str, dict]:
 
         # Profile selection.
         console.print()
-        console.print("[bold]Which profile should this preset use?[/bold]")
         profile_options = state.profile_names or ["default"]
-        choice = _prompt_numeric_choice("Profile", options=profile_options)
+        choice = _prompt_numeric_choice(
+            "Which profile should this preset use?", options=profile_options
+        )
         profile_name = profile_options[choice - 1]
 
         # Harness (only hermes today).
@@ -1029,11 +1016,8 @@ def _step_4_custom_preset_subflow(state: WizardState) -> dict[str, dict]:
         if state.mount_names:
             console.print()
             for mount_name in state.mount_names:
-                console.print(
-                    f"[bold]Attach your \"{mount_name}\" folder to this preset?[/bold]"
-                )
                 a_choice = _prompt_numeric_choice(
-                    f"Attach {mount_name}",
+                    f"Attach your \"{mount_name}\" folder to this preset?",
                     options=["Yes", "No"],
                 )
                 if a_choice == 1:
@@ -1302,9 +1286,8 @@ def step_1b_hermes_profile(
         # Default in --yes mode: clone the profile.
         choice = 1
     else:
-        console.print("[bold]Copy your Hermes setup into a Whizzard profile?[/bold]")
         choice = _prompt_numeric_choice(
-            "Copy your Hermes setup?",
+            "Copy your Hermes setup into a Whizzard profile?",
             options=[
                 "Yes (recommended — gets you running right away)",
                 "No  (I'll set up a profile later with `whiz hermes profile create`)",
