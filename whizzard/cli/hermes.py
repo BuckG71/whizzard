@@ -113,9 +113,9 @@ def hermes_image_build_cmd(
 ) -> None:
     """Build the Hermes execution image from the bundled Dockerfile.hermes.
 
-    Stage 19 / D-131: Hermes is the only supported harness today; ``whiz init``
-    builds this image as part of its mandatory setup. Run-it-yourself path
-    for users who want to rebuild after an upstream Hermes ref bump.
+    Hermes is the only supported harness today; ``whiz init`` builds this
+    image as part of its mandatory setup. Run-it-yourself path for users who
+    want to rebuild after an upstream Hermes ref bump.
     """
     if not docker_available():
         console.print("[red]error: docker not found on PATH[/red]")

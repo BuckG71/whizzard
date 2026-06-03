@@ -84,9 +84,9 @@ def wake_cmd(
     """Wake (hot-restart) an idle-ended session.
 
     Eligibility is restricted to sessions that ended with
-    `expiry_reason: idle` (D-169 spec). Duration-capped sessions are not
-    wakeable — the cap was a deliberate budget, not a pause. Permission
-    set carries forward unchanged (D-168).
+    `expiry_reason: idle`. Duration-capped sessions are not wakeable — the
+    cap was a deliberate budget, not a pause. Permission set carries forward
+    unchanged.
     """
     resolution = find_wakeable(session_id)
     if resolution.status != WakeStatus.OK or resolution.candidate is None:

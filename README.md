@@ -102,8 +102,8 @@ Whizzard currently supports the [Hermes Agent harness by Nous Research](https://
 
 `whiz init` detects whether you already have Hermes installed on your machine (`~/.hermes/`) and branches into one of two flows:
 
-- **If you have Hermes**: the wizard copies your existing setup into a Whizzard profile (`~/.hermes-whizz/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
-- **If you don't have Hermes**: the wizard prints install instructions and completes setup without it. To finish, install [Hermes from NousResearch](https://github.com/NousResearch/hermes-agent), then run `whiz hermes profile create whizz` to copy your fresh Hermes setup into `~/.hermes-whizz/`.
+- **If you have Hermes**: the wizard copies your existing setup into a Whizzard profile (`~/.hermes-main/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
+- **If you don't have Hermes**: the wizard prints install instructions and completes setup without it. To finish, install [Hermes from NousResearch](https://github.com/NousResearch/hermes-agent), then run `whiz hermes profile create main` to copy your fresh Hermes setup into `~/.hermes-main/`.
 
 ### First session
 
