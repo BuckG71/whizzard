@@ -59,17 +59,17 @@ _PANEL_SHORTCUTS = "Shortcuts"
 
 app = typer.Typer(
     name="whizzard",
-    help="Whizzard — local capability governance for AI agents.",
-    no_args_is_help=False,
-    add_completion=False,
-    # Footer under the command panels: how to invoke a command and find flags.
-    # A blank line (\n\n) renders as two separate blocks — Typer's Rich help
-    # reflows single newlines into one line, so the paragraph break is what
-    # keeps these on two lines.
-    epilog=(
-        "Run any command as  whiz <command>\n\n"
+    # Top help block (below Usage): tagline, then how to invoke a command and
+    # find flags. The \n\n starts a second paragraph — Typer reflows the first
+    # paragraph (the tagline) but preserves single newlines in later ones, so
+    # the two hint lines stay on their own lines.
+    help=(
+        "Whizzard — local capability governance for AI agents.\n\n"
+        "Run any command as  whiz <command>\n"
         "See its flags with  whiz <command> --help"
     ),
+    no_args_is_help=False,
+    add_completion=False,
 )
 app.add_typer(profiles_app, name="profiles", rich_help_panel=_PANEL_INSPECT)
 app.add_typer(image_app, name="image", rich_help_panel=_PANEL_SETUP)

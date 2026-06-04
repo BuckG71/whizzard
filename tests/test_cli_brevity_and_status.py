@@ -391,10 +391,10 @@ def test_version_flag_does_not_require_config(tmp_path, monkeypatch):
     assert "whizzard" in result.output.lower()
 
 
-def test_help_groups_commands_into_workflow_panels_with_footer():
-    """`whiz --help` groups commands by workflow (rich_help_panel) and ends
-    with a footer telling the user how to invoke a command and find its
-    flags — not a flat, ungrouped command list."""
+def test_help_groups_commands_into_workflow_panels_with_invocation_hints():
+    """`whiz --help` groups commands by workflow (rich_help_panel) and, in the
+    top help block, tells the user how to invoke a command and find its flags
+    — not a flat, ungrouped command list."""
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     for panel in (
@@ -405,9 +405,9 @@ def test_help_groups_commands_into_workflow_panels_with_footer():
         "Shortcuts",
     ):
         assert panel in result.output, f"missing help panel: {panel}"
-    # Footer: invocation + flag discovery, rendered on two separate lines.
+    # Invocation + flag-discovery hints, on two separate lines in the header.
     # Assert on the distinctive phrases rather than the full sentence — rich
-    # wraps the epilog at the terminal width, so "whiz <command> --help" can
+    # wraps help text at the terminal width, so "whiz <command> --help" can
     # straddle two lines.
     assert "Run any command as" in result.output
     assert "See its flags with" in result.output
