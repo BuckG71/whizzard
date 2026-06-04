@@ -344,38 +344,27 @@ backend line entirely rather than show a grayed item.
 *Disposition:* fix before launch; UX-shaped, so design noted here first.
 
 ### Wizard Hermes-not-installed branch links the repo but gives no install steps
-Step 1b Branch B (`init_wizard.py:1228-1230`) prints "Install Hermes on
-your computer" + the bare `github.com/NousResearch/hermes-agent` URL —
-no command, no steps. The README claims it "prints install instructions";
-it only links. Surfaced during the Windows clean-install test 2026-06-03.
-*Fix (near-term — behavior decided 2026-06-03):* replace the bare URL with
-an explicit y/N "Install Hermes now?" prompt. On **yes**:
-- if `pipx` is present → Whizzard runs `pipx install hermes-agent`
-  (isolated CLI env; never touches Whizzard's own venv — the dep-hygiene
-  property, enforced by construction; [[user_dep_hygiene]]). Hermes is an
-  application you run, not a library Whizzard imports, so pipx is the
-  idiomatic mechanism.
-- if `pipx` is absent → do **not** silently fall back to `pip` (that would
-  pollute Whizzard's venv). Instead print clear, complete instructions to
-  run **in a separate terminal window** (keeping the wizard session
-  intact): install pipx (`py -m pip install --user pipx` then
-  `py -m pipx ensurepath`), then `pipx install hermes-agent`, then return
-  and run `whiz hermes profile create whizz`.
-Rejected plain auto-`pip install` (commingles Hermes' deps into Whizzard's
-venv). "Easier than yolo" without silent shared-env pulls.
-*Also (UX, surfaced 2026-06-03):* reorder Branch B — lead with why a
-harness is required ("Whizzard runs an agent harness in the sandbox; it
-needs at least one installed and configured to do its job"), then the
-"you can finish init now, but nothing launches until it's done"
-reassurance (currently buried at the bottom and worded to undersell the
-necessity). The y/N install prompt must carry this context so declining
-is an informed choice.
-*Considered and rejected:* having Whizzard generate a minimal `~/.hermes/`
-profile to drop the host-Hermes prerequisite. A synthesized profile the
-user didn't create would shadow or conflict with a real Hermes install
-later, with unclear provenance/authority — and we'd own a config format we
-don't control. The host profile must come from Hermes itself.
-*Disposition:* near-term fix (real command + opt-in + reorder) before launch.
+Step 1b Branch B printed "Install Hermes on your computer" + the bare
+`github.com/NousResearch/hermes-agent` URL — no steps, no necessity framing.
+The README overclaimed it "prints install instructions". Surfaced during the
+Windows clean-install test 2026-06-03.
+*Resolved 2026-06-03 (D-182):* the harness is **user-supplied** — Whizzard
+does not install it. An earlier plan to have the wizard run `pipx install
+hermes-agent` (with a separate-terminal fallback) was **superseded**: the
+user must run Hermes' interactive config to produce a usable `~/.hermes/`
+regardless, so an inline install removes only one of two out-of-Whizzard
+steps while adding harness-specific install knowledge to a harness-neutral
+core (D-10). Branch B is now informational: necessity-first framing → the
+three setup steps (install per Nous' instructions → configure → `whiz hermes
+profile create main`) → the "you can finish init now" reassurance. The README
+gained a "install a supported harness first" prerequisite. Still rejected:
+synthesizing a minimal `~/.hermes/` (a profile the user didn't create would
+shadow/conflict with a real install; we'd own a config format we don't
+control — the host profile must come from Hermes itself).
+*Remaining (separate unit):* declare the tested Hermes version in the
+compatibility matrix + add host-version detect-and-warn at init/profile-create,
+keyed off the cell's pinned version (couples to the `Dockerfile.hermes`
+0.12→0.14 pin-bump, which needs an M7 smoke re-run). See D-182.
 
 ### BUG: `_prompt_numeric_choice` silently drops its question (wizard-wide)
 `init_wizard._prompt_numeric_choice(message, options)` accepts a `message`

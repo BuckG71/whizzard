@@ -75,6 +75,7 @@ This list is not exhaustive. It names the gaps most likely to surprise a user wh
 - macOS, Linux, or Windows (Windows is in pre-release verification for v0.1.0)
 - Python 3.11+
 - Docker Desktop (or any Docker daemon) running
+- A supported agent harness installed **and configured** before `whiz init` — today that's Hermes (see [Hermes setup](#hermes-setup)). Whizzard sandboxes a harness you provide; it does not install one for you.
 
 ### Compatibility matrix
 
@@ -100,10 +101,12 @@ That's the entire flow. `whiz init` walks you through five short configuration s
 
 Whizzard currently supports the [Hermes Agent harness by Nous Research](https://github.com/NousResearch/hermes-agent) — an open-source autonomous-agent harness with platform connectors (Discord, Slack), cron scheduling, and skill management. Additional harnesses are planned for future releases.
 
-`whiz init` detects whether you already have Hermes installed on your machine (`~/.hermes/`) and branches into one of two flows:
+**Install a supported harness before `whiz init`.** Whizzard sandboxes a harness you provide; it does not install one for you. Install and configure Hermes following [Nous Research's instructions](https://github.com/NousResearch/hermes-agent) so it creates a profile at `~/.hermes/`. Whizzard's execution cell runs a pinned, tested Hermes build — if your host version differs, `whiz init` tells you but does not block: a newer Hermes usually works, but can occasionally author a profile the tested cell doesn't fully understand, so it's the first thing to suspect if a session misbehaves.
 
-- **If you have Hermes**: the wizard copies your existing setup into a Whizzard profile (`~/.hermes-main/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
-- **If you don't have Hermes**: the wizard prints install instructions and completes setup without it. To finish, install [Hermes from NousResearch](https://github.com/NousResearch/hermes-agent), then run `whiz hermes profile create main` to copy your fresh Hermes setup into `~/.hermes-main/`.
+`whiz init` then branches on whether a Hermes profile (`~/.hermes/`) exists:
+
+- **If a Hermes profile exists**: the wizard copies it into a Whizzard profile (`~/.hermes-main/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
+- **If none exists yet**: the wizard explains why a harness is needed and the steps to set one up, then completes setup without it. Once Hermes is installed and configured, run `whiz hermes profile create main` to copy `~/.hermes/` into `~/.hermes-main/`.
 
 ### First session
 

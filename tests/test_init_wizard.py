@@ -344,9 +344,16 @@ def test_init_step_1b_branch_b_shows_install_instructions(
 
     result = runner.invoke(app, ["init", "--yes"])
     assert result.exit_code == 0
-    assert "Hermes is not yet installed" in result.output
-    assert "github.com/NousResearch/hermes-agent" in result.output
-    assert "whiz hermes profile create main" in result.output
+    # Collapse Rich's line wraps so multi-word phrases match regardless of
+    # the rendered console width.
+    flat = " ".join(result.output.split())
+    # Necessity-first framing + honest "not set up yet" state (D-182).
+    assert "needs at least one installed and configured" in flat
+    assert "isn't set up on this computer yet" in flat
+    # Whizzard does not install the harness — it points at Nous' instructions
+    # and the profile-create step.
+    assert "github.com/NousResearch/hermes-agent" in flat
+    assert "whiz hermes profile create main" in flat
 
 
 def test_init_step_1b_clone_failure_does_not_abort_wizard(

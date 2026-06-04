@@ -8,8 +8,9 @@ Wizard structure (see docs/wizard_design.md for the full transcripts):
 
   Welcome  (Step 0)              — orientation + "5 short steps" preview
   Step 1   — The Docker container — base + Hermes images built silently
-  Step 1b  — Hermes profile setup — detect ~/.hermes/ → clone OR install
-                                    instructions when Hermes is missing
+  Step 1b  — Hermes profile setup — detect ~/.hermes/ → clone it, or (if
+                                    absent) explain the user-supplied setup
+                                    steps; the wizard never installs Hermes
   Step 2   — Profiles            — 5 bundled defaults; choice of use-all,
                                     minimal-subset, or define-your-own
   Step 3   — Mounts              — host folders an agent is allowed to see;
@@ -1214,11 +1215,13 @@ def step_1b_hermes_profile(
 
     Detects ``~/.hermes/`` on the host:
     - Present (Branch A): offer to clone it into ``~/.hermes-main/``
-    - Absent (Branch B): print install instructions, continue setup
+    - Absent (Branch B): explain why a harness is needed + the steps to
+      install/configure one, then continue setup. Whizzard does not install
+      the harness itself (D-182 — harness is user-supplied).
 
     Either branch leaves ``whiz init`` runnable to completion — Branch B
-    users just need to install Hermes + create a profile before the
-    bundled "hermes" preset will launch a working session.
+    users just need to install + configure Hermes, then create a profile,
+    before the bundled "hermes" preset will launch a working session.
     """
     console.print()
     console.print("[bold]Step 1b of 5 — Hermes profile setup[/bold]")
@@ -1235,29 +1238,52 @@ def step_1b_hermes_profile(
     detected = _hermes_profile_already_exists()
 
     if detected is None:
-        # Branch B — Hermes not installed.
+        # Branch B — no Hermes profile found (Hermes not installed, or
+        # installed but not yet configured). Informational only: Whizzard
+        # does not install the harness for you (D-182). Lead with why a
+        # harness is required, then the steps, then the reassurance.
         state.hermes_branch = "B"
         console.print(
-            "[yellow]Hermes is not yet installed on your computer.[/yellow]"
+            "Whizzard runs an agent harness inside the sandbox — it needs at "
+            "least one installed and configured to do its job. Hermes is the "
+            "supported harness today."
         )
         console.print()
-        console.print("To finish Hermes setup, you'll need two things:")
+        console.print(
+            "[yellow]No Hermes profile was found at ~/.hermes/, so Hermes "
+            "isn't set up on this computer yet.[/yellow]"
+        )
         console.print()
-        console.print("  1. [bold]Install Hermes on your computer[/bold]")
-        console.print("     [green]https://github.com/NousResearch/hermes-agent[/green]")
-        console.print("     (this gives you a starting profile at ~/.hermes/)")
-        console.print()
-        console.print("  2. [bold]Create a Whizzard profile that points at it[/bold]")
-        console.print("     Once Hermes is installed, run:")
-        console.print("       [green]whiz hermes profile create main[/green]")
-        console.print("     to copy your Hermes setup into ~/.hermes-main/, which")
-        console.print("     is what the bundled \"hermes\" preset uses.")
+        console.print("Three steps get it working (you can do them after setup):")
         console.print()
         console.print(
-            "You don't have to do this now. The rest of `whiz init` will still "
-            "run, and Whizzard's other commands work without Hermes. Just the "
-            "\"hermes\" preset won't launch a working session until the steps "
-            "above are done."
+            "  1. [bold]Install Hermes[/bold] following Nous Research's instructions"
+        )
+        console.print("     [green]https://github.com/NousResearch/hermes-agent[/green]")
+        console.print(
+            "     [dim](Whizzard's README notes the Hermes version it's tested "
+            "against.)[/dim]"
+        )
+        console.print()
+        console.print(
+            "  2. [bold]Configure Hermes[/bold] so it creates a profile at ~/.hermes/"
+        )
+        console.print(
+            "     [dim](run Hermes once and complete its setup — model, persona, "
+            "etc.)[/dim]"
+        )
+        console.print()
+        console.print("  3. [bold]Create a Whizzard profile from it[/bold] — run:")
+        console.print("       [green]whiz hermes profile create main[/green]")
+        console.print(
+            "     [dim](copies ~/.hermes/ into ~/.hermes-main/, which the bundled "
+            "\"hermes\" preset uses)[/dim]"
+        )
+        console.print()
+        console.print(
+            "You can finish `whiz init` now — Whizzard's other commands work "
+            "without Hermes. The \"hermes\" preset just won't launch a working "
+            "session until the three steps above are done."
         )
         console.print()
         if not state.non_interactive:
