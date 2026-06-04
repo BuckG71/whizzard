@@ -1275,6 +1275,17 @@ def step_done_summary(state: WizardState) -> None:
         "  [green]whiz hermes --help[/green]  manage your Hermes profile"
     )
     console.print()
+    console.print(
+        "[bold yellow]⚠ WARNING: Always launch Hermes with Whizzard controls in "
+        "place via the `whiz r hermes` command[/bold yellow]"
+    )
+    console.print()
+    console.print(
+        "   Running `hermes` directly in CLI (outside Whizzard) is UNCONTAINED — "
+        "Hermes would have full access to your computer, with none of the "
+        "capability controls Whizzard provides."
+    )
+    console.print()
 
 
 def _prompt_positive_int(label: str) -> int:

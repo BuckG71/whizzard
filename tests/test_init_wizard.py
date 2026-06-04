@@ -656,6 +656,23 @@ def test_init_done_summary_mentions_branch_b_state(
     assert "install Hermes" in result.output or "not yet" in result.output
 
 
+def test_init_done_summary_warns_against_running_bare_hermes(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """The Done summary loudly warns that running `hermes` directly (outside
+    Whizzard) is uncontained — so users always launch via `whiz r hermes`."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["init", "--yes"])
+    assert result.exit_code == 0
+    flat = " ".join(result.output.split())
+    assert "UNCONTAINED" in flat
+    assert "Always launch Hermes" in flat
+    assert "whiz r hermes" in flat
+
+
 def test_init_step_2_custom_subflow_creates_one_profile(
     _isolated_whizzard_home: Path,
     monkeypatch: pytest.MonkeyPatch,
