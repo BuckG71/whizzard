@@ -2954,6 +2954,24 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-182: Harness is user-supplied; cell pins the tested version; mismatch warns, never blocks
+
+**Type:** adapter
+
+**Tags:** hermes, adapter, oss-launch
+
+**Door Type:** two-way — the pin target, the warning thresholds, and the "user-supplied" stance are all revisitable (e.g. if a Nous pre-release partnership later enables testing against unreleased versions).
+
+**Decision:** Whizzard treats the agent harness as **user-supplied** — the README recommends installing and configuring a supported harness per the harness developer's instructions before `whiz init` (today: Hermes). The wizard does **not** install the harness mid-flow. The execution **cell pins the harness to the version Whizzard tests against** (e.g. `pip install hermes-agent==X.Y` in `Dockerfile.hermes`); that version is declared in the README/compatibility matrix. At `init`/profile-create Whizzard detects the host harness version and, on mismatch with the pinned cell version, **warns clearly but does not block** (per D-179). Rejected: building the cell to match the detected host version ("cell tracks host").
+
+**Rationale:** There are three version seams — host-profile ⇄ cell-harness (profile schema), cell-harness ⇄ Whizzard adapter (the CLI/behavior Whizzard drives and tests), and adapter ⇄ core. "Cell tracks host" fixes the profile seam but forces Whizzard to run a harness version its adapter was never validated against, trading an occasional profile-schema break for an unvalidated adapter — more frequent and more obscure failures. Pinning the cell to the tested version keeps the adapter↔harness coupling validated; the residual profile-skew risk (profiles are mostly portable, with the occasional release that breaks something) is made legible via detect-and-warn rather than eliminated. Mid-wizard install was rejected because the user must run the harness's interactive config to produce a usable `~/.hermes/` regardless, so inline install removes only one of two out-of-Whizzard steps while adding harness-specific install knowledge to a harness-neutral core (D-10). Nous pre-release notifications are the long-term durability path (test against X.Y+1 before users hit it) but are feasibility-gated and early-stage — a partnership track, not a launch gate.
+
+**Source:** conversation 2026-06-03.
+
+**Status:** active. Relates to D-10 (harness-neutral core), D-179 (permissive/no-hard-block), D-181 (Hermes cell default).
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
