@@ -396,6 +396,10 @@ def _stub_through_step_1b(
     fake_home = tmp_path / "fake-home-step2"
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    # Isolate ~ expansion too: Path.expanduser() reads $HOME/$USERPROFILE, not
+    # the patched Path.home — so the wizard's mount dir-creation stays in tmp.
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
     return fake_home
 
 
@@ -468,7 +472,7 @@ def test_init_step_3_interactive_adds_one_folder(
     tmp_path: Path,
 ):
     """Interactive mode collects path/name/description/mode and saves."""
-    _stub_through_step_1b(monkeypatch, tmp_path)
+    fake_home = _stub_through_step_1b(monkeypatch, tmp_path)
 
     user_input = "\n".join([
         "",                      # welcome Press Enter
@@ -477,6 +481,7 @@ def test_init_step_3_interactive_adds_one_folder(
         "1",                     # step 2: all 5 defaults
         "1",                     # step 3: yes, add a folder
         "~/code/scratch",        # path
+        "1",                     # folder doesn't exist → create it
         "scratch",               # name
         "scratch projects",      # description
         "2",                     # mode: read-write
@@ -497,6 +502,45 @@ def test_init_step_3_interactive_adds_one_folder(
     assert mount["host_path"] == "~/code/scratch"
     assert mount["default_mode"] == "rw"
     assert mount["description"] == "scratch projects"
+    # 5c: the missing folder was created on disk after the "create it" prompt.
+    assert (fake_home / "code" / "scratch").is_dir()
+
+
+def test_init_step_3_rejects_hard_blocked_path_then_recovers(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """5c: a hard-blocked path (filesystem root) is rejected in the wizard,
+    and the user can re-enter a valid path without restarting."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+    valid = tmp_path / "okdir"
+    valid.mkdir()                          # exists → no create prompt
+
+    user_input = "\n".join([
+        "", "", "",            # welcome, step 1, step 1b
+        "1",                   # step 2: all 5 defaults
+        "1",                   # step 3: yes, add a folder
+        "/",                   # hard-blocked (exact) → rejected, re-prompt path
+        str(valid),            # valid existing path
+        "okdir",               # name
+        "",                    # description
+        "1",                   # mode: read-only
+        "2",                   # add another folder? No
+        "1",                   # step 4: bundled hermes
+        "2",                   # attach okdir? No
+        "",                    # step 5 Press Enter
+    ]) + "\n"
+
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+    assert "hard-blocked" in result.output
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.MOUNTS_FILE.read_text())
+    # Only the valid folder registered; the blocked root never made it in.
+    assert list(payload["mounts"].keys()) == ["okdir"]
 
 
 # ---------- step 4 + 5 + done ----------
@@ -549,6 +593,7 @@ def test_init_step_4_attaches_registered_mount_in_full_interactive(
         "1",                     # step 2: all 5
         "1",                     # step 3: yes add folder
         "~/code/scratch",        # path
+        "1",                     # folder doesn't exist → create it
         "scratch",               # name
         "scratch projects",      # description
         "2",                     # mode: rw

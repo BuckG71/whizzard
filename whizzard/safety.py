@@ -192,6 +192,35 @@ def _is_inside_or_eq(needle: Path, root: Path) -> bool:
         return False
 
 
+def hard_block_reason(host_path: Path) -> str | None:
+    """Return the reason a path is hard-blocked (no override possible), or None.
+
+    Profile-independent and existence-independent — so callers can reject a
+    path *before* any side effects (e.g. the wizard's mount dir-creation)
+    without first requiring the path to exist. Returns the inner reason string
+    (e.g. ``"exact match: /"``, ``"intersects /Users/x/.ssh"``).
+    """
+    p = _resolve_safe(host_path)
+    if p is None:
+        return None  # unresolvable is surfaced by the full check, not here
+
+    # Tier 1a: exact-match hard blocks
+    for blocked in _EXACT_HARD_BLOCKS:
+        b = _resolve_safe(blocked)
+        if b is not None and p == b:
+            return f"exact match: {b}"
+
+    # Tier 1b: deep hard blocks (intersection)
+    for blocked in _DEEP_HARD_BLOCKS:
+        b = _resolve_safe(blocked)
+        if b is None:
+            continue
+        if _intersects(p, b):
+            return f"intersects {b}"
+
+    return None
+
+
 def check_mount_path(
     host_path: Path,
     profile: Profile,
@@ -210,23 +239,10 @@ def check_mount_path(
     if not p.exists():
         raise SafetyViolation(f"mount source does not exist: {p}")
 
-    # Tier 1a: exact-match hard blocks
-    for blocked in _EXACT_HARD_BLOCKS:
-        b = _resolve_safe(blocked)
-        if b is not None and p == b:
-            raise SafetyViolation(
-                f"path {p} is hard-blocked (exact match: {b}); no override available"
-            )
-
-    # Tier 1b: deep hard blocks (intersection)
-    for blocked in _DEEP_HARD_BLOCKS:
-        b = _resolve_safe(blocked)
-        if b is None:
-            continue
-        if _intersects(p, b):
-            raise SafetyViolation(
-                f"path {p} is hard-blocked (intersects {b}); no override available"
-            )
+    # Tier 1: profile-independent hard blocks (no override available).
+    block = hard_block_reason(p)
+    if block is not None:
+        raise SafetyViolation(f"path {p} is hard-blocked ({block}); no override available")
 
     # Tier 2: override-required reasons accumulate
     overrides: list[OverrideRecord] = []

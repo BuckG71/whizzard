@@ -56,6 +56,7 @@ from whizzard.cli._shared import console
 from whizzard.config import (
     CONFIG_DIR,
     PROFILES_FILE,
+    Profile,
     default_profiles,
 )
 from whizzard.docker_cmd import (
@@ -66,6 +67,12 @@ from whizzard.docker_cmd import (
 from whizzard.harness_config import HARNESSES_FILE, default_harnesses
 from whizzard.mounts import MOUNTS_FILE
 from whizzard.preset_config import PRESETS_FILE
+from whizzard.safety import (
+    OverrideRecord,
+    SafetyViolation,
+    check_mount_path,
+    hard_block_reason,
+)
 
 # Config files the wizard creates. Existence of any → wizard refuses
 # unless --force is passed. Idempotency contract for first-run UX.
@@ -733,6 +740,52 @@ def step_3_mounts(state: WizardState) -> None:
         if not path_raw:
             console.print("[yellow]path required.[/yellow] try again.")
             continue
+        resolved = Path(path_raw).expanduser()
+        # Reject hard-blocked paths (e.g. ~/.ssh, /) up front — before any
+        # dir-creation — since no profile can override them at launch anyway.
+        block = hard_block_reason(resolved)
+        if block is not None:
+            console.print(
+                f"[red]can't add that folder:[/red] {resolved} is hard-blocked "
+                f"({block}); no profile can mount it."
+            )
+            continue
+        # Offer to create the folder if it doesn't exist yet, so the mount
+        # doesn't fail later at launch with "source does not exist".
+        if not resolved.exists():
+            create = _prompt_numeric_choice(
+                f"That folder doesn't exist yet ({resolved}). Create it?",
+                options=["Yes, create it", "No, let me pick another path"],
+            )
+            if create == 2:
+                continue
+            try:
+                resolved.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                console.print(f"[red]couldn't create that folder:[/red] {e}")
+                continue
+            console.print(f"  [green]✓[/green] created {resolved}")
+        # Early safety check — surface hard-blocked paths (e.g. ~/.ssh) here in
+        # the wizard rather than at launch. Broad/cloud locations are advised
+        # only; per-profile override gating happens at launch.
+        other_registered = [
+            Path(m["host_path"]).expanduser() for m in mounts.values()
+        ]
+        try:
+            advisories = _wizard_validate_mount_path(resolved, other_registered)
+        except SafetyViolation as e:
+            console.print(f"[red]can't add that folder:[/red] {e}")
+            continue
+        if advisories:
+            reasons = "; ".join(a.reason for a in advisories)
+            console.print(
+                f"  [yellow]note:[/yellow] this is a broad or sensitive "
+                f"location ({reasons})."
+            )
+            console.print(
+                "  [dim]Launching with it will need a profile that allows "
+                "broad mounts (or `--allow-broad-mount`).[/dim]"
+            )
         # Keep path string as the user typed; mounts.py expands ~ at load.
         name = _prompt_text(
             "  Name (how you'll refer to it later)"
@@ -763,8 +816,6 @@ def step_3_mounts(state: WizardState) -> None:
             "default_mode": default_mode,
             "description": description,
         }
-        # Render absolute path for the confirmation line if the user used ~.
-        resolved = Path(path_raw).expanduser()
         console.print()
         console.print(
             f"  [green]✓[/green] added: {name} → {resolved} "
@@ -795,6 +846,36 @@ def _write_mounts(mounts: dict[str, dict]) -> None:
     """Write the mount registry JSON."""
     payload = {"schema_version": 1, "mounts": mounts}
     atomic_write_text(MOUNTS_FILE, json.dumps(payload, indent=2) + "\n")
+
+
+# Permissive profile used only to run the structural mount checks during the
+# wizard. Profile-dependent gating (broad-mount overrides) is deferred to
+# launch, when the real profile is known — so this opens both gates and never
+# raises on Tier-2 reasons; only profile-independent hard blocks raise here.
+_WIZARD_CHECK_PROFILE = Profile(
+    name="wizard-check",
+    network_enabled=True,
+    duration_seconds=None,
+    allow_broad_mount=True,
+)
+
+
+def _wizard_validate_mount_path(
+    resolved: Path, other_registered: list[Path]
+) -> list[OverrideRecord]:
+    """Early mount safety check during the wizard.
+
+    Raises SafetyViolation on profile-independent hard blocks (e.g. ``~/.ssh``,
+    ``/``) so they surface here rather than at launch. Returns broad/cloud/
+    parent override reasons as advisories — those are enforced per-profile at
+    launch, not blocked here.
+    """
+    return check_mount_path(
+        resolved,
+        _WIZARD_CHECK_PROFILE,
+        allow_broad_mount_flag=True,
+        other_registered_paths=other_registered,
+    )
 
 
 def step_4_presets(state: WizardState) -> None:
@@ -1186,6 +1267,9 @@ def step_done_summary(state: WizardState) -> None:
             "  [green]whiz r hermes[/green]     launch a Hermes session"
         )
     console.print("  [green]whiz --help[/green]       list every command")
+    console.print(
+        "  [green]whiz hermes --help[/green]  manage your Hermes profile"
+    )
     console.print()
 
 
