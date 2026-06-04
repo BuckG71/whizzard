@@ -105,6 +105,11 @@ def test_init_force_overrides_idempotency_check(
 
     monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+    # Isolate from the dev's real ~/.hermes: force Step 1b's Branch B so the
+    # test exercises the --force idempotency override, not a real profile clone
+    # (which would touch the host home and, if ~/.hermes-main exists, surface
+    # "already exists" — unrelated to what this test asserts).
+    monkeypatch.setattr(iw, "_hermes_profile_already_exists", lambda: None)
 
     result = runner.invoke(app, ["init", "--yes", "--force"])
     # With --yes + --force, the welcome + step 1 should at least run
