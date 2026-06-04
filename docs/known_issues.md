@@ -99,6 +99,26 @@ prerequisite (strengthening D-182) + a clean credential-via-env path
 (`secrets:` injection, since the clone carries config but not credentials).
 *Disposition:* fix before launch; decide the prerequisite question first.
 
+### Cell credential injection has no auto-wiring; OAuth path hides the token value
+The cell gets LLM credentials via the harness config's `secrets:` block — env
+injection sourced from OneCLI or a host env-var fallback (D-134/D-162). The
+*mechanism* works (validated in M7 smoke), but there is **no auto-wiring**: the
+user must manually add `"secrets": ["<VAR>"]` to `hermes-cell` and export the
+matching env var. Worse on the OAuth/Claude-Max path — choosing "Claude Pro/Max
+OAuth" in `hermes setup` stores the credential in *Claude Code's credential
+store* (host), not in a file/env the cell can read (and the clone strips `.env`
+per D-80 anyway). So there is **no token value to inject**: the user has to know
+to run `claude setup-token` separately to mint an explicit `sk-ant-oat01-…` for
+`CLAUDE_CODE_OAUTH_TOKEN`. Non-obvious, and each mint adds a 1-year token to the
+account. Surfaced on the Windows fresh-install test 2026-06-04.
+*Fix direction:* wizard auto-wiring — detect the configured provider/auth
+method and wire the `secrets:` entry: for API-key providers, prompt for the key
++ env var; for the OAuth path, prompt to mint a token (`claude setup-token`) and
+wire `CLAUDE_CODE_OAUTH_TOKEN`. Consider OneCLI/vault as the non-plaintext
+default once OneCLI is real (it is currently inert).
+*Disposition:* fix before launch — credential onboarding is load-bearing for a
+usable cell.
+
 ---
 
 ## Deferred features (planned, on the roadmap)
