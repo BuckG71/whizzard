@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+from pathlib import PurePosixPath, PureWindowsPath
 
 from whizzard._platform import (
     DAEMON_DOWN_INDICATORS,
+    docker_host_path,
     is_windows,
     looks_like_daemon_error,
 )
@@ -13,6 +15,13 @@ from whizzard._platform import (
 
 def test_is_windows_matches_os_name():
     assert is_windows() == (os.name == "nt")
+
+
+def test_docker_host_path_uses_forward_slashes():
+    # A Windows-style path renders with forward slashes for the -v spec.
+    assert docker_host_path(PureWindowsPath(r"C:\Users\me\code")) == "C:/Users/me/code"
+    # POSIX paths are unchanged.
+    assert docker_host_path(PurePosixPath("/home/me/code")) == "/home/me/code"
 
 
 def test_looks_like_daemon_error_matches_each_indicator():

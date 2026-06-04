@@ -16,6 +16,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
+from whizzard._platform import docker_host_path
+
 
 @dataclass(frozen=True)
 class ContainerMount:
@@ -38,11 +40,7 @@ class ContainerMount:
     uid_parity: bool = False
 
     def docker_volume_arg(self) -> str:
-        # as_posix(): Docker on Windows needs forward-slash host paths;
-        # a raw Path stringifies with backslashes, which Docker's -v parser
-        # mishandles alongside the drive-letter colon. Matches the same fix
-        # in whizzard.mounts.Mount.docker_volume_arg.
-        return f"{self.host_path.as_posix()}:{self.container_path}:{self.mode}"
+        return f"{docker_host_path(self.host_path)}:{self.container_path}:{self.mode}"
 
 
 class WrapUpStatus(Enum):

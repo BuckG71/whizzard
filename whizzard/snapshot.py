@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from whizzard._atomic import atomic_write_text
+from whizzard._platform import docker_host_path
 from whizzard.config import WHIZZARD_HOME
 from whizzard.mounts import Mount, MountMode
 
@@ -119,7 +120,7 @@ def write_snapshot(
         "mounts": [
             {
                 "name": m.name,
-                "host_path": m.host_path.as_posix(),
+                "host_path": docker_host_path(m.host_path),
                 "container_path": m.container_path(),
                 "mode": str(mode),
             }

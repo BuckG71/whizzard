@@ -18,6 +18,7 @@ same Windows-quirk origin:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 def is_windows() -> bool:
@@ -30,6 +31,17 @@ def is_windows() -> bool:
     (``WindowsPath`` can't be instantiated on POSIX).
     """
     return os.name == "nt"
+
+
+def docker_host_path(p: Path) -> str:
+    """Host side of a Docker ``-v`` spec (or a recorded mount): forward-slash.
+
+    Docker on Windows needs forward-slash host paths — a raw ``Path``
+    stringifies with backslashes (``C:\\Users\\…``) which Docker's ``-v``
+    parser mishandles alongside the drive-letter colon. ``as_posix()`` is a
+    no-op on POSIX. Centralized so the rule and its reason live in one place.
+    """
+    return p.as_posix()
 
 
 # Substrings docker emits when the daemon is unreachable. Stable across

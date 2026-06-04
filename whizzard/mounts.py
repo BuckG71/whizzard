@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from whizzard._platform import docker_host_path
 from whizzard.config import CONFIG_DIR, validate_schema_version
 
 MountMode = Literal["ro", "rw"]
@@ -60,11 +61,7 @@ class Mount:
 
     def docker_volume_arg(self, mode: MountMode | None = None) -> str:
         effective_mode = mode or self.default_mode
-        # `as_posix()` for the host side so the `-v` spec uses forward
-        # slashes — required for Docker on Windows (`C:\Users\…` backslashes
-        # don't parse cleanly against the `:` field separator). No-op on
-        # POSIX, where str() is already forward-slash.
-        return f"{self.host_path.as_posix()}:{self.container_path()}:{effective_mode}"
+        return f"{docker_host_path(self.host_path)}:{self.container_path()}:{effective_mode}"
 
 
 # Bundled mount defaults. These reflect the MVP user's daily-driver setup
