@@ -25,6 +25,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from whizzard._platform import is_windows
 from whizzard.adapters._credentials import (
     fetch_secret,
 )
@@ -394,7 +395,7 @@ def _is_pid_alive(pid: int) -> bool:
     degrades to "not alive" so the gateway-lock preflight treats a lock
     as stale and proceeds rather than crashing the launch.
     """
-    if os.name != "nt":  # POSIX
+    if not is_windows():  # POSIX
         try:
             os.kill(pid, 0)
             return True

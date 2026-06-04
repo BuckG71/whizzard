@@ -41,6 +41,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from whizzard._platform import is_windows
 from whizzard.config import WHIZZARD_HOME, Profile
 
 HOME = Path.home()
@@ -133,7 +134,7 @@ def _windows_exclusions(home: Path) -> dict[str, list[Path]]:
 
 # On Windows, extend the block lists with the validated Windows set. On
 # macOS/Linux this branch never runs, so those platforms are untouched.
-if os.name == "nt":
+if is_windows():
     _win = _windows_exclusions(HOME)
     _EXACT_HARD_BLOCKS += _win["exact"]
     _DEEP_HARD_BLOCKS += _win["deep"]

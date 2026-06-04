@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from whizzard._platform import is_windows, looks_like_daemon_error
 from whizzard.adapters import GenericShellAdapter, HarnessAdapter
 from whizzard.config import STATE_DIR, Profile
 from whizzard.enforcement import monitor_and_enforce
@@ -33,18 +34,6 @@ from whizzard.session_log import (
 from whizzard.snapshot import event_log_path, request_dir, session_dir
 
 CONTAINER_USER = "whizzard"  # non-root, defined in whizzard/_dockerfiles/Dockerfile
-
-
-def _host_is_windows() -> bool:
-    """Whether the *host* running Whizzard is Windows.
-
-    Wrapped in a function (rather than inlining ``os.name == "nt"``) so the
-    UID-parity fallback can be exercised on Linux/macOS CI without
-    monkeypatching the global ``os.name`` — which would leak into pytest's
-    own path handling and crash failure reporting (``WindowsPath`` can't be
-    instantiated on POSIX).
-    """
-    return os.name == "nt"
 
 
 @dataclass
@@ -74,20 +63,6 @@ class DockerDaemonError(Exception):
     """
 
 
-# Substrings docker emits when the daemon is unreachable. Stable across
-# Docker for Mac, Docker Desktop on Windows, and Linux daemons. Matched
-# case-sensitively because docker emits these verbatim.
-_DAEMON_DOWN_INDICATORS = (
-    "Cannot connect to the Docker daemon",
-    "Is the docker daemon running",
-    "error during connect",  # Windows named-pipe variant
-)
-
-
-def _looks_like_daemon_error(stderr: str) -> bool:
-    return any(token in stderr for token in _DAEMON_DOWN_INDICATORS)
-
-
 def docker_available() -> bool:
     return shutil.which("docker") is not None
 
@@ -108,7 +83,7 @@ def docker_daemon_status() -> tuple[str, str]:
       ``"ok"``                 — daemon up, Linux-container mode
 
     Unlike ``docker_available`` (a PATH check only), this talks to the daemon.
-    It reuses ``_looks_like_daemon_error`` (the same matcher ``image_exists``
+    It reuses ``looks_like_daemon_error`` (the same matcher ``image_exists``
     uses) so "not running" is distinguished from other failures, and bounds
     the call with a ``timeout`` so a mid-startup or unreachable-remote daemon
     can't hang the wizard (matching adjust.py's docker-probe timeout). Used by
@@ -132,7 +107,7 @@ def docker_daemon_status() -> tuple[str, str]:
             "remote docker context is unreachable",
         )
     if result.returncode != 0:
-        if _looks_like_daemon_error(result.stderr):
+        if looks_like_daemon_error(result.stderr):
             return ("unreachable", result.stderr.strip())
         return ("daemon_error", result.stderr.strip())
     ostype = result.stdout.strip().lower()
@@ -161,7 +136,7 @@ def image_exists(image: str = WHIZZARD_IMAGE) -> bool:
     )
     if result.returncode == 0:
         return True
-    if _looks_like_daemon_error(result.stderr):
+    if looks_like_daemon_error(result.stderr):
         raise DockerDaemonError(
             f"Docker CLI is installed but the daemon is not reachable.\n"
             f"On macOS / Windows, start Docker Desktop. On Linux, check "
@@ -186,7 +161,7 @@ def get_image_id(image: str = WHIZZARD_IMAGE) -> str | None:
         env=_docker_env(),
     )
     if result.returncode != 0:
-        if _looks_like_daemon_error(result.stderr):
+        if looks_like_daemon_error(result.stderr):
             raise DockerDaemonError(
                 f"Docker daemon unreachable while resolving image ID.\n"
                 f"docker said: {result.stderr.strip()}"
@@ -232,7 +207,7 @@ def image_inspect(image: str = WHIZZARD_IMAGE) -> ImageMeta | None:
         env=_docker_env(),
     )
     if result.returncode != 0:
-        if _looks_like_daemon_error(result.stderr):
+        if looks_like_daemon_error(result.stderr):
             raise DockerDaemonError(
                 f"Docker daemon unreachable while inspecting image.\n"
                 f"docker said: {result.stderr.strip()}"
@@ -343,8 +318,8 @@ def build_run_argv(
     # `os.getuid` does not exist (would raise AttributeError), and the
     # parity trick doesn't apply anyway — Docker Desktop's WSL2 backend
     # maps bind-mount ownership itself. So on Windows we fall back to the
-    # image's default user. (`os.name == "nt"` is the Windows guard.)
-    if needs_uid_parity and not _host_is_windows():
+    # image's default user. (`is_windows()` is the Windows guard.)
+    if needs_uid_parity and not is_windows():
         user_uid = os.getuid()
         user_gid = os.getgid()
         user_arg = f"{user_uid}:{user_gid}"

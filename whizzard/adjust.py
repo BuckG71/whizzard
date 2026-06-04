@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
 
+from whizzard._platform import looks_like_daemon_error
 from whizzard.session_log import SESSIONS_LOG, append_event
 
 # --- Constants --------------------------------------------------------------
@@ -46,18 +47,6 @@ AGENT_ALLOWED_CHANGES: frozenset[str] = frozenset({
 # 99999h`) from effectively unlimiting the session. 7 days is generous
 # for a single extend; users can extend again if they really need more.
 _MAX_EXTEND_SECONDS = 7 * 24 * 60 * 60  # 604_800
-
-# Daemon-down indicators — mirrors `docker_cmd._DAEMON_DOWN_INDICATORS`
-# (kept local to avoid importing the docker_cmd module for the substring
-# match alone). If `docker ps` returns these phrases in stderr, the
-# daemon is unreachable — surfaced as a distinct resolution status so
-# the user sees "Docker Desktop not running" instead of "session not
-# found" (F-G-10).
-_DAEMON_DOWN_INDICATORS = (
-    "Cannot connect to the Docker daemon",
-    "Is the docker daemon running",
-    "error during connect",
-)
 
 
 class DockerDaemonUnavailable(Exception):
@@ -248,7 +237,7 @@ def _docker_label_lookup(session_id_prefix: str) -> list[tuple[str, str]]:
         ) from exc
     if result.returncode != 0:
         stderr = (result.stderr or "")
-        if any(token in stderr for token in _DAEMON_DOWN_INDICATORS):
+        if looks_like_daemon_error(stderr):
             raise DockerDaemonUnavailable(
                 f"Docker daemon unreachable: {stderr.strip()}"
             )

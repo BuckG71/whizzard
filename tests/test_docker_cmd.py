@@ -354,7 +354,7 @@ def test_argv_uid_parity_falls_back_to_named_user_on_windows(tmp_path, monkeypat
     # the 3.11 CI legs). Forcing the helper keeps the rest of the call under
     # the real platform. If the guard regresses, os.getuid() is still
     # present on this macOS/Linux test host, so also assert it isn't called.
-    monkeypatch.setattr(dc, "_host_is_windows", lambda: True)
+    monkeypatch.setattr(dc, "is_windows", lambda: True)
     called = {"getuid": False}
     if hasattr(dc.os, "getuid"):
         real = dc.os.getuid
