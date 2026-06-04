@@ -390,10 +390,22 @@ def _clone_hermes_profile(
 
 def _default_hermes_cloner(name: str, source: Path) -> Path:
     """Default Hermes profile clone — uses the adapter's existing
-    create_hermes_profile primitive (Stage 8 / D-80 / D-86)."""
+    create_hermes_profile primitive (Stage 8 / D-80 / D-86).
+
+    `source` is the detected host profile, which Step 1b only ever resolves to
+    ``~/.hermes`` (see `_hermes_profile_already_exists`). create_hermes_profile
+    addresses that profile by the reserved NAME ``"default"``, not by path —
+    passing the path as `clone_from` builds a garbled ``~/.hermes-<path>``
+    source and fails ("clone source not found").
+    """
     from whizzard.adapters import create_hermes_profile
 
-    result = create_hermes_profile(name, clone_from=str(source))
+    if source.resolve() != (Path.home() / ".hermes").resolve():
+        raise ValueError(
+            f"unsupported clone source {source!r}; the wizard only clones the "
+            "host default profile (~/.hermes)"
+        )
+    result = create_hermes_profile(name, clone_from="default")
     return result.path
 
 

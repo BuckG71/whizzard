@@ -385,6 +385,32 @@ def test_init_step_1b_clone_failure_does_not_abort_wizard(
     assert "simulated clone failure" in result.output
 
 
+def test_default_hermes_cloner_clones_host_default_via_name(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Regression (Windows fresh-install 2026-06-04): the wizard's auto-clone
+    must clone the detected host profile (~/.hermes) via the reserved NAME
+    'default', not by passing the full path as a profile name — which built a
+    garbled ~/.hermes-<path> source and failed with 'clone source not found'.
+    Exercises the REAL _default_hermes_cloner (the failure-path test above
+    substitutes a fake cloner, so it never caught this)."""
+    fake_home = tmp_path / "home"
+    (fake_home / ".hermes").mkdir(parents=True)
+    (fake_home / ".hermes" / "config.yaml").write_text("model: test\n")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    from whizzard import init_wizard as iw
+
+    path = iw._default_hermes_cloner("main", fake_home / ".hermes")
+    assert path == fake_home / ".hermes-main"
+    # The host config came across (auth.json/.env would be excluded per D-80).
+    assert (fake_home / ".hermes-main" / "config.yaml").read_text() == "model: test\n"
+
+
 # ---------- step 2: profiles ----------
 
 
