@@ -222,6 +222,61 @@ def hard_block_reason(host_path: Path) -> str | None:
     return None
 
 
+def _broad_folder_reason(p: Path) -> str | None:
+    """Override reason if ``p`` is inside (or equal to) a broad umbrella folder.
+
+    Mounting a specific subproject (``~/Documents/foo``) is broad enough to
+    deserve the override prompt. One broad-folder reason is enough.
+    """
+    for broad in _BROAD_FOLDERS:
+        b = _resolve_safe(broad)
+        if b is not None and _is_inside_or_eq(p, b):
+            return f"broad folder ({b})"
+    return None
+
+
+def _cloud_sync_reason(p: Path) -> str | None:
+    """Override reason if ``p`` is inside a cloud-sync root, else None.
+
+    Covers the explicit ``_CLOUD_SYNC_ROOTS`` list plus business OneDrive,
+    which uses an org-suffixed folder name (e.g. ``OneDrive - Acme``) the
+    exact-name list misses — any HOME-direct-child named ``OneDrive`` or
+    ``OneDrive -…`` counts. A single match wins (no double-flagging), so this
+    folds in what used to need a ``cloud_flagged`` sentinel. Cross-platform
+    safe — it only adds override gating for a genuinely cloud-synced location.
+    """
+    for cloud in _CLOUD_SYNC_ROOTS:
+        c = _resolve_safe(cloud)
+        if c is not None and _is_inside_or_eq(p, c):
+            return f"cloud sync root ({c})"
+    home_resolved = _resolve_safe(HOME)
+    if home_resolved is not None:
+        try:
+            first = p.relative_to(home_resolved).parts[0]
+        except (ValueError, IndexError):
+            first = ""
+        if first == "OneDrive" or first.startswith("OneDrive -"):
+            return "cloud sync root (OneDrive)"
+    return None
+
+
+def _parent_of_registered_reasons(
+    p: Path, other_registered_paths: Iterable[Path]
+) -> list[str]:
+    """Override reason per already-registered mount that ``p`` is a parent of."""
+    reasons: list[str] = []
+    for registered in other_registered_paths:
+        r = _resolve_safe(Path(registered))
+        if r is None or r == p:
+            continue
+        try:
+            r.relative_to(p)
+        except ValueError:
+            continue
+        reasons.append(f"parent of registered mount ({r})")
+    return reasons
+
+
 def check_mount_path(
     host_path: Path,
     profile: Profile,
@@ -245,80 +300,29 @@ def check_mount_path(
     if block is not None:
         raise SafetyViolation(f"path {p} is hard-blocked ({block}); no override available")
 
-    # Tier 2: override-required reasons accumulate
-    overrides: list[OverrideRecord] = []
+    # Tier 2: override-required reasons accumulate, in a stable order
+    # (broad → cloud → parent-of-registered) so the message text is
+    # deterministic.
+    reasons: list[str] = []
+    if (broad := _broad_folder_reason(p)) is not None:
+        reasons.append(broad)
+    if (cloud := _cloud_sync_reason(p)) is not None:
+        reasons.append(cloud)
+    reasons.extend(_parent_of_registered_reasons(p, other_registered_paths))
 
-    for broad in _BROAD_FOLDERS:
-        b = _resolve_safe(broad)
-        if b is None:
-            continue
-        # Flag exact match or being inside a broad folder umbrella.
-        # Mounting a specific subproject (~/Documents/foo) is broad enough
-        # to deserve the override prompt; the override list says so.
-        if _is_inside_or_eq(p, b):
-            overrides.append(OverrideRecord(
-                path=str(p),
-                reason=f"broad folder ({b})",
-            ))
-            break  # one broad-folder reason is enough
-
-    cloud_flagged = False
-    for cloud in _CLOUD_SYNC_ROOTS:
-        c = _resolve_safe(cloud)
-        if c is None:
-            continue
-        if _is_inside_or_eq(p, c):
-            overrides.append(OverrideRecord(
-                path=str(p),
-                reason=f"cloud sync root ({c})",
-            ))
-            cloud_flagged = True
-            break
-
-    # Business OneDrive uses an org-suffixed folder name (e.g.
-    # "OneDrive - Acme"), which the exact-name entry above misses. Treat any
-    # HOME-direct-child whose name is "OneDrive" or starts with "OneDrive -"
-    # as a cloud sync root. Cross-platform safe — it only adds override
-    # gating for a genuinely cloud-synced location.
-    if not cloud_flagged:
-        home_resolved = _resolve_safe(HOME)
-        if home_resolved is not None:
-            try:
-                first = p.relative_to(home_resolved).parts[0]
-            except (ValueError, IndexError):
-                first = ""
-            if first == "OneDrive" or first.startswith("OneDrive -"):
-                overrides.append(OverrideRecord(
-                    path=str(p),
-                    reason="cloud sync root (OneDrive)",
-                ))
-
-    # Parent of any registered mount target
-    for registered in other_registered_paths:
-        r = _resolve_safe(Path(registered))
-        if r is None or r == p:
-            continue
-        try:
-            r.relative_to(p)
-            overrides.append(OverrideRecord(
-                path=str(p),
-                reason=f"parent of registered mount ({r})",
-            ))
-        except ValueError:
-            pass
+    overrides = [OverrideRecord(path=str(p), reason=r) for r in reasons]
 
     if overrides:
+        joined = "; ".join(reasons)
         if not profile.allow_broad_mount:
-            reasons = "; ".join(o.reason for o in overrides)
             raise SafetyViolation(
                 f"path {p} requires broad-mount override but profile "
-                f"{profile.name!r} blocks it. Reasons: {reasons}"
+                f"{profile.name!r} blocks it. Reasons: {joined}"
             )
         if not allow_broad_mount_flag:
-            reasons = "; ".join(o.reason for o in overrides)
             raise SafetyViolation(
                 f"path {p} requires broad-mount override; pass "
-                f"--allow-broad-mount to opt in. Reasons: {reasons}"
+                f"--allow-broad-mount to opt in. Reasons: {joined}"
             )
 
     return overrides
