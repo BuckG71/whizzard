@@ -162,6 +162,14 @@ def test_default_harnesses_returns_copy():
     assert b["generic"]["start_command"] != "tampered"
 
 
+def test_bundled_hermes_cell_default_is_interactive_not_gateway():
+    """D-181: the bundled hermes-cell starts interactive `hermes`, not
+    `hermes gateway run`. Gateway is opt-in via a start_command override."""
+    hermes_cell = default_harnesses()["hermes-cell"]
+    assert hermes_cell["start_command"] == "hermes"
+    assert "gateway" not in hermes_cell["start_command"]
+
+
 def test_bundled_example_file_parses_cleanly():
     """The repo's harnesses.json.example must be a valid config."""
     example = Path(__file__).resolve().parent.parent / "config" / "harnesses.json.example"

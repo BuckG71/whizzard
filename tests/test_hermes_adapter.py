@@ -178,9 +178,16 @@ def test_hermes_preflight_returns_ok_when_no_hermes_home_with_allow_ephemeral():
     assert result.cleanup_note == ""
 
 
+def _gateway_adapter(tmp_path):
+    """Gateway-mode Hermes adapter. The gateway.lock pre-check only runs in
+    gateway mode (D-87/D-181), so the lock tests opt into it explicitly."""
+    return HermesAdapter(
+        config={"hermes_home": str(tmp_path), "start_command": "hermes gateway run"}
+    )
+
+
 def test_hermes_preflight_returns_ok_when_no_lock_file(tmp_path):
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
-    result = adapter.preflight()
+    result = _gateway_adapter(tmp_path).preflight()
     assert result.ok is True
 
 
@@ -189,8 +196,7 @@ def test_hermes_preflight_blocks_when_pid_alive(tmp_path, monkeypatch):
     (tmp_path / "gateway.lock").write_text(json.dumps(lock_data))
     monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: True)
 
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
-    result = adapter.preflight()
+    result = _gateway_adapter(tmp_path).preflight()
 
     assert result.ok is False
     assert "12345" in result.reason
@@ -204,8 +210,7 @@ def test_hermes_preflight_clears_stale_lock_and_proceeds(tmp_path, monkeypatch):
     lock_path.write_text(json.dumps(lock_data))
     monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: False)
 
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
-    result = adapter.preflight()
+    result = _gateway_adapter(tmp_path).preflight()
 
     assert result.ok is True
     assert "999999" in result.cleanup_note
@@ -215,17 +220,31 @@ def test_hermes_preflight_clears_stale_lock_and_proceeds(tmp_path, monkeypatch):
 
 def test_hermes_preflight_treats_malformed_lock_as_no_lock(tmp_path):
     (tmp_path / "gateway.lock").write_text("not valid json {{{")
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
-    result = adapter.preflight()
+    result = _gateway_adapter(tmp_path).preflight()
     # Malformed → proceed; Hermes will overwrite on its own launch.
     assert result.ok is True
 
 
 def test_hermes_preflight_treats_lock_without_pid_as_no_lock(tmp_path):
     (tmp_path / "gateway.lock").write_text(json.dumps({"kind": "hermes-gateway"}))
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
-    result = adapter.preflight()
+    result = _gateway_adapter(tmp_path).preflight()
     assert result.ok is True
+
+
+def test_hermes_preflight_interactive_default_ignores_gateway_lock(tmp_path, monkeypatch):
+    """D-181/D-87: the default (interactive) start_command must NOT pre-check
+    the gateway.lock — a live lock left by a gateway must not block an
+    interactive `whiz r hermes`."""
+    (tmp_path / "gateway.lock").write_text(
+        json.dumps({"pid": 12345, "kind": "hermes-gateway", "argv": []})
+    )
+    monkeypatch.setattr(hermes_module, "_is_pid_alive", lambda pid: True)
+
+    # Default start_command is interactive `hermes` (no override).
+    result = HermesAdapter(config={"hermes_home": str(tmp_path)}).preflight()
+
+    assert result.ok is True  # not blocked despite a live gateway lock
+    assert (tmp_path / "gateway.lock").exists()  # left untouched
 
 
 @pytest.mark.skipif(
@@ -973,7 +992,11 @@ def test_preflight_reports_truthfully_when_unlink_fails(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "unlink", failing_unlink)
 
-    adapter = HermesAdapter(config={"hermes_home": str(tmp_path)})
+    # Gateway mode — the stale-lock cleanup path only runs when gateway.lock is
+    # pre-checked (D-87/D-181), i.e. when start_command is gateway.
+    adapter = HermesAdapter(
+        config={"hermes_home": str(tmp_path), "start_command": "hermes gateway run"}
+    )
     result = adapter.preflight()
 
     assert result.ok is True  # not blocking, just informational

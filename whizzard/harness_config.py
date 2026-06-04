@@ -45,12 +45,16 @@ _DEFAULT_HARNESSES: dict[str, dict] = {
     # per the same pattern as D-157.
     "hermes-cell": {
         "type": "agent",
-        "start_command": "hermes gateway run",
+        # D-181: interactive terminal chat is the *default invocation*, not
+        # `hermes gateway run`. The harness stays discord-capable (the
+        # `platforms` ceiling), but a bare `hermes` start ignores it; gateway
+        # mode is opted into by overriding start_command.
+        "start_command": "hermes",
         "wrap_up_command": "/quit",
         "wrap_up_grace_seconds": 30,
         "hermes_home": "~/.hermes-whizzard-cell",
         "platforms": ["discord"],
-        "description": "Whizzard-wrapped Hermes (gateway mode, Discord active)",
+        "description": "Whizzard-wrapped Hermes (interactive chat; gateway/Discord opt-in)",
     },
 }
 

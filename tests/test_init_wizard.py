@@ -575,6 +575,9 @@ def test_init_yes_mode_full_flow_writes_all_four_config_files(
     harnesses = json.loads(iw.HARNESSES_FILE.read_text())["harnesses"]
     assert "hermes-cell" in harnesses
     assert harnesses["hermes-cell"]["hermes_home"] == "~/.hermes-main"
+    # D-181: the wizard-written default is interactive `hermes`, not gateway —
+    # a fresh `whiz r hermes` should drop into a chat, not an idle gateway.
+    assert harnesses["hermes-cell"]["start_command"] == "hermes"
 
 
 def test_init_step_4_attaches_registered_mount_in_full_interactive(

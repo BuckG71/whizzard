@@ -755,6 +755,14 @@ class HermesAdapter:
         except HermesAuthJsonPresentError as e:
             return PreflightResult(ok=False, reason=str(e))
 
+        # D-87/D-181: the gateway.lock pre-check is a GATEWAY-mode enforcement
+        # point. In interactive mode (the default since D-181) no gateway.lock
+        # is written, and Hermes' own SQLite/fcntl locking handles contention,
+        # so the lock check does not apply — skip it rather than spuriously
+        # block an interactive launch on a lock left by a gateway.
+        if "gateway" not in self.start_command():
+            return PreflightResult(ok=True)
+
         lock = _read_gateway_lock(hermes_home)
         if lock is None:
             return PreflightResult(ok=True)

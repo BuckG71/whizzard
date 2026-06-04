@@ -1158,11 +1158,15 @@ def _write_wizard_harnesses() -> None:
     harnesses = {
         "hermes-cell": {
             "type": "agent",
-            "start_command": "hermes gateway run",
+            # D-181: bare `hermes` (interactive chat) is the default, not
+            # `hermes gateway run` — a fresh `whiz r hermes` should drop the
+            # user into a chat, not an idle gateway. Gateway is opt-in via a
+            # manual start_command override.
+            "start_command": "hermes",
             "wrap_up_command": "/quit",
             "wrap_up_grace_seconds": 30,
             "hermes_home": "~/.hermes-main",
-            "description": "Hermes (gateway mode) inside the Whizzard sandbox",
+            "description": "Hermes (interactive chat) inside the Whizzard sandbox",
         },
     }
     payload = {"schema_version": 1, "harnesses": harnesses}
