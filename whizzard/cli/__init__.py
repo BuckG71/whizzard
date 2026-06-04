@@ -63,9 +63,12 @@ app = typer.Typer(
     no_args_is_help=False,
     add_completion=False,
     # Footer under the command panels: how to invoke a command and find flags.
+    # A blank line (\n\n) renders as two separate blocks — Typer's Rich help
+    # reflows single newlines into one line, so the paragraph break is what
+    # keeps these on two lines.
     epilog=(
-        "Run any command as  whiz <command>  ·  "
-        "see its flags with  whiz <command> --help"
+        "Run any command as  whiz <command>\n\n"
+        "See its flags with  whiz <command> --help"
     ),
 )
 app.add_typer(profiles_app, name="profiles", rich_help_panel=_PANEL_INSPECT)

@@ -405,8 +405,9 @@ def test_help_groups_commands_into_workflow_panels_with_footer():
         "Shortcuts",
     ):
         assert panel in result.output, f"missing help panel: {panel}"
-    # Footer: invocation + flag discovery. Assert on the distinctive phrases
-    # rather than the full sentence — rich wraps the epilog at the terminal
-    # width, so "whiz <command> --help" can straddle two lines.
+    # Footer: invocation + flag discovery, rendered on two separate lines.
+    # Assert on the distinctive phrases rather than the full sentence — rich
+    # wraps the epilog at the terminal width, so "whiz <command> --help" can
+    # straddle two lines.
     assert "Run any command as" in result.output
-    assert "see its flags with" in result.output
+    assert "See its flags with" in result.output
