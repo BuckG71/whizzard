@@ -46,6 +46,12 @@ ARG HERMES_REF=e8b9369a9
 RUN pip install --no-cache-dir --break-system-packages \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
 
+# Anthropic provider SDK. Hermes treats provider packages as optional extras,
+# so the bare install above does not pull it in — without it the cell can't
+# talk to Claude (the default/recommended model). Pinned floor matches Hermes's
+# own requirement. Other providers' SDKs would be added the same way.
+RUN pip install --no-cache-dir --break-system-packages "anthropic>=0.39.0"
+
 # Whiz in-cell MCP cooperation layer (D-167).
 # - `mcp` SDK so mcp_server.py's `FastMCP` import works inside the cell.
 # - `mcp_server.py` as a standalone script. Self-contained (stdlib + lazy

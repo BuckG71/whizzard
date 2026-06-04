@@ -34,6 +34,22 @@ def test_mcp_sdk_installed_in_hermes_cell(whizzard_hermes_image: str) -> None:
     )
 
 
+def test_anthropic_sdk_installed_in_hermes_cell(whizzard_hermes_image: str) -> None:
+    """The anthropic provider SDK is importable in the cell. Hermes treats
+    provider packages as optional, so a bare hermes-agent install omits it and
+    the cell can't reach Claude (the default model) — surfaced on the Windows
+    fresh-install test 2026-06-04 as 'the anthropic package is required'."""
+    result = subprocess.run(
+        ["docker", "run", "--rm", whizzard_hermes_image,
+         "python3", "-c", "import anthropic"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, (
+        f"anthropic not importable in the Hermes cell — Dockerfile.hermes drift?\n"
+        f"stderr: {result.stderr}"
+    )
+
+
 def test_mcp_server_script_present_in_hermes_cell(whizzard_hermes_image: str) -> None:
     """mcp_server.py is COPY'd into /opt/whiz/ as a standalone script
     (D-167); the cell ships exactly that one file, not the whizzard package."""
