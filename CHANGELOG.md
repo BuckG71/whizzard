@@ -17,6 +17,11 @@ planned through v1.0.
   and Hermes execution images, sets up profiles / mounts / harnesses /
   presets, and detects existing Hermes installs to clone profiles
   automatically. Non-interactive `--yes` mode for CI / scripted installs.
+- **Sandbox boundary cues.** `whiz r` prints an explicit "entering the
+  sandbox" banner on launch and a "you are back on your host — uncontained"
+  banner on exit, and the `whiz init` summary warns that running the harness
+  directly (outside Whizzard) is uncontained. Makes the contained vs.
+  uncontained boundary impossible to miss.
 - **`whiz hermes image build` CLI verb.** First-class command for
   building `whizzard-hermes:latest` from the bundled `Dockerfile.hermes`.
   Mirrors the existing `whiz image build` shape; called by `whiz init`.
