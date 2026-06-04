@@ -81,6 +81,24 @@ needs syncing for the changes to take effect locally.
 *Disposition:* a one-time `whiz profiles init --force` (or manual edit) when
 convenient.
 
+### In-cell first-run Hermes setup poisons the profile (conflicts with D-80)
+When the cell's Hermes isn't configured, it offers a first-run setup wizard;
+if the user authenticates there (e.g. Claude OAuth), Hermes writes `auth.lock`
+(and credential state) into its `HERMES_HOME` — which is the *mounted* profile.
+That write persists to the host profile, and D-80's mount-time preflight then
+**refuses to mount a profile containing `auth.lock`** — bricking every
+subsequent launch. So the "run setup inside the cell" first-run path (assumed
+to be the desired UX) creates exactly the file D-80 forbids. The intended model
+is creds-via-env (D-134/D-162); the cell should never authenticate into its
+mounted profile. Surfaced on the Windows test 2026-06-04.
+*Fix direction (pending the install-order decision):* the cleanest fix removes
+the in-cell-setup path entirely — require a *configured* host Hermes before
+`whiz init` and always clone it (auth excluded), so the cell never prompts for
+setup. Couples to the open question of whether to make host-Hermes-first a hard
+prerequisite (strengthening D-182) + a clean credential-via-env path
+(`secrets:` injection, since the clone carries config but not credentials).
+*Disposition:* fix before launch; decide the prerequisite question first.
+
 ---
 
 ## Deferred features (planned, on the roadmap)
