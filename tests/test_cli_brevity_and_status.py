@@ -289,6 +289,36 @@ def test_preset_launch_writes_preset_field_to_session_log(
     assert captured.get("preset_name") == "shell"
 
 
+def test_launch_prints_sandbox_boundary_banners(
+    isolated_whizzard_home: Path,
+    fake_credentials,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A contained session announces both crossings: an entry banner on launch
+    and an exit banner when the container returns to the host — so a silent
+    exit can't be mistaken for still being inside the sandbox."""
+    from whizzard.cli import _launch as cli_launch
+    from whizzard.docker_cmd import RunResult
+
+    monkeypatch.setattr(
+        cli_launch, "run_shell", lambda *a, **k: RunResult(container_id="c", exit_code=0)
+    )
+    monkeypatch.setattr(cli_launch, "docker_available", lambda: True)
+    monkeypatch.setattr(cli_launch, "image_exists", lambda image: True)
+
+    result = runner.invoke(app, ["preset", "launch", "shell"])
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    # Entry: explicit "you are now inside a contained session".
+    assert "Entering the Whizzard sandbox" in flat
+    # Exit: explicit "you are back on the host, this is no longer contained".
+    assert "sandbox session ended" in flat
+    assert "back on your HOST" in flat
+    assert "whiz r shell" in flat  # relaunch hint names the preset
+    # The stubbed run_shell returns instantly → fast-exit hint fires.
+    assert "one-time setup step" in flat
+
+
 # --- Stage 15: status duration-remaining display --------------------------
 
 

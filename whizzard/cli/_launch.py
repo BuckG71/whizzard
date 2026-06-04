@@ -8,6 +8,8 @@ code.
 
 from __future__ import annotations
 
+import time
+
 import typer
 
 from whizzard.adapters import (
@@ -37,6 +39,47 @@ from whizzard.mounts import (
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
 from whizzard.session_log import new_session_id
 from whizzard.snapshot import write_snapshot
+
+# A session that ends almost immediately usually means a one-time setup step
+# ran and exited (or an early error) rather than a real working session — worth
+# a nudge so the quick return doesn't read as a crash.
+_FAST_EXIT_SECONDS = 10
+
+
+def _print_sandbox_exit_banner(
+    *, preset_name: str | None, harness_name: str, fast_exit: bool
+) -> None:
+    """Announce that the contained session ended and the user is back on the
+    host.
+
+    For a containment tool the worst failure mode is a user unknowingly running
+    the agent uncontained on the host while believing they're still inside the
+    sandbox — a contained session can exit silently (e.g. the harness ran a
+    one-time setup and quit) and drop the user back at their host shell with no
+    marker. This bookends the entry banner so every boundary crossing is
+    announced.
+    """
+    relaunch = (
+        f"whiz r {preset_name}" if preset_name else f"whiz run --harness {harness_name}"
+    )
+    line = "─" * 60
+    console.print()
+    console.print(f"[dim]{line}[/dim]")
+    console.print(
+        "[bold]⊞ Whizzard sandbox session ended — you are back on your HOST.[/bold]"
+    )
+    console.print(
+        "  Commands you run here are [bold]not[/bold] contained. Start another "
+        "sandboxed session with:"
+    )
+    console.print(f"    [green]{relaunch}[/green]")
+    if fast_exit:
+        console.print(
+            "  [dim]The session ended within a few seconds — if this was a "
+            "one-time setup step, run the same command again to start your "
+            "session.[/dim]"
+        )
+    console.print(f"[dim]{line}[/dim]")
 
 
 def _perform_launch(
@@ -151,6 +194,10 @@ def _perform_launch(
     session_id = new_session_id()
     if dry_run:
         console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
+    else:
+        console.print(
+            "[bold]▶ Entering the Whizzard sandbox[/bold] — this session is contained."
+        )
     console.print(f"[bold]Whizzard Profile:[/bold] {prof.name.upper()}")
     console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
     console.print(f"[bold]Duration:[/bold] {duration}")
@@ -242,6 +289,7 @@ def _perform_launch(
     # red-error path every other launch failure uses. No container has
     # started yet at the raise point (container_env runs in
     # build_run_argv), so no cleanup is needed.
+    launch_started = time.monotonic()
     try:
         result = run_shell(
             prof,
@@ -265,4 +313,12 @@ def _perform_launch(
         # the two leaks a DockerDaemonError past run_shell to the user.
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=125) from e
+
+    # The container has exited — the user is back on the host shell. Announce
+    # the boundary so a silent return can't be mistaken for still being inside.
+    _print_sandbox_exit_banner(
+        preset_name=preset_name,
+        harness_name=adapter.name,
+        fast_exit=(time.monotonic() - launch_started) < _FAST_EXIT_SECONDS,
+    )
     raise typer.Exit(code=result.exit_code)
