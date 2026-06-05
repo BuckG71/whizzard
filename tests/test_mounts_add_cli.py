@@ -102,3 +102,27 @@ def test_add_rejects_bad_mode(isolated_whizzard_home: Path, tmp_path: Path):
     result = runner.invoke(app, ["mounts", "add", str(tmp_path / "p"), "--mode", "weird"])
     assert result.exit_code == 2
     assert "'ro'" in result.output and "'rw'" in result.output
+
+
+def test_add_pick_uses_dialog_result(
+    isolated_whizzard_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    picked = tmp_path / "picked"
+    picked.mkdir()
+    from whizzard import _platform
+
+    monkeypatch.setattr(_platform, "pick_directory", lambda prompt="": str(picked))
+    result = runner.invoke(app, ["mounts", "add", "--pick", "--name", "pk"])
+    assert result.exit_code == 0, result.output
+    assert "pk" in _registry(isolated_whizzard_home)
+
+
+def test_add_pick_cancelled_exits_cleanly(
+    isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from whizzard import _platform
+
+    monkeypatch.setattr(_platform, "pick_directory", lambda prompt="": None)
+    result = runner.invoke(app, ["mounts", "add", "--pick"])
+    assert result.exit_code == 1
+    assert "no folder selected" in result.output

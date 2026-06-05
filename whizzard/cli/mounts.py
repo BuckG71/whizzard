@@ -79,6 +79,10 @@ def mounts_add_cmd(
         bool,
         typer.Option("--create", help="Create the folder if it doesn't exist."),
     ] = False,
+    pick: Annotated[
+        bool,
+        typer.Option("--pick", help="Choose the folder with a native file dialog instead of typing a path."),
+    ] = False,
 ) -> None:
     """Register a host folder as a named mount.
 
@@ -86,8 +90,19 @@ def mounts_add_cmd(
     ``~/.ssh``, ``/``) are refused, broad/cloud locations get an advisory, and
     the registered mode is the ceiling — a launch can narrow it, never widen it.
     """
+    if pick:
+        from whizzard._platform import pick_directory
+
+        chosen = pick_directory()
+        if chosen is None:
+            console.print(
+                "[yellow]no folder selected[/yellow] (cancelled, or no file "
+                "dialog is available here). Provide a path instead."
+            )
+            raise typer.Exit(code=1)
+        path = chosen
     if not path:
-        console.print("[red]error: provide a folder path.[/red]")
+        console.print("[red]error: provide a folder path (or use --pick).[/red]")
         raise typer.Exit(code=2)
     if mode not in ("ro", "rw"):
         console.print(f"[red]error: --mode must be 'ro' or 'rw', got {mode!r}.[/red]")

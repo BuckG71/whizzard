@@ -40,3 +40,57 @@ def test_looks_like_daemon_error_real_mac_message():
 def test_looks_like_daemon_error_ignores_unrelated_stderr():
     assert not looks_like_daemon_error("Error: No such image: whizzard:latest")
     assert not looks_like_daemon_error("")
+
+
+# --- pick_directory: dispatch / parse / fallback (no real dialog opens) ----
+
+
+class _Result:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _force_darwin(monkeypatch):
+    from whizzard import _platform
+
+    monkeypatch.setattr(_platform, "is_windows", lambda: False)
+    monkeypatch.setattr(_platform.sys, "platform", "darwin")
+
+
+def test_pick_directory_returns_chosen_path(monkeypatch):
+    from whizzard import _platform
+
+    _force_darwin(monkeypatch)
+    monkeypatch.setattr(_platform.subprocess, "run", lambda *a, **k: _Result(0, "/Users/me/proj\n"))
+    assert _platform.pick_directory() == "/Users/me/proj"
+
+
+def test_pick_directory_none_on_cancel(monkeypatch):
+    from whizzard import _platform
+
+    _force_darwin(monkeypatch)
+    monkeypatch.setattr(_platform.subprocess, "run", lambda *a, **k: _Result(1, "", "User canceled"))
+    assert _platform.pick_directory() is None
+
+
+def test_pick_directory_none_on_error(monkeypatch):
+    from whizzard import _platform
+
+    _force_darwin(monkeypatch)
+
+    def boom(*a, **k):
+        raise OSError("osascript missing")
+
+    monkeypatch.setattr(_platform.subprocess, "run", boom)
+    assert _platform.pick_directory() is None
+
+
+def test_pick_directory_linux_without_dialog_tool_returns_none(monkeypatch):
+    from whizzard import _platform
+
+    monkeypatch.setattr(_platform, "is_windows", lambda: False)
+    monkeypatch.setattr(_platform.sys, "platform", "linux")
+    monkeypatch.setattr(_platform.shutil, "which", lambda name: None)
+    assert _platform.pick_directory() is None

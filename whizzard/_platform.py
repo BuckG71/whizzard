@@ -18,6 +18,9 @@ same Windows-quirk origin:
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -42,6 +45,50 @@ def docker_host_path(p: Path) -> str:
     no-op on POSIX. Centralized so the rule and its reason live in one place.
     """
     return p.as_posix()
+
+
+def pick_directory(prompt: str = "Select a folder to mount") -> str | None:
+    """Open the OS's native folder-picker and return the chosen path, or None.
+
+    Shells out to the platform's own dialog so Whizzard adds **no GUI
+    dependency** (no tkinter): a PowerShell folder browser on Windows,
+    ``osascript`` on macOS, ``zenity``/``kdialog`` on Linux. Returns None on
+    cancel, on any error, or when there's no dialog tool / no display — callers
+    must fall back to text entry rather than treat None as a failure.
+
+    ``prompt`` is a fixed caller-supplied string (never user input), so it is
+    safe to interpolate into the dialog command.
+    """
+    try:
+        if is_windows():
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms;"
+                "$d = New-Object System.Windows.Forms.FolderBrowserDialog;"
+                f"$d.Description = '{prompt}';"
+                "if ($d.ShowDialog() -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }"
+            )
+            cmd = ["powershell", "-NoProfile", "-STA", "-Command", ps]
+        elif sys.platform == "darwin":
+            cmd = [
+                "osascript",
+                "-e",
+                f'POSIX path of (choose folder with prompt "{prompt}")',
+            ]
+        else:
+            tool = shutil.which("zenity") or shutil.which("kdialog")
+            if tool is None:
+                return None
+            if tool.endswith("kdialog"):
+                cmd = [tool, "--getexistingdirectory", str(Path.home())]
+            else:
+                cmd = [tool, "--file-selection", "--directory", f"--title={prompt}"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            return None  # cancelled, or the dialog couldn't open
+        chosen = result.stdout.strip()
+        return chosen or None
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 # Substrings docker emits when the daemon is unreachable. Stable across
