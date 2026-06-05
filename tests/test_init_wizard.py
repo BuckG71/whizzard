@@ -574,6 +574,42 @@ def test_init_step_3_rejects_hard_blocked_path_then_recovers(
     assert list(payload["mounts"].keys()) == ["okdir"]
 
 
+def test_init_step_3_pick_uses_folder_dialog(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    """Typing 'pick' at the mount-path prompt opens the native folder dialog
+    and registers whatever it returns (dialog mocked — no GUI in tests)."""
+    fake_home = _stub_through_step_1b(monkeypatch, tmp_path)
+    picked = fake_home / "picked"
+    picked.mkdir()
+
+    from whizzard import init_wizard as iw
+
+    monkeypatch.setattr(iw, "pick_directory", lambda prompt="": str(picked))
+
+    user_input = "\n".join([
+        "", "", "",            # welcome, step 1, step 1b
+        "1",                   # step 2: all 5 defaults
+        "1",                   # step 3: yes, add a folder
+        "pick",                # path → opens the (mocked) dialog
+        "pickedmount",         # name
+        "",                    # description
+        "1",                   # mode: read-only
+        "2",                   # add another folder? No
+        "1",                   # step 4: bundled hermes
+        "2",                   # attach pickedmount? No
+        "",                    # step 5 Press Enter
+    ]) + "\n"
+
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0, result.output
+    assert "picked:" in result.output  # confirmation line
+    payload = json.loads(iw.MOUNTS_FILE.read_text())
+    assert "pickedmount" in payload["mounts"]
+
+
 # ---------- step 4 + 5 + done ----------
 
 

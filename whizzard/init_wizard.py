@@ -52,6 +52,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from whizzard._atomic import atomic_write_text
+from whizzard._platform import pick_directory
 from whizzard.cli._shared import console
 from whizzard.config import (
     CONFIG_DIR,
@@ -748,7 +749,20 @@ def step_3_mounts(state: WizardState) -> None:
 
     while add_choice == 1:
         console.print()
-        path_raw = _prompt_text(f"  Path on your computer (e.g. {_example_mount_path()})")
+        path_raw = _prompt_text(
+            f"  Path on your computer (e.g. {_example_mount_path()}) "
+            "— or type 'pick' to browse"
+        )
+        if path_raw.strip().lower() == "pick":
+            chosen = pick_directory()
+            if chosen is None:
+                console.print(
+                    "[yellow]no folder selected[/yellow] (cancelled, or no file "
+                    "dialog available here). Type a path instead."
+                )
+                continue
+            path_raw = chosen
+            console.print(f"  [dim]picked: {chosen}[/dim]")
         if not path_raw:
             console.print("[yellow]path required.[/yellow] try again.")
             continue
