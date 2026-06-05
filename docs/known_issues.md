@@ -131,8 +131,15 @@ manual-env-var sprawl entirely and is the clean substrate for multi-provider
 support. Explore the full ramifications (which providers to bundle vs. install
 on demand, how the wizard picks the provider, OneCLI rollout sequencing) before
 committing to an approach.
+*Cross-harness (maintainer note 2026-06-05):* credential handling is not a
+Hermes problem — **every** harness Whizzard adds (Claude Code, Codex, NanoClaw,
+…) brings its own provider/auth model and its own set of keys. So the real
+deliverable is a **comprehensive, harness-neutral credential-handling plan** (a
+credential layer the adapters plug into), not a per-harness patch. Treat this as
+a first-class design workstream, not a Hermes footnote.
 *Disposition:* fix before launch — credential onboarding is load-bearing for a
-usable cell; the provider-scale piece is exploration-then-design.
+usable cell; the provider-scale piece is exploration-then-design, and the
+harness-neutral credential plan is its own workstream.
 
 ---
 
