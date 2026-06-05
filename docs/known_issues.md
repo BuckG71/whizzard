@@ -116,8 +116,23 @@ method and wire the `secrets:` entry: for API-key providers, prompt for the key
 + env var; for the OAuth path, prompt to mint a token (`claude setup-token`) and
 wire `CLAUDE_CODE_OAUTH_TOKEN`. Consider OneCLI/vault as the non-plaintext
 default once OneCLI is real (it is currently inert).
+*Provider-scale dimension (needs exploration — surfaced 2026-06-05):* Hermes
+supports ~20 inference providers, and to be a real harness wrapper Whizzard must
+support all of them — across **two** seams that both currently assume Anthropic:
+(1) the **cell image bakes in `anthropic` only** (`Dockerfile.hermes` hardcodes
+the SDK), so the provider SDK needs parameterizing (build `ARG` derived from the
+configured provider, or bundle the common set) — fold into the version-bump
+unit; (2) **credential injection per provider** — each provider has its own
+key/env var, so the current "manually add a `secrets:` entry + `export` one env
+var" path scales poorly to 20 providers (friction + error-prone, easy to set the
+wrong var). This is the strongest argument to **make the OneCLI integration real
+sooner rather than later**: a vault that resolves credentials by name removes the
+manual-env-var sprawl entirely and is the clean substrate for multi-provider
+support. Explore the full ramifications (which providers to bundle vs. install
+on demand, how the wizard picks the provider, OneCLI rollout sequencing) before
+committing to an approach.
 *Disposition:* fix before launch — credential onboarding is load-bearing for a
-usable cell.
+usable cell; the provider-scale piece is exploration-then-design.
 
 ---
 
