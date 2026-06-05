@@ -212,6 +212,40 @@ def resolve_mount_spec(
     return mount, requested
 
 
+def load_mount_specs(path: Path | None = None) -> dict[str, dict]:
+    """Raw mount-spec dicts from the file, host_path strings **preserved** (not
+    resolved). Returns ``{}`` when no file exists.
+
+    Use this (not `load_mounts`) when adding/removing a mount and writing the
+    registry back: `load_mounts` canonicalizes every host_path via
+    ``expanduser().resolve()``, so a load→save cycle would silently rewrite
+    other entries' stored forms (e.g. ``~/code`` → ``/Users/x/code``). This
+    keeps existing entries verbatim.
+    """
+    target = path or MOUNTS_FILE
+    if not target.exists():
+        return {}
+    try:
+        data = json.loads(target.read_text())
+    except json.JSONDecodeError as e:
+        raise MountRegistryError(f"invalid {target}: {e}") from e
+    if not isinstance(data, dict):
+        raise MountRegistryError(f"{target}: top-level must be an object")
+    specs = data.get("mounts", {})
+    if not isinstance(specs, dict):
+        raise MountRegistryError(f"{target}: 'mounts' must be an object")
+    return specs
+
+
+def write_mount_specs(specs: dict[str, dict], path: Path | None = None) -> None:
+    """Atomically write raw mount specs under the standard envelope."""
+    from whizzard._atomic import atomic_write_text
+
+    target = path or MOUNTS_FILE
+    payload = {"schema_version": 1, "mounts": specs}
+    atomic_write_text(target, json.dumps(payload, indent=2) + "\n")
+
+
 # Stage 2 had `basic_path_sanity_check` here; superseded by the full policy
 # in `whizzard.safety` as of Stage 6. Path-existence and root-mount rejection
 # are now part of `whizzard.safety.check_mount_path`.
