@@ -32,3 +32,6 @@ htmlcov/
 
 # Local-only docs — never pushed to remote (see docs/internal/README.md)
 docs/internal/
+
+# ChatGPT/Codex artifact — mirror of CLAUDE.md, not tracked (may delete later)
+AGENTS.md
