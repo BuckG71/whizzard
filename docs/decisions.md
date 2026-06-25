@@ -2293,7 +2293,6 @@ Any other harnesses — OpenClaw, Claude Code, Codex, Cursor, etc. — are not c
 (Status: open across the document — collected here for visibility. Full entries above.)
 
 - **D-131** — OSS-launch milestone scope
-- **D-132** — Sidecar-proxy mechanism in OSS-launch
 - **D-133** — Failure-mode semantics across new controls
 - **D-135** — Read-only project-root mounting as a Whizzard pattern
 - **D-136** — NanoClaw upstream collaboration
@@ -2351,13 +2350,19 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 **Type:** architecture
 
-**Door Type:** one-way (sidecar proxy is an enabling architectural primitive — choosing to add it commits to a richer in-cell network surface; choosing not to forecloses several adjacent capabilities).
+**Tags:** post-mvp, integration
 
-**Decision:** Whether to introduce a sidecar-proxy mechanism in OSS-launch (which unlocks egress allowlists, MCP tool shaping, traffic logging, vault generalization) is unresolved.
+**Door Type:** one-way (an enabling architectural primitive — adding it commits to a richer in-cell network surface; not adding it forecloses several adjacent capabilities).
 
-**Source:** docs/control_surface.md (Open items #3)
+**Decision:** Adopt the sidecar-proxy mechanism. A host-side proxy mediates the cell's egress; it is the enabling primitive for credential mediation (D-183), the per-domain egress allowlist (goal 11), traffic logging, and vault generalization across providers.
 
-**Status:** open
+**Rationale:** The credential-privacy target (D-183, bar C) is unachievable without a host-side interception point — the secret must live host-side and be injected where the agent can't see it. The same sidecar is the natural home for the egress allowlist and the ~20-provider vault generalization, so one primitive unlocks several roadmap goals. Rejected: not adopting — forecloses bar-C credential containment, the egress allowlist, and vault generalization, and leaves env-injected secrets readable in-cell.
+
+**Source:** docs/control_surface.md (Open items #3); conversation 2026-06-25.
+
+**Status:** active
+
+**Load-bearing because:** every later network/credential control (egress allowlist, broker, traffic log) hangs off this primitive existing.
 
 ### D-133: Failure-mode semantics across new controls
 
@@ -2972,6 +2977,26 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-183: Credential-privacy "solved" = mediation (bar C)
+
+**Type:** safety
+
+**Tags:** post-mvp, integration, hermes
+
+**Door Type:** one-way (commits to a broker architecture for credentials; reversing re-exposes secrets inside the cell and unwinds the D-132 sidecar primitive).
+
+**Decision:** "Solved" for credential privacy is **bar C (mediation)**: a fully-compromised in-cell agent can neither read nor exfiltrate the model credential. Mechanism — a host-side authenticating egress proxy + credential broker (the adopted D-132 sidecar): the real secret stays host-side (sourced from the OneCLI vault, extending D-134); the cell receives `ANTHROPIC_BASE_URL` + a worthless placeholder instead of the real key; the proxy attaches the real credential only when forwarding to the provider's real domain (allowlist-bound injection). Scope is credential-specific containment only.
+
+**Rationale:** The key's safety doesn't depend on perfect egress closure — the agent can't exfiltrate a secret it never holds — so this is achievable on-thesis without a constrained DNS resolver. Rejected: bar A (containment — only close `auth.json` write-back) and bar B (opacity — agent can't read it but the secret is still present and exfiltratable); both leave the credential reachable. Rejected for now: closing general data exfil (DNS-subdomain channel, D-176) — out of scope per the value-prop framing (D-15/D-117/D-106); too much friction for the credential goal, deferred. Approach: Anthropic-first (one provider, one allowlisted domain) before generalizing to ~20 providers and OAuth.
+
+**Source:** conversation 2026-06-25 (item 3, loose-thread review).
+
+**Status:** active
+
+**Notes:** Resolves D-132 (sidecar adopted). General data exfil deferred — D-176 lean (b) stands. The same broker could later hold git push credentials host-side, reframing D-174. Implementation gated behind a design pass; no code yet. Likely post-MVP.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
@@ -3042,7 +3067,6 @@ For narrative context behind clusters of decisions:
 
 The following decisions are currently **open**. Any work that depends on them should treat them as unresolved; closing one promotes it to **active** with a non-open Decision sentence.
 
-- **D-132** — Sidecar-proxy mechanism inclusion in OSS-launch
 - **D-133** — Framework-level failure-mode policy vs. per-feature
 - **D-136** — NanoClaw upstream collaboration
 - **D-171** — Sub-agent permission scoping (revisit alongside D-131)
