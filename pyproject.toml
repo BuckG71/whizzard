@@ -44,15 +44,12 @@ dependencies = [
     "mcp>=1.0",
 ]
 
-# URL fields will be populated at OSS-launch when the repo goes public.
-# Leaving stubs commented out rather than hardcoding placeholder URLs that
-# would render as broken links on PyPI.
-# [project.urls]
-# Homepage = "https://github.com/<owner>/whizzard"
-# Documentation = "https://github.com/<owner>/whizzard/tree/main/docs"
-# Repository = "https://github.com/<owner>/whizzard"
-# Issues = "https://github.com/<owner>/whizzard/issues"
-# Changelog = "https://github.com/<owner>/whizzard/blob/main/CHANGELOG.md"
+[project.urls]
+Homepage = "https://github.com/BuckG71/whizzard"
+Documentation = "https://github.com/BuckG71/whizzard/tree/main/docs"
+Repository = "https://github.com/BuckG71/whizzard"
+Issues = "https://github.com/BuckG71/whizzard/issues"
+Changelog = "https://github.com/BuckG71/whizzard/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

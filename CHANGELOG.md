@@ -48,6 +48,21 @@ planned through v1.0.
   per-session cidfile is unlinked even if an exception interrupts the
   session (KeyboardInterrupt, monitor / audit errors). Prevents
   long-running installs accumulating stray files in STATE_DIR.
+- **Launch now selects the harness's image.** A bare launch derived the
+  container image from the adapter's `default_image` instead of a
+  hardcoded base, so `whiz r hermes` runs the Hermes cell without the user
+  naming an image.
+- **Hermes cell defaults to interactive mode.** The cell's default command
+  is now `hermes` (interactive terminal) rather than the gateway daemon,
+  which idled waiting for messaging-platform config (D-181).
+- **`whiz init` Docker preflight probes the daemon.** It now distinguishes
+  "Docker not installed," "installed but not running," and
+  "Windows-containers mode" with OS-aware, actionable messages, instead of
+  asserting Docker is running after only a PATH check.
+- **`--harness` is required on `whiz run`.** Bare `whiz run` no longer
+  silently defaults to the internal shell (which dead-ended after setup);
+  it now asks for an explicit `--harness` (e.g. `hermes-cell`).
+- Scrubbed stale `oiq` command references from user-facing output.
 
 ### Security
 

@@ -70,6 +70,16 @@ This list is not exhaustive. It names the gaps most likely to surprise a user wh
 
 **Whizzard collects no telemetry.** No usage analytics, no crash reporting, no phone-home of any kind — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config (`~/.whizzard/config/`) and your local audit log (`~/.whizzard/logs/`). A capability-governance tool that quietly exfiltrated usage data would be self-defeating; there is no analytics dependency in the codebase to disable.
 
+## Project status
+
+Whizzard is early (0.1.x), solo-maintained, and deliberately narrow: it
+sandboxes one harness (Hermes), pinned to a tested build, on a
+mount-list-is-the-permission model. It is held to a real bar — hardened,
+tested, documented — but support is best-effort with no SLA, and it tracks
+its pinned Hermes build rather than chasing upstream releases. For sensitive
+work, use the pinned-version install and read
+[Scope and limitations](#scope-and-limitations).
+
 ## Prerequisites
 
 - macOS, Linux, or Windows (Windows is in pre-release verification for v0.1.0)
@@ -85,6 +95,7 @@ This list is not exhaustive. It names the gaps most likely to surprise a user wh
 | OS | macOS, Linux | primary dev + CI target |
 | OS | Windows | pre-release verification underway for v0.1.0 |
 | Docker | Docker Desktop or any Docker daemon | `host.docker.internal` routing (e.g. local Ollama) is Docker-Desktop only; on native Linux use the bridge gateway IP |
+| Hermes (agent harness) | pinned build, commit `e8b9369a` | The cell installs a **fixed, tested Hermes build** (`HERMES_REF` in `Dockerfile.hermes`); Whizzard intentionally does not track upstream Hermes releases. A newer host Hermes usually works, but can occasionally author a profile the tested cell doesn't fully understand — see [D-182](docs/decisions.md). |
 
 ## Install
 
@@ -169,9 +180,11 @@ whizzard/
 
 - [docs/vision_and_strategy.md](docs/vision_and_strategy.md) — what this is, who it's for, where it's going
 - [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract, control layering
+- [docs/reference/architecture-at-a-glance.html](docs/reference/architecture-at-a-glance.html) — visual architecture overview (open in a browser)
+- [docs/threat_model.md](docs/threat_model.md) — threat model and trust boundaries
 - [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
 - [docs/decisions.md](docs/decisions.md) — append-only decisions index
 
 ## A note on naming
 
-"Whizzard" is a working name. The project may rename before broader release; the CLI verb may change accordingly.
+**Whizzard** is the project name; **`whiz`** is the short CLI alias — both invoke the same tool. The name is settled; no rename is planned.
