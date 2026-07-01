@@ -2456,7 +2456,7 @@ One input toward eventual scope: how to structure the OSS repo(s) so that update
 
 **Notes:** Whether to also acquire `osmotiq.com` later is separable from this decision and not blocking. During ongoing MVP work the CLI binary remains `whiz`; it renames to `oiq` as part of the same sweep.
 
-**Status:** active; supersedes D-02 on the active package name.
+**Status:** superseded by D-186 (rename dropped; "Whizzard" is permanent). Historical: still supersedes D-02 on the package name, which D-186 keeps as `whizzard`.
 
 ### D-159: Programmatic launch API for orchestrator integration (post-MVP)
 
@@ -2993,7 +2993,61 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active
 
-**Notes:** Resolves D-132 (sidecar adopted). General data exfil deferred — D-176 lean (b) stands. The same broker could later hold git push credentials host-side, reframing D-174. Implementation gated behind a design pass; no code yet. Likely post-MVP.
+**Notes:** Resolves D-132 (sidecar adopted). General data exfil deferred — D-176 lean (b) stands. The same broker could later hold git push credentials host-side, reframing D-174. **Now a pre-launch gate — see D-184** (sequencing amended from the original "likely post-MVP"; design verified viable).
+
+---
+
+### D-184: Credential mediation (bar C) is a hard pre-launch gate; design verified viable (amends D-183)
+
+**Type:** safety
+
+**Tags:** oss-launch, sequencing, hermes
+
+**Door Type:** one-way (gating the public launch on the broker commits to shipping it; once announced as the launch's security posture the sequencing is hard to walk back).
+
+**Decision:** The bar-C credential-mediation build (D-183) is a **hard gate for the public OSS launch**, not a post-MVP item. A pre-build verification spike confirmed the Anthropic-first slice is viable: Hermes honors a `base_url` redirect via both `ANTHROPIC_BASE_URL` and its `config.yaml` `model.base_url` (no TLS-CA fallback needed), and the per-session `--internal` Docker network blocks all cell egress (DNS and raw-IP) on the target platform. SSE streaming through the proxy is verified during the build. Fallback if a blocker surfaces late: ship with the D-80 residual **documented and disclosed** + fast-follow the broker, rather than a rushed, half-verified proxy.
+
+**Rationale:** Credential exposure inside the cell is the project's #1 invariant (D-80); launching a security tool whose headline containment leaks the model key undercuts its whole premise. The verification spike de-risked the build — 2 of 3 unknowns GREEN, including the make-or-break base_url question. The disclose-and-fast-follow fallback is retained because a half-verified broker that *looks* like containment but leaks is worse than an honest documented residual. Amends D-183's "likely post-MVP" sequencing.
+
+**Source:** conversation 2026-07-01 (launch sprint); verification spike — Hermes source at pinned commit e8b9369a + a local `--internal` egress smoke.
+
+**Status:** active. Amends D-183 (sequencing); depends on D-132 (sidecar), D-134 (OneCLI).
+
+---
+
+### D-185: `whiz init` gains a model-credential step (working session out of the box)
+
+**Type:** adapter
+
+**Tags:** hermes, integration, oss-launch
+
+**Door Type:** two-way (wizard-flow / config-shape decision; revisable as providers are added).
+
+**Decision:** The `whiz init` wizard gains a **model-credential step** so a user finishes setup with a working session instead of hand-editing `harnesses.json`. The step collects the provider (Anthropic for now) and the secret name/source (default `ANTHROPIC_API_KEY`, resolved host-side via OneCLI vault → host-env fallback), offers a dry-run resolution check, and warns (does not hard-fail) if the secret is unavailable. It writes a `model_credential` block that the bar-C broker (D-184) resolves host-side; in mediated mode the adapter injects the proxy base_url + a placeholder and skips real-secret injection.
+
+**Rationale:** Closes the biggest "installed ≠ working" gap — the fully-manual credential onboarding known-issue, where a new user had to edit config and export env vars with no guidance and the Claude-OAuth path was unaddressed. Warn-not-fail on unavailable mirrors the host-env-fallback tolerance already in the adapter, so a user who will set the key later can still finish init. Anthropic-first; generalizes to more providers alongside the broker.
+
+**Source:** conversation 2026-07-01 (launch sprint, decision 2b).
+
+**Status:** active. Depends on D-184 (broker), D-134 (OneCLI credential resolution).
+
+---
+
+### D-186: Keep the "Whizzard" name permanently; drop the Osmotiq rename (supersedes D-158)
+
+**Type:** naming
+
+**Tags:** naming, sequencing, oss-launch
+
+**Door Type:** two-way (a name is revisitable, but a public launch makes a later rename costly — effectively sticky once announced).
+
+**Decision:** Keep **"Whizzard"** as the permanent product name and **`whiz`** as the CLI binary. **Drop** the planned rename to Osmotiq / `oiq` (D-158). Env vars (`WHIZZARD_HOME`), config dir (`~/.whizzard/`), package (`whizzard/`), and all commands stay as-is.
+
+**Rationale:** The rename (D-158) was sequenced "after MVP, before Hermes migration," but the project is now going straight to a public OSS launch as a portfolio artifact — a rename sweep is pure churn with no technical payoff and adds risk on the critical path to launch. Keeping one name also removes the heaviest OSS-launch checklist item (the org move + rename in §G) and turns the stale `oiq` command strings from rename-debt into a plain bug (since scrubbed). The osmosis metaphor was nice-to-have, not load-bearing.
+
+**Source:** conversation 2026-07-01 (launch sprint).
+
+**Status:** active; supersedes D-158.
 
 ---
 
