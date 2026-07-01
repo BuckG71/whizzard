@@ -492,6 +492,36 @@ opts into gateway (preset field? `whiz run --gateway`? wizard choice?).
 *Disposition:* fix before launch — the default launch UX is currently a
 dead-end idle daemon.
 
+### onecli/hybrid: model-key placeholder is hardcoded to `ANTHROPIC_API_KEY`
+In onecli/hybrid mode the adapter strips all fetched secrets and sets only
+`ANTHROPIC_API_KEY=<placeholder>` so the client initializes. Correct for the
+only shipped harness (Anthropic `hermes-cell`), but a non-Anthropic model whose
+key env var differs would be stripped with no placeholder under its real name,
+so that client fails to init even though OneCLI would inject the header.
+*Source:* D-187 onecli review (2026-07-01), angles A/B/altitude.
+*Disposition:* defer — single-provider scope today; thread the model-secret
+name through `OneCLIContext` when the first non-Anthropic harness lands.
+
+### onecli_gateway.py duplicates broker.py session-net helpers
+`_docker`, `_slug`, `_older_than_grace`, `_reap_orphans`, and `_REAP_GRACE_S`
+are copied from `broker.py` (now consistent, but two copies that can drift).
+The `mediated_network` build_run_argv param is also overloaded to carry the
+onecli/hybrid net (misleading name).
+*Source:* D-187 onecli review (2026-07-01), altitude/cleanup angles.
+*Disposition:* defer — extract shared session-net helpers (and rename the
+param to `cell_network`) as a deliberate refactor, not under launch pressure.
+
+### onecli/hybrid: watch-items (defensive)
+`NO_PROXY` is set host-only (no `:port`) — fine for httpx/Hermes and the broker
+still injects even if routed via OneCLI, but a strict client could differ; the
+proxy-parse regex assumes `user:token@host:port` (fails closed on other shapes);
+`onecli_gateway_available()` + `resolve_onecli_wiring()` do overlapping probes;
+container_env's mode blocks are order-coupled (documented). All verified-working
+against the current OneCLI.
+*Source:* D-187 onecli review (2026-07-01), angles A/C/cleanup.
+*Disposition:* defer — revisit if OneCLI's proxy shape changes or a non-httpx
+harness is added.
+
 ## How to keep this doc useful
 
 Add an entry when:
