@@ -1,0 +1,38 @@
+name: Actionlint
+
+# Lints the workflow YAML itself (shellcheck of run: blocks, expression
+# syntax, action input validation). Runs only when workflow files change, and
+# only on PRs into main — so it never fires on unrelated pushes.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionlint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: actionlint
+        uses: reviewdog/action-actionlint@6fb7acc99f4a1008869fa8a0f09cfca740837d9d # v1.72.0
+        with:
+          # reporter: local + fail_level: error keeps this a pure gate that
+          # fails the job on findings and prints them to the run log. This
+          # needs only contents:read — the PR-annotation reporters
+          # (github-pr-check / github-pr-review) would require checks:write or
+          # pull-requests:write, which we deliberately do not grant.
+          reporter: local
+          fail_level: error

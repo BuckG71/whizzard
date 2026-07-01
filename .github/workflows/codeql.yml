@@ -1,0 +1,53 @@
+name: CodeQL
+
+# CodeQL SAST for Python. CodeQL is FREE on public repositories — this
+# workflow is inert cost-wise until the repo goes public (GitHub code
+# scanning activates on the public flip). On a private repo the analyze step
+# requires GitHub Advanced Security; the schedule is kept minimal (weekly) to
+# respect runner-minute billing.
+#
+# Cost note: does NOT run on every push. Only on PRs into main (the merge
+# gate) plus one scheduled scan per week.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "whizzard/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - ".github/workflows/codeql.yml"
+  schedule:
+    # Weekly — Mondays 07:17 UTC. Off-peak, odd minute to avoid top-of-hour
+    # scheduling congestion.
+    - cron: "17 7 * * 1"
+
+# Least privilege: security-events:write uploads SARIF results; actions:read
+# lets CodeQL inspect workflow runs; contents:read for checkout.
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL analyze (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          languages: python
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          category: "/language:python"
