@@ -522,6 +522,25 @@ against the current OneCLI.
 *Disposition:* defer — revisit if OneCLI's proxy shape changes or a non-httpx
 harness is added.
 
+### Dockerfile.hermes has mutable build inputs (supply-chain determinism)
+The base and broker images are digest-pinned, but `Dockerfile.hermes` uses
+`FROM whizzard-base:latest`, a short Hermes ref (`HERMES_REF=e8b9369a9`), and
+open-ended `pip install "anthropic>=0.39.0"` / `mcp`. Less deterministic than
+the surrounding security story.
+*Source:* Codex security review (2026-07-01), finding #7.
+*Disposition:* defer — full-SHA the Hermes ref + pin anthropic/mcp versions
+(cheap) and pass the exact base digest into the Hermes build; batch into a
+supply-chain pass rather than the launch critical path.
+
+### OneCLI proxy-auth token lives in the cell env (delegated capability)
+onecli/hybrid mode puts the gateway's basic-auth token in the cell's
+`HTTP(S)_PROXY` (scrubbed from the audit log, but visible to the cell process).
+A compromised cell could drive the gateway for anything its policy allows.
+*Source:* Codex review (2026-07-01) #4, corroborating the D-187 onecli review.
+*Disposition:* defer — inherent to an authenticating proxy; document the token's
+scope/lifetime and, if OneCLI supports it, move to a per-session-scoped token or
+per-attached-network gateway policy. See D-187 Notes.
+
 ## How to keep this doc useful
 
 Add an entry when:
