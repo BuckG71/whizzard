@@ -1,4 +1,4 @@
-"""Stage 13 — `oiq adjust` library-layer tests.
+"""Stage 13 — `whiz adjust` library-layer tests.
 
 Cover the pure-Python pieces (Changes, parse_duration, no-op detection,
 diff rendering, agent-denied filter, error-message rendering) plus the
@@ -373,7 +373,7 @@ def test_resolution_error_message_for_ended():
     )
     msg = _resolution_error_message(r, "abcd")
     assert "ended" in msg
-    assert "oiq r" in msg
+    assert "whiz r" in msg
 
 
 def test_resolution_error_message_for_not_found_offers_recent():

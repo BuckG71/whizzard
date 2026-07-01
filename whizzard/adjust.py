@@ -1,4 +1,4 @@
-"""Stage 13 — mid-session capability adjustment (`oiq adjust`).
+"""Stage 13 — mid-session capability adjustment (`whiz adjust`).
 
 Implements the stop+restart mechanism per D-27 with a typed library surface
 that Stage 13's CLI command and Stage 14's MCP request handler both consume.
@@ -69,7 +69,7 @@ class MountAddition:
 
 @dataclass(frozen=True)
 class Changes:
-    """The set of mutations a single `oiq adjust` invocation requests.
+    """The set of mutations a single `whiz adjust` invocation requests.
 
     Empty fields mean "no change to this axis." Combinable in one call —
     e.g., adding mount X while extending by 30 minutes is one Changes
@@ -669,24 +669,24 @@ def _resolution_error_message(resolution: SessionResolution,
         when = resolution.ended_at or "unknown time"
         return (
             f"session {resolution.session_id} ended at {when}; "
-            f"can't adjust an ended session. Start a new one with: oiq r [preset]"
+            f"can't adjust an ended session. Start a new one with: whiz r [preset]"
         )
     if resolution.status == ResolutionStatus.CRASHED:
         return (
             f"session {resolution.session_id} has no session_end recorded; "
             "container may have crashed or been killed externally. "
-            "Start a new one with: oiq r [preset]"
+            "Start a new one with: whiz r [preset]"
         )
     # NOT_FOUND
     if resolution.candidates:
         recent = ", ".join(resolution.candidates)
         return (
             f"no session matching {session_id_or_prefix!r}. "
-            f"Recent sessions: {recent} (run `oiq s` for full list)"
+            f"Recent sessions: {recent} (run `whiz s` for full list)"
         )
     return (
         f"no session matching {session_id_or_prefix!r}; "
-        "no sessions in the log yet. Start one with: oiq r [preset]"
+        "no sessions in the log yet. Start one with: whiz r [preset]"
     )
 
 
@@ -799,7 +799,7 @@ def adjust_session(
             detail=(
                 f"{warning_prefix}stop succeeded but relaunch raised "
                 f"{type(exc).__name__}: {exc}. The original session is "
-                "gone; start a new one with `oiq r`."
+                "gone; start a new one with `whiz r`."
             ),
         )
 

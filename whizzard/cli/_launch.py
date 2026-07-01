@@ -105,7 +105,7 @@ def _perform_launch(
     so the adapter sees the restricted set.
 
     duration_override_seconds: optional override of the profile's duration
-    cap (Stage 15) — an `oiq adjust --extend` relaunch passes the extended
+    cap (Stage 15) — an `whiz adjust --extend` relaunch passes the extended
     limit through here.
     """
     try:

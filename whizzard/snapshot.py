@@ -80,7 +80,7 @@ def write_snapshot(
     a `Profile` instance.
 
     ``duration_override_seconds`` (F-D-06): when set, this is the effective
-    duration cap for the session — typically from an ``oiq adjust --extend``
+    duration cap for the session — typically from an ``whiz adjust --extend``
     relaunch. The snapshot records the effective limit, not the underlying
     profile value, so the agent's ``whiz_status`` reports the same cap that
     enforcement is using. Per D-156 the snapshot is "the agent's view of

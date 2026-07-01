@@ -171,7 +171,7 @@ def test_write_snapshot_overwrites_existing(tmp_path, profile, mounts):
 
 
 def test_snapshot_records_duration_override_when_set(tmp_path: Path):
-    """After `oiq adjust --extend`, the relaunch passes an effective
+    """After `whiz adjust --extend`, the relaunch passes an effective
     duration cap. The snapshot must record that override so the agent's
     whiz_status reports the actual remaining time."""
     from whizzard.config import Profile

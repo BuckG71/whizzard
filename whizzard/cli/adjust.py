@@ -1,4 +1,4 @@
-"""`oiq adjust <session-id> [flags]` — mid-session capability adjustment.
+"""`whiz adjust <session-id> [flags]` — mid-session capability adjustment.
 
 Stage 13 / D-163. Thin CLI wrapper around `whizzard.adjust.adjust_session`;
 this module owns the user-facing surface (flag parsing + TTY prompt) and

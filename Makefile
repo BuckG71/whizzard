@@ -14,7 +14,7 @@ MYPY := $(shell test -x venv/bin/mypy && echo venv/bin/mypy || echo mypy)
 
 help:
 	@echo "Targets:"
-	@echo "  test               Run the fast unit suite (311 tests, ~0.7s; excludes integration)"
+	@echo "  test               Run the fast unit suite (736 tests, ~3s; excludes integration)"
 	@echo "  lint               Run ruff lint checks (no auto-fix)"
 	@echo "  fmt                Run ruff with --fix to apply auto-fixable lint corrections"
 	@echo "  typecheck          Run mypy on whizzard + scripts"
