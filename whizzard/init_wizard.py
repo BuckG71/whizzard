@@ -61,6 +61,7 @@ from whizzard.config import (
     default_profiles,
 )
 from whizzard.docker_cmd import (
+    WHIZZARD_BROKER_IMAGE,
     WHIZZARD_HERMES_IMAGE,
     WHIZZARD_IMAGE,
     docker_daemon_status,
@@ -350,6 +351,21 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
         console.print(f"[red]Hermes image build failed (exit {hermes_rc}).[/red]")
         sys.exit(hermes_rc)
 
+    # Broker image — the credential-broker sidecar for mediated sessions
+    # (bar C / D-184). Build context is whizzard/_dockerfiles/ (its Dockerfile
+    # COPYs broker/proxy.py).
+    broker_dockerfile = Path(
+        str(files("whizzard._dockerfiles") / "Dockerfile.broker")
+    )
+    broker_context = Path(str(files("whizzard._dockerfiles")))
+    broker_rc = build_runner([
+        "docker", "build", "-t", WHIZZARD_BROKER_IMAGE,
+        "-f", str(broker_dockerfile), str(broker_context),
+    ])
+    if broker_rc != 0:
+        console.print(f"[red]Broker image build failed (exit {broker_rc}).[/red]")
+        sys.exit(broker_rc)
+
     console.print("  [green]✓ sandbox built[/green]")
     console.print()
     console.print(
@@ -507,6 +523,10 @@ def _write_profiles_subset(names: list[str]) -> list[str]:
         "profiles": {
             name: {
                 "network_enabled": p.network_enabled,
+                # D-184/D-185: credential privacy by default — the `default`
+                # profile mediates the model key through the broker (bar C).
+                # Other profiles keep their derived posture.
+                "network_mode": "mediated" if name == "default" else p.network_mode,
                 "duration_seconds": p.duration_seconds,
                 "idle_timeout_seconds": p.idle_timeout_seconds,
                 "allow_broad_mount": p.allow_broad_mount,
@@ -1294,6 +1314,29 @@ def step_done_summary(state: WizardState) -> None:
     presets_str = ", ".join(state.preset_names) if state.preset_names else "(none)"
     console.print(f"  Preset:            {presets_str}        [green]{state.preset_count}[/green]")
     console.print(f"  Audit log:         {LOGS_DIR / 'sessions.jsonl'}")
+
+    # bar C / D-184/D-185: credential privacy is on by default — the `default`
+    # profile mediates the model key through the broker so the cell never holds
+    # it. Verify the key resolves now (warn, don't fail) so a fresh user learns
+    # before their first launch rather than at a fail-closed launch error.
+    from whizzard.adapters._credentials import fetch_secret
+
+    try:
+        fetch_secret("ANTHROPIC_API_KEY")
+        console.print(
+            "  Credential privacy: [green]on[/green] — your model key stays "
+            "out of the cell.  [green]✓ ANTHROPIC_API_KEY found[/green]"
+        )
+    except Exception:
+        console.print(
+            "  Credential privacy: [green]on[/green] — your model key stays "
+            "out of the cell."
+        )
+        console.print(
+            "  [yellow]⚠ ANTHROPIC_API_KEY isn't resolvable yet — set it (env "
+            "var or OneCLI vault) before [bold]whiz r hermes[/bold], or the "
+            "launch will stop with a clear error.[/yellow]"
+        )
     console.print()
     console.print("A few first commands to try:")
     console.print()
@@ -1559,6 +1602,10 @@ def _write_default_profiles() -> list[str]:
         "profiles": {
             name: {
                 "network_enabled": p.network_enabled,
+                # D-184/D-185: credential privacy by default — the `default`
+                # profile mediates the model key through the broker (bar C).
+                # Other profiles keep their derived posture.
+                "network_mode": "mediated" if name == "default" else p.network_mode,
                 "duration_seconds": p.duration_seconds,
                 "idle_timeout_seconds": p.idle_timeout_seconds,
                 "allow_broad_mount": p.allow_broad_mount,

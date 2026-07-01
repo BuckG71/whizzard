@@ -26,7 +26,11 @@ from whizzard.enforcement import monitor_and_enforce
 
 # Re-exported from the dependency-free images module (avoids an import cycle:
 # docker_cmd imports adapters, and the adapters now reference these too).
-from whizzard.images import WHIZZARD_HERMES_IMAGE, WHIZZARD_IMAGE  # noqa: E402,F401
+from whizzard.images import (  # noqa: E402,F401
+    WHIZZARD_BROKER_IMAGE,
+    WHIZZARD_HERMES_IMAGE,
+    WHIZZARD_IMAGE,
+)
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (
     SESSIONS_LOG,
