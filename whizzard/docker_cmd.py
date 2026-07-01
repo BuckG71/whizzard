@@ -493,6 +493,7 @@ def run_shell(
     preset_name: str | None = None,
     duration_override_seconds: int | None = None,
     interactive: bool = True,
+    mediated_network: str | None = None,
 ) -> RunResult:
     """Launch a contained shell. Blocks until the session exits.
 
@@ -548,6 +549,7 @@ def run_shell(
         cidfile=cidfile,
         adapter=adapter,
         interactive=interactive,
+        mediated_network=mediated_network,
     )
 
     image_id = get_image_id(image)

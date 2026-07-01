@@ -64,6 +64,25 @@ def test_hermes_env_defaults_empty():
     assert HermesAdapter().container_env() == {}
 
 
+def test_mediated_container_env_injects_placeholder_not_the_real_key():
+    """bar C / D-184: a mediated launch hands the cell the broker URL + a
+    worthless placeholder; the real key is never injected here (it lives only
+    on the broker sidecar)."""
+    from whizzard.adapters.hermes import MEDIATION_PLACEHOLDER, MediationContext
+
+    adapter = HermesAdapter()
+    adapter.mediation = MediationContext(
+        base_url="http://whiz-broker-abc:8080",
+        base_url_env="ANTHROPIC_BASE_URL",
+        secret_name="ANTHROPIC_API_KEY",
+    )
+    env = adapter.container_env()
+    assert env["ANTHROPIC_BASE_URL"] == "http://whiz-broker-abc:8080"
+    assert env["ANTHROPIC_API_KEY"] == MEDIATION_PLACEHOLDER
+    # the placeholder is not a real credential → it must not be in the scrub set
+    assert "ANTHROPIC_API_KEY" not in adapter.credential_env_keys()
+
+
 def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     fake_vault = {
         "DISCORD_BOT_TOKEN": "discord-secret-xyz",

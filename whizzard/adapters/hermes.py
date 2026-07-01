@@ -55,6 +55,22 @@ _IN_CELL_AUDIT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/audit.jsonl"
 _IN_CELL_EVENT_LOG_PATH = f"{_IN_CELL_WHIZ_DIR}/events.jsonl"
 _IN_CELL_REQUEST_DIR = f"{_IN_CELL_WHIZ_DIR}/requests"
 
+# Worthless value handed to the cell in place of the real model key when a
+# session is mediated (bar C / D-184). The real key lives only on the broker.
+MEDIATION_PLACEHOLDER = "whiz-proxy-placeholder-not-a-real-key"
+
+
+@dataclass(frozen=True)
+class MediationContext:
+    """Set on the adapter (by _perform_launch) for a mediated launch. Tells
+    container_env to point the harness at the broker and hand it a placeholder
+    instead of the real credential."""
+
+    base_url: str  # e.g. http://whiz-broker-<sid>:8080
+    base_url_env: str  # e.g. ANTHROPIC_BASE_URL
+    secret_name: str  # e.g. ANTHROPIC_API_KEY
+    placeholder: str = MEDIATION_PLACEHOLDER
+
 
 # Bare `hermes` drops the user into Hermes's interactive terminal chat — the
 # default cell invocation (D-181, amending D-88). Gateway mode (a messaging-
@@ -525,6 +541,18 @@ class HermesAdapter:
         extra = self.config.get("env", {}) or {}
         for k, v in extra.items():
             env[str(k)] = str(v)
+        # Mediated launch (bar C / D-184): point the harness at the broker and
+        # hand it a worthless placeholder in place of the real key. The real
+        # value is never injected here — it lives only on the broker sidecar.
+        mediation = getattr(self, "mediation", None)
+        if mediation is not None:
+            env[mediation.base_url_env] = mediation.base_url
+            env[mediation.secret_name] = mediation.placeholder
+            # Defense-in-depth: if the model key was also (mis)configured in
+            # `secrets` and got fetched, the line above already overwrote it
+            # with the placeholder; drop it from the credential-scrub set since
+            # what the cell holds is no longer a real secret.
+            self._credential_sources.pop(mediation.secret_name, None)
         return env
 
     def credential_env_keys(self) -> set[str]:

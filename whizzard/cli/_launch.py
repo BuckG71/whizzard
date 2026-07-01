@@ -19,6 +19,8 @@ from whizzard.adapters import (
     UnknownHarnessTypeError,
     build_adapter,
 )
+from whizzard.adapters.hermes import MEDIATION_PLACEHOLDER, MediationContext
+from whizzard.broker import BrokerError, start_broker, stop_broker
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, get_profile
 from whizzard.docker_cmd import (
@@ -218,14 +220,45 @@ def _perform_launch(
             console.print(f"  - {o.path} ({o.reason})")
     console.print()
 
+    # Mediated launch (bar C / D-184): the cell reaches only the credential
+    # broker. Resolve the model-credential config now (fail closed if a
+    # mediated profile has none); the broker itself starts just-in-time on the
+    # real path below — dry-run only reports intent.
+    mediation_secret: str | None = None
+    mediation_base_url_env = "ANTHROPIC_BASE_URL"
+    mediation_placeholder = MEDIATION_PLACEHOLDER
+    mediated_network: str | None = None
+    if prof.network_mode == "mediated":
+        mc = harness_cfg.get("model_credential") or {}
+        mediation_secret = mc.get("secret")
+        if not mediation_secret:
+            console.print(
+                "[red]profile network_mode is 'mediated' but the harness has "
+                "no model_credential.secret in harnesses.json.[/red]"
+            )
+            raise typer.Exit(code=2)
+        mediation_base_url_env = mc.get("base_url_env", mediation_base_url_env)
+        mediation_placeholder = mc.get("placeholder", mediation_placeholder)
+
     if dry_run:
         import shlex
+        if prof.network_mode == "mediated":
+            assert mediation_secret is not None  # guaranteed by the check above
+            slug = session_id[:24]
+            mediated_network = f"whiz-int-{slug}"
+            adapter.mediation = MediationContext(  # type: ignore[attr-defined]
+                base_url=f"http://whiz-broker-{slug}:8080",
+                base_url_env=mediation_base_url_env,
+                secret_name=mediation_secret,
+                placeholder=mediation_placeholder,
+            )
         argv = build_run_argv(
             prof,
             image=image,
             resolved_mounts=resolved,
             session_id=session_id,
             adapter=adapter,
+            mediated_network=mediated_network,
         )
         console.print("[bold]docker invocation that would run:[/bold]")
         console.print("  " + " ".join(shlex.quote(a) for a in argv))
@@ -290,6 +323,26 @@ def _perform_launch(
     # red-error path every other launch failure uses. No container has
     # started yet at the raise point (container_env runs in
     # build_run_argv), so no cleanup is needed.
+    # Mediated launch: bring up the broker just-in-time (it resolves the real
+    # credential host-side and gives us the --internal network the cell will
+    # join). Fail closed if it can't start. Torn down in the finally below so
+    # the network + container + key file never outlive the session.
+    broker_handle = None
+    if prof.network_mode == "mediated":
+        assert mediation_secret is not None  # guaranteed by the check above
+        try:
+            broker_handle = start_broker(session_id, mediation_secret)
+        except BrokerError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=125) from e
+        adapter.mediation = MediationContext(  # type: ignore[attr-defined]
+            base_url=broker_handle.base_url,
+            base_url_env=mediation_base_url_env,
+            secret_name=mediation_secret,
+            placeholder=mediation_placeholder,
+        )
+        mediated_network = broker_handle.internal_network
+
     launch_started = time.monotonic()
     try:
         result = run_shell(
@@ -301,6 +354,7 @@ def _perform_launch(
             adapter=adapter,
             preset_name=preset_name,
             duration_override_seconds=duration_override_seconds,
+            mediated_network=mediated_network,
         )
     except OneCLITimeoutError as e:
         console.print(f"[red]{e}[/red]")
@@ -314,6 +368,9 @@ def _perform_launch(
         # the two leaks a DockerDaemonError past run_shell to the user.
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=125) from e
+    finally:
+        if broker_handle is not None:
+            stop_broker(broker_handle)
 
     # The container has exited — the user is back on the host shell. Announce
     # the boundary so a silent return can't be mistaken for still being inside.
