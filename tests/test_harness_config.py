@@ -40,6 +40,52 @@ def test_load_parses_valid_config(tmp_path: Path):
     assert harnesses["hermes"]["wrap_up_command"] == "/quit"
 
 
+def test_model_credential_valid_loads(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "hermes-cell": {
+            "type": "agent",
+            "start_command": "hermes",
+            "model_credential": {
+                "provider": "anthropic",
+                "secret": "ANTHROPIC_API_KEY",
+                "base_url_env": "ANTHROPIC_BASE_URL",
+            },
+        },
+    })
+    harnesses = load_harnesses(f)
+    assert harnesses["hermes-cell"]["model_credential"]["secret"] == "ANTHROPIC_API_KEY"
+
+
+def test_model_credential_requires_valid_secret_name(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "agent", "start_command": "hermes", "model_credential": {"secret": "BAD NAME"}},
+    })
+    with pytest.raises(HarnessConfigError, match="model_credential.secret"):
+        load_harnesses(f)
+
+
+def test_model_credential_must_be_object(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "agent", "start_command": "hermes", "model_credential": "ANTHROPIC_API_KEY"},
+    })
+    with pytest.raises(HarnessConfigError, match="model_credential must be an object"):
+        load_harnesses(f)
+
+
+def test_model_credential_secret_must_not_also_be_in_secrets(tmp_path: Path):
+    # D-185: listing it in both would inject the real value into the cell.
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {
+            "type": "agent",
+            "start_command": "hermes",
+            "secrets": ["ANTHROPIC_API_KEY"],
+            "model_credential": {"secret": "ANTHROPIC_API_KEY"},
+        },
+    })
+    with pytest.raises(HarnessConfigError, match="must not"):
+        load_harnesses(f)
+
+
 def test_load_rejects_invalid_json(tmp_path: Path):
     bad = tmp_path / "harnesses.json"
     bad.write_text("{not json")

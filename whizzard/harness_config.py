@@ -155,6 +155,40 @@ def _validate_spec(name: str, spec: dict) -> None:
                     f"harness {name!r}: secret {sec!r} is not a valid env-var name"
                 )
 
+    # model_credential (D-184/D-185): optional block enabling broker mediation
+    # for a mediated profile. `secret` is an env-var NAME resolved host-side by
+    # the broker (never a plaintext value here).
+    if "model_credential" in spec:
+        mc = spec["model_credential"]
+        if not isinstance(mc, dict):
+            raise HarnessConfigError(
+                f"harness {name!r}: model_credential must be an object"
+            )
+        secret = mc.get("secret")
+        if (
+            not isinstance(secret, str)
+            or not secret
+            or any(c.isspace() or c == "=" for c in secret)
+        ):
+            raise HarnessConfigError(
+                f"harness {name!r}: model_credential.secret must be a valid "
+                "env-var name (resolved host-side, never a plaintext value)"
+            )
+        for opt in ("provider", "base_url_env", "placeholder"):
+            if opt in mc and not isinstance(mc[opt], str):
+                raise HarnessConfigError(
+                    f"harness {name!r}: model_credential.{opt} must be a string"
+                )
+        # The model secret must NOT also be in `secrets`: that path injects the
+        # real value, while mediation replaces it with a placeholder. Listing
+        # it in both would leak the real key into the cell.
+        if secret in (spec.get("secrets") or []):
+            raise HarnessConfigError(
+                f"harness {name!r}: model_credential.secret {secret!r} must not "
+                "also appear in `secrets` — mediation replaces it with a "
+                "placeholder; listing it in secrets injects the real value"
+            )
+
 
 def load_harnesses(path: Path | None = None) -> dict[str, dict]:
     """Return a dict of harness_name → config_dict.
