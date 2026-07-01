@@ -3051,6 +3051,26 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-187: OneCLI as a general credential broker — `onecli` + `hybrid` postures (extends bar C)
+
+**Type:** safety
+
+**Tags:** integration, hermes, oss-launch
+
+**Door Type:** two-way (the two modes are additive and opt-in; `mediated`/bar-C stays the default fallback, so `onecli`/`hybrid` can be deprecated without unwinding the core broker).
+
+**Decision:** Extend bar-C (D-183/D-184) with two more network postures, using the user's **OneCLI gateway** as a general credential broker. **`onecli`**: the cell's whole egress routes through the OneCLI forward proxy (CA-MITM), which injects every configured credential host-side. **`hybrid`**: the model login goes to the bar-C broker and everything else through OneCLI, both attached to one per-session `--internal` net, with `NO_PROXY` exempting the broker host so the model call bypasses OneCLI. Composition rule: **OneCLI is the default for every credential except a subscription-OAuth model login, which reverts to the bar-C broker.** `whiz init` prompts the user for the posture in plain language (no broker/mediation jargon).
+
+**Rationale:** bar-C mediates one credential (the model key); real agents use many (GitHub, Slack, tool APIs), and OneCLI already brokers those via host-side MITM injection — so routing the cell's egress through it keeps *every* service credential out of the cell, a strict superset of bar-C's coverage. But OneCLI can't serve Anthropic subscription-OAuth (needs `Authorization: Bearer` **+** `anthropic-beta` — two headers; OneCLI injects one), so the model login carves out to bar-C. Rejected: OneCLI-only (breaks subscription-OAuth model users — the maintainer's own setup). Rejected: bar-C-only (leaves every non-model credential in the cell). Verified end-to-end: a real subscription-OAuth turn through bar-C (Bearer+beta injection + SSE) and onecli/hybrid topology smokes (cell reaches only the proxies; direct egress blocked). A high-effort review caught a critical fail-open (hybrid missing its `--network` flag) — fixed + regression-tested.
+
+**Source:** conversation 2026-07-01 (this session).
+
+**Status:** active. Extends D-183/D-184 (bar-C), D-185 (wizard credential step); depends on D-134 (OneCLI credential resolution).
+
+**Notes:** The cell does hold the OneCLI proxy-auth token (in `HTTP(S)_PROXY`) — an unavoidable proxy-client capability, scrubbed from the audit log; it drives the gateway but exposes no raw provider secret. Deferred items (multi-provider placeholder naming; `broker.py`↔`onecli_gateway.py` helper dedup) logged in `known_issues.md`.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
