@@ -52,7 +52,7 @@ def sessions_dir(tmp_path, monkeypatch):
 def _write_request(
     sessions_dir: Path,
     *,
-    request_id: str = "reqaaaaaaaaa",
+    request_id: str = "aabbccddeeff",  # canonical uuid4().hex[:12] shape
     session_id: str = "sess-1",
     kind: str = "extend",
     params: dict | None = None,
@@ -153,10 +153,44 @@ def test_load_request_returns_none_on_unknown_kind(tmp_path):
     assert reqs._load_request(bad) is None
 
 
-def test_load_request_returns_none_when_missing_fields(tmp_path):
-    bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps({"kind": "mount"}))  # no request_id / session_id
+def test_load_request_returns_none_when_kind_missing(tmp_path):
+    # request_id/session_id now come from the filename + directory, not JSON;
+    # `kind` is the remaining required (and validated) field.
+    bad = tmp_path / "aabbccddeeff.json"
+    bad.write_text(json.dumps({"reason": "no kind"}))
     assert reqs._load_request(bad) is None
+
+
+def test_load_request_derives_id_from_filename_not_cell_json(sessions_dir):
+    # Path-traversal defense: a malicious cell can put anything in the JSON
+    # `request_id`, but the host must use the FILENAME. Here the file is named
+    # canonically while the JSON claims a traversal id.
+    rdir = sessions_dir / "sess-1" / "requests"
+    rdir.mkdir(parents=True, exist_ok=True)
+    (rdir / "aabbccddeeff.json").write_text(json.dumps({
+        "request_id": "../../../../etc/evil",  # ignored
+        "kind": "extend", "params": {"duration": "30m"},
+        "reason": "", "status": "pending", "created_at": "2026-05-21T00:00:00+00:00",
+    }))
+    req = reqs._load_request(rdir / "aabbccddeeff.json")
+    assert req is not None
+    assert req.request_id == "aabbccddeeff"  # from the filename, not the JSON
+
+
+def test_resolutions_path_rejects_traversal_ids():
+    # The host-side resolution path builder must refuse any traversing id.
+    for bad in ["../../probe", "..", ".", "a/b", "a\\b", "x\x00y", "z" * 200]:
+        with pytest.raises(ValueError):
+            reqs._resolutions_path("sess-1", bad)
+    # ...and a traversing session_id.
+    with pytest.raises(ValueError):
+        reqs._resolutions_path("../../etc", "aabbccddeeff")
+
+
+def test_read_resolution_record_returns_none_for_traversal_id():
+    # The read path swallows the guard and reports "no record" rather than
+    # touching a traversed path.
+    assert reqs._read_resolution_record("sess-1", "../../probe") is None
 
 
 # --- read_session_requests / read_all_requests ------------------------------

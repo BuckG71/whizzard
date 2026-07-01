@@ -18,9 +18,32 @@ tests in test_safety.py, which construct their own block lists.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
+
+# Isolate WHIZZARD_HOME to a throwaway dir at conftest import — which happens
+# before test modules run their `from whizzard...` imports — so import-time path
+# constants (SESSIONS_LOG, SESSIONS_DIR, STATE_DIR, ...) can never bind to, or a
+# test write into, the operator's REAL ~/.whizzard. Per-test fixtures still
+# override to their own tmp_path as needed. (Codex 2026-07-01 test-isolation.)
+os.environ["WHIZZARD_HOME"] = tempfile.mkdtemp(prefix="whiz-test-home-")
+
+# The isolated home must not accidentally be a real one.
+_REAL_WHIZZARD_HOME = Path.home() / ".whizzard"
+
+
+@pytest.fixture(autouse=True)
+def _guard_real_whizzard_home():
+    """Fail loudly if a test's env ever points WHIZZARD_HOME at the real home —
+    a regression guard for the isolation above."""
+    current = Path(os.environ.get("WHIZZARD_HOME", ""))
+    assert current != _REAL_WHIZZARD_HOME, (
+        "a test set WHIZZARD_HOME to the real ~/.whizzard — tests must stay "
+        "isolated (see tests/conftest.py)"
+    )
+    yield
 
 
 @pytest.fixture(autouse=True)

@@ -49,6 +49,30 @@ from whizzard.safety import SafetyViolation, check_mount_path
 from whizzard.session_log import SESSIONS_LOG, append_event
 from whizzard.snapshot import SESSIONS_DIR
 
+# request_id (host-generated as uuid4().hex[:12] in mcp_server) and session_id
+# (the host-created session-dir name) both become host-side PATH COMPONENTS in
+# the resolutions store below. request_id is the one a cell can influence — it
+# is derived from the cell's request filename — so it must be traversal-safe:
+# a value like "../../probe" must never reach the filesystem path. We guard the
+# traversal property directly (no separators / "." / ".." / NUL, bounded length)
+# rather than format-policing the exact hex shape, which the real ids satisfy
+# trivially.
+_MAX_ID_LEN = 128
+
+
+def _is_safe_path_component(s: str) -> bool:
+    """True if `s` is a single, non-traversing path component (host-path guard).
+
+    Closes the sandbox→host path-traversal: rejects empty, "."/"..", anything
+    containing a path separator or NUL, and absurdly long ids.
+    """
+    return (
+        bool(s)
+        and len(s) <= _MAX_ID_LEN
+        and s not in (".", "..")
+        and not any(c in s for c in ("/", "\\", "\x00"))
+    )
+
 
 def _resolutions_path(session_id: str, request_id: str) -> Path:
     """Host-only authoritative resolution store (F-D-05).
@@ -60,7 +84,18 @@ def _resolutions_path(session_id: str, request_id: str) -> Path:
 
     Read STATE_DIR lazily through the config module so tests that
     monkeypatch ``config.STATE_DIR`` see the redirected path.
+
+    Defense-in-depth: refuse to build the path from a non-canonical id, so no
+    caller can smuggle a traversal component even if the id ever reaches here
+    unvalidated.
     """
+    if not _is_safe_path_component(session_id) or not _is_safe_path_component(
+        request_id
+    ):
+        raise ValueError(
+            "refusing to build a resolutions path from a non-canonical "
+            "session_id/request_id (path-traversal guard)"
+        )
     return _config.STATE_DIR / "request-resolutions" / session_id / f"{request_id}.json"
 
 
@@ -74,7 +109,10 @@ def _read_resolution_record(session_id: str, request_id: str) -> dict | None:
     request file is no longer trusted for any field of a resolved
     request, closing the repaint-on-resolved attack.
     """
-    p = _resolutions_path(session_id, request_id)
+    try:
+        p = _resolutions_path(session_id, request_id)
+    except ValueError:
+        return None  # non-canonical id → no resolution record, never a lookup
     if not p.exists():
         return None
     try:
@@ -159,14 +197,20 @@ def _load_request(path: Path) -> AgentRequest | None:
     if not canonical_session_id:
         return None
 
+    # Derive the request id from the FILENAME (a single, host-visible path
+    # component), NOT from the cell-written JSON, and require the canonical
+    # 12-hex shape. The id becomes a host-side path component in the resolutions
+    # store, so trusting the cell's `request_id` field let a malicious cell pick
+    # `../../probe` and steer host reads/writes outside the session subtree.
+    request_id = path.stem
+    if not _is_safe_path_component(request_id):
+        return None
+
     try:
         data = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict):
-        return None
-    request_id = data.get("request_id")
-    if not request_id:
         return None
     kind = data.get("kind")
 

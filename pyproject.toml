@@ -84,7 +84,15 @@ include = ["whizzard*"]
 # Dockerfiles ship as package data so `pip install whizzard` includes them
 # in the wheel and `whiz init` can locate them at runtime via
 # `importlib.resources.files("whizzard._dockerfiles")` (Stage 19 / M1).
-"whizzard._dockerfiles" = ["Dockerfile", "Dockerfile.hermes"]
+# The broker Dockerfile + its proxy.py build-context file (bar C / D-184) MUST
+# be here too, or a wheel install can't build the broker image and the
+# mediated/hybrid credential modes fail at `whiz init`.
+"whizzard._dockerfiles" = [
+    "Dockerfile",
+    "Dockerfile.hermes",
+    "Dockerfile.broker",
+    "broker/proxy.py",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

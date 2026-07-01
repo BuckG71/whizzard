@@ -9,21 +9,24 @@
     },
     "default": {
       "network_enabled": true,
+      "network_mode": "mediated",
       "duration_seconds": null,
       "allow_broad_mount": false,
-      "description": "SAFE-NET baseline. Network on, mounts opt-in. Always-on."
+      "description": "SAFE-NET baseline, secure-by-default. network_mode keeps credentials out of the cell: 'mediated' = model key via a local broker; 'onecli' = all credentials via the OneCLI gateway; 'hybrid' = model login via broker + everything else via OneCLI (needs OneCLI running). 'open' = full egress with no mediation; 'none' = no network."
     },
     "build": {
       "network_enabled": true,
+      "network_mode": "mediated",
       "duration_seconds": 7200,
       "allow_broad_mount": false,
-      "description": "Development work. Network on, rw mounts allowed."
+      "description": "Development work. Network on (model key mediated), rw mounts allowed."
     },
     "power": {
       "network_enabled": true,
+      "network_mode": "open",
       "duration_seconds": 3600,
       "allow_broad_mount": true,
-      "description": "Capability-heavy. Shorter duration intentional."
+      "description": "Capability-heavy, full egress (network_mode 'open' — no credential mediation). Shorter duration intentional."
     },
     "quarantine": {
       "network_enabled": false,

@@ -64,6 +64,42 @@ def test_model_credential_requires_valid_secret_name(tmp_path: Path):
         load_harnesses(f)
 
 
+@pytest.mark.parametrize("bad", ["LD_PRELOAD", "PATH", "PYTHONPATH", "IFS"])
+def test_secrets_reject_denied_env_names(tmp_path: Path, bad: str):
+    # Codex 2026-07-01: `secrets` must not bypass the denied-env-key policy.
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "shell", "start_command": "/bin/sh", "secrets": [bad]},
+    })
+    with pytest.raises(HarnessConfigError, match="denied"):
+        load_harnesses(f)
+
+
+@pytest.mark.parametrize("bad", ["LD_PRELOAD", "PATH", "DYLD_INSERT_LIBRARIES"])
+def test_model_credential_secret_rejects_denied_env_names(tmp_path: Path, bad: str):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "agent", "start_command": "x", "model_credential": {"secret": bad}},
+    })
+    with pytest.raises(HarnessConfigError, match="denied"):
+        load_harnesses(f)
+
+
+def test_secrets_reject_malformed_env_name(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "shell", "start_command": "/bin/sh", "secrets": ["not a name!"]},
+    })
+    with pytest.raises(HarnessConfigError, match="valid.*env-var name"):
+        load_harnesses(f)
+
+
+def test_model_credential_base_url_env_rejects_denied_name(tmp_path: Path):
+    f = _write(tmp_path / "harnesses.json", {
+        "h": {"type": "agent", "start_command": "x",
+              "model_credential": {"secret": "ANTHROPIC_API_KEY", "base_url_env": "PATH"}},
+    })
+    with pytest.raises(HarnessConfigError, match="denied"):
+        load_harnesses(f)
+
+
 def test_model_credential_must_be_object(tmp_path: Path):
     f = _write(tmp_path / "harnesses.json", {
         "h": {"type": "agent", "start_command": "hermes", "model_credential": "ANTHROPIC_API_KEY"},

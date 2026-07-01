@@ -26,6 +26,7 @@ or fall back to bundled defaults. Validate the schema (per architecture.md):
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from whizzard.config import CONFIG_DIR, validate_schema_version
@@ -88,6 +89,30 @@ _DENIED_ENV_KEYS: frozenset[str] = frozenset({
     "IFS",                 # shell field-separator; classic injection vector
 })
 
+# Standard env-var-name shape; a length cap keeps the argv sane.
+_VALID_ENV_NAME = re.compile(r"\A[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
+
+
+def _validate_env_name(name: object, *, harness: str, field_label: str) -> None:
+    """Reject a bad env-var NAME on any harness surface (D-133 generalized).
+
+    Applies to every place a config can name an env var — literal `env` keys,
+    `secrets`, `model_credential.secret`, `base_url_env` — so the denied-key set
+    can't be bypassed by declaring a dangerous name through a surface other than
+    `env` (the senior-review + Codex 2026-07-01 finding).
+    """
+    if not isinstance(name, str) or not _VALID_ENV_NAME.match(name):
+        raise HarnessConfigError(
+            f"harness {harness!r}: {field_label} {name!r} is not a valid "
+            f"env-var name (expected [A-Za-z_][A-Za-z0-9_]*, ≤128 chars)"
+        )
+    if name in _DENIED_ENV_KEYS:
+        raise HarnessConfigError(
+            f"harness {harness!r}: {field_label} {name!r} is denied — this name "
+            f"controls process loading or tool resolution and must not be set "
+            f"via harness config"
+        )
+
 
 def _validate_spec(name: str, spec: dict) -> None:
     if not isinstance(spec, dict):
@@ -128,16 +153,7 @@ def _validate_spec(name: str, spec: dict) -> None:
         # senior-engineer review's "No env-name denylist on
         # adapter-supplied container_env" finding).
         for env_key in env:
-            if not isinstance(env_key, str):
-                raise HarnessConfigError(
-                    f"harness {name!r}: env keys must be strings"
-                )
-            if env_key in _DENIED_ENV_KEYS:
-                raise HarnessConfigError(
-                    f"harness {name!r}: env key {env_key!r} is denied — "
-                    "this name controls process loading or tool resolution "
-                    "and must not be set via harness config"
-                )
+            _validate_env_name(env_key, harness=name, field_label="env key")
 
     # platforms (D-89, agent harnesses) must be a list of strings if present
     if "platforms" in spec:
@@ -158,10 +174,7 @@ def _validate_spec(name: str, spec: dict) -> None:
                 "(plaintext credential values are not permitted per D-162)"
             )
         for sec in secrets:
-            if not sec or any(c.isspace() or c == "=" for c in sec):
-                raise HarnessConfigError(
-                    f"harness {name!r}: secret {sec!r} is not a valid env-var name"
-                )
+            _validate_env_name(sec, harness=name, field_label="secret")
 
     # model_credential (D-184/D-185): optional block enabling broker mediation
     # for a mediated profile. `secret` is an env-var NAME resolved host-side by
@@ -173,16 +186,15 @@ def _validate_spec(name: str, spec: dict) -> None:
                 f"harness {name!r}: model_credential must be an object"
             )
         secret = mc.get("secret")
-        if (
-            not isinstance(secret, str)
-            or not secret
-            or any(c.isspace() or c == "=" for c in secret)
-        ):
-            raise HarnessConfigError(
-                f"harness {name!r}: model_credential.secret must be a valid "
-                "env-var name (resolved host-side, never a plaintext value)"
+        _validate_env_name(
+            secret, harness=name, field_label="model_credential.secret",
+        )
+        if "base_url_env" in mc:
+            _validate_env_name(
+                mc["base_url_env"], harness=name,
+                field_label="model_credential.base_url_env",
             )
-        for opt in ("provider", "base_url_env", "placeholder"):
+        for opt in ("provider", "placeholder"):
             if opt in mc and not isinstance(mc[opt], str):
                 raise HarnessConfigError(
                     f"harness {name!r}: model_credential.{opt} must be a string"

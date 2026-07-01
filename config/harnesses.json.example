@@ -17,17 +17,20 @@
     },
     "hermes": {
       "type": "agent",
-      "start_command": "hermes chat",
-      "stop_command": "hermes stop",
+      "start_command": "hermes",
       "wrap_up_command": "/quit",
       "wrap_up_grace_seconds": 30,
-      "working_dir": "/home/whizzard",
-      "health_check": "hermes status",
-      "startup_timeout_seconds": 30,
-      "env": {
-        "HERMES_HOME": "/home/whizzard/.hermes"
+      "hermes_home": "~/.hermes-whizzard-cell",
+      "platforms": ["discord"],
+      "model_credential": {
+        "provider": "anthropic",
+        "secret": "ANTHROPIC_API_KEY",
+        "base_url_env": "ANTHROPIC_BASE_URL"
       },
-      "description": "Hermes adapter (lands in Stage 8; type=agent not yet wired)"
+      "secrets": [
+        "DISCORD_BOT_TOKEN"
+      ],
+      "description": "Whizzard-wrapped Hermes. `model_credential` names the model key/login, resolved host-side — in a mediated/hybrid profile the cell sees only a placeholder + broker URL, never the real value. `secrets` lists OTHER env-var names whose real values are fetched (OneCLI vault -> host env) and injected into the cell; use it for tokens that mediation/OneCLI don't already cover. The model secret must NOT also appear in `secrets`."
     }
   }
 }
