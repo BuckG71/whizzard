@@ -34,11 +34,12 @@ import sys
 
 try:
     from aiohttp import ClientSession, ClientTimeout, web
+    from yarl import URL
 except ImportError:  # pragma: no cover
     # aiohttp ships in the broker image (Debian python3-aiohttp), not the host
     # venv. The pure header/URL helpers below are unit-tested on the host
     # without it; the server functions require it at runtime.
-    ClientSession = ClientTimeout = web = None  # type: ignore[assignment,misc]
+    ClientSession = ClientTimeout = web = URL = None  # type: ignore[assignment,misc]
 
 UPSTREAM_SCHEME = "https"
 # The ONLY host this proxy will ever contact. Not user-configurable from the
@@ -47,6 +48,13 @@ UPSTREAM_SCHEME = "https"
 UPSTREAM_HOST = os.environ.get("BROKER_UPSTREAM_HOST", "api.anthropic.com")
 LISTEN_PORT = int(os.environ.get("BROKER_PORT", "8080"))
 KEY_FILE = os.environ.get("BROKER_KEY_FILE", "/run/broker/key")
+# How the real credential is injected: "api_key" → x-api-key header (a raw
+# Anthropic API key); "bearer" → Authorization: Bearer + the oauth beta header
+# (a Claude subscription / OAuth token). Chosen host-side by broker.py from the
+# resolved credential; never client-controllable.
+AUTH_SCHEME = os.environ.get("BROKER_AUTH_SCHEME", "api_key")
+# Beta header Anthropic requires for OAuth-token (subscription) auth.
+_OAUTH_BETA = "oauth-2025-04-20"
 
 # Hop-by-hop headers (RFC 7230 §6.1) plus length/host — never forwarded as-is;
 # the client library recomputes length and we set host to the upstream.
@@ -81,23 +89,53 @@ def load_key(path: str) -> str:
     return key
 
 
-def build_upstream_url(path_qs: str) -> str:
-    """Map an incoming request path (+query) onto the single allowlisted
-    upstream. ``path_qs`` already starts with '/'."""
-    return f"{UPSTREAM_SCHEME}://{UPSTREAM_HOST}{path_qs}"
+def build_upstream_url(path: str, query_string: str = ""):
+    """Structurally pin the upstream host; the request's path/query can only
+    populate the path/query components, never the authority. Returns a yarl URL
+    (URL.build rejects authority injection — a leading '//path' can't smuggle a
+    different host the way string concatenation could)."""
+    return URL.build(
+        scheme=UPSTREAM_SCHEME,
+        host=UPSTREAM_HOST,
+        path=path,
+        query_string=query_string,
+        encoded=True,
+    )
 
 
-def rewrite_request_headers(headers, real_key: str) -> dict[str, str]:
-    """Strip hop-by-hop + client auth headers, inject the real key, and point
-    Host at the upstream. Everything else (anthropic-version, anthropic-beta,
-    content-type, x-stainless-*, user-agent) passes through unchanged."""
+def _oauth_beta(existing) -> str:
+    """Merge the required oauth beta token with any anthropic-beta the client
+    already sent (comma-separated), without duplicating it."""
+    parts = [p.strip() for p in (existing or "").split(",") if p.strip()]
+    if _OAUTH_BETA not in parts:
+        parts.append(_OAUTH_BETA)
+    return ", ".join(parts)
+
+
+def rewrite_request_headers(headers, real_key: str, scheme: str = "api_key") -> dict[str, str]:
+    """Strip hop-by-hop + client auth headers, inject the real credential per
+    the auth scheme, and point Host at the upstream. Everything else
+    (anthropic-version, content-type, x-stainless-*, user-agent) passes through.
+
+    scheme "api_key" → x-api-key: <key>. scheme "bearer" → Authorization:
+    Bearer <token> + the oauth beta header (Claude subscription / OAuth auth)."""
     out: dict[str, str] = {}
+    client_beta = ""
     for k, v in headers.items():
         lk = k.lower()
+        if lk == "anthropic-beta":
+            client_beta = v  # capture, re-emit below (possibly augmented)
+            continue
         if lk in _HOP_BY_HOP or lk in _STRIP_CLIENT_AUTH:
             continue
         out[k] = v
-    out["x-api-key"] = real_key
+    if scheme == "bearer":
+        out["authorization"] = f"Bearer {real_key}"
+        out["anthropic-beta"] = _oauth_beta(client_beta)
+    else:
+        out["x-api-key"] = real_key
+        if client_beta:
+            out["anthropic-beta"] = client_beta
     out["host"] = UPSTREAM_HOST
     return out
 
@@ -110,9 +148,10 @@ def filter_response_headers(headers) -> dict[str, str]:
 async def handle(request: web.Request) -> web.StreamResponse:
     real_key: str = request.app["real_key"]
     session: ClientSession = request.app["session"]
+    scheme: str = request.app["scheme"]
 
-    url = build_upstream_url(request.path_qs)
-    req_headers = rewrite_request_headers(request.headers, real_key)
+    url = build_upstream_url(request.path, request.query_string)
+    req_headers = rewrite_request_headers(request.headers, real_key, scheme)
     # Read the request body fully (Anthropic requests are JSON, not streamed
     # uploads) so the length is exact; stream only the RESPONSE, which is where
     # SSE / token streaming matters.
@@ -154,6 +193,7 @@ async def _on_cleanup(app: web.Application) -> None:
 def make_app() -> web.Application:
     app = web.Application()
     app["real_key"] = load_key(KEY_FILE)
+    app["scheme"] = AUTH_SCHEME
     app.router.add_route("*", "/{tail:.*}", handle)
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)

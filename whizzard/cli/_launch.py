@@ -202,7 +202,13 @@ def _perform_launch(
             "within the limits below."
         )
     console.print(f"[bold]Whizzard Profile:[/bold] {prof.name.upper()}")
-    console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
+    if prof.network_mode == "mediated":
+        _net_str = "mediated (broker only — model key stays out of the cell)"
+    elif prof.network_enabled:
+        _net_str = "enabled"
+    else:
+        _net_str = "disabled"
+    console.print(f"[bold]Network:[/bold] {_net_str}")
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")
     console.print(f"[bold]Image:[/bold] {image}")
@@ -244,7 +250,7 @@ def _perform_launch(
         import shlex
         if prof.network_mode == "mediated":
             assert mediation_secret is not None  # guaranteed by the check above
-            slug = session_id[:24]
+            slug = session_id
             mediated_network = f"whiz-int-{slug}"
             adapter.mediation = MediationContext(  # type: ignore[attr-defined]
                 base_url=f"http://whiz-broker-{slug}:8080",
