@@ -176,14 +176,20 @@ def run_cmd(
         ),
     ] = False,
     harness: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--harness",
-            help="Named harness from harnesses.json (default: generic shell).",
+            help="Named harness from harnesses.json (required, e.g. hermes-cell).",
         ),
-    ] = "generic",
+    ] = None,
 ) -> None:
-    """Launch a contained shell session under the given profile."""
+    """Launch a contained agent session under the given profile."""
+    if harness is None:
+        console.print(
+            "[red]--harness is required (e.g. [bold]--harness hermes-cell[/bold]). "
+            "Or launch a saved preset with [bold]whiz r hermes[/bold].[/red]"
+        )
+        raise typer.Exit(code=2)
     _perform_launch(
         profile_name=profile,
         mount_specs=mount or [],
@@ -345,13 +351,19 @@ def r_cmd(
 
     if run_flag_present:
         # Run-with-flags path
+        if harness is None:
+            console.print(
+                "[red]--harness is required with run-style flags "
+                "(e.g. [bold]--harness hermes-cell[/bold]).[/red]"
+            )
+            raise typer.Exit(code=2)
         _perform_launch(
             profile_name=profile or "default",
             mount_specs=mount or [],
             image=image,
             dry_run=dry_run,
             allow_broad_mount=allow_broad_mount,
-            harness=harness or "generic",
+            harness=harness,
             allow_ephemeral=allow_ephemeral,
         )
         return

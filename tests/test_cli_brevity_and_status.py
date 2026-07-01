@@ -199,9 +199,25 @@ def test_whiz_r_with_preset_name_dry_run(isolated_whizzard_home: Path, fake_cred
 
 
 def test_whiz_r_with_run_flags(isolated_whizzard_home: Path):
-    result = runner.invoke(app, ["r", "--profile", "safe", "--dry-run"])
+    result = runner.invoke(
+        app, ["r", "--profile", "safe", "--harness", "generic", "--dry-run"]
+    )
     assert result.exit_code == 0, result.output
     assert "SAFE" in result.output
+
+
+def test_whiz_run_requires_harness(isolated_whizzard_home: Path):
+    """--harness is required (no silent default to the internal shell)."""
+    result = runner.invoke(app, ["run", "--profile", "safe", "--dry-run"])
+    assert result.exit_code == 2
+    assert "--harness is required" in result.output
+
+
+def test_whiz_r_run_flags_require_harness(isolated_whizzard_home: Path):
+    """The `r` run-flag path also requires an explicit --harness."""
+    result = runner.invoke(app, ["r", "--profile", "safe", "--dry-run"])
+    assert result.exit_code == 2
+    assert "--harness is required" in result.output
 
 
 def test_whiz_r_mixing_preset_and_run_flags_errors(isolated_whizzard_home: Path):

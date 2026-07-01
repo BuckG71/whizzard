@@ -35,19 +35,19 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def test_dry_run_does_not_call_run_shell():
     """Dry-run must not invoke run_shell — that's the whole point."""
     with patch("whizzard.cli._launch.run_shell") as mock_run:
-        result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+        result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert mock_run.call_count == 0
 
 
 def test_dry_run_output_contains_dry_run_banner():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert "DRY RUN" in result.output
 
 
 def test_dry_run_output_contains_profile_summary():
-    result = runner.invoke(app, ["run", "--profile", "build", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "build", "--dry-run"])
     assert "BUILD" in result.output
     assert "Network" in result.output
     assert "Duration" in result.output
@@ -60,21 +60,21 @@ def test_dry_run_resolves_image_from_harness_when_not_overridden():
     default. The bug was that the base image was used regardless of harness."""
     from whizzard.images import WHIZZARD_IMAGE
 
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert WHIZZARD_IMAGE in result.output
 
 
 def test_dry_run_explicit_image_overrides_harness_default():
     result = runner.invoke(
-        app, ["run", "--profile", "default", "--image", "custom:tag", "--dry-run"]
+        app, ["run", "--harness", "generic", "--profile", "default", "--image", "custom:tag", "--dry-run"]
     )
     assert result.exit_code == 0
     assert "custom:tag" in result.output
 
 
 def test_dry_run_output_contains_docker_argv():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     out = result.output
     assert "docker invocation that would run" in out
     assert "docker" in out
@@ -117,7 +117,7 @@ def test_dry_run_includes_mount_in_argv(tmp_path: Path, monkeypatch):
 
     result = runner.invoke(
         app,
-        ["run", "--profile", "build", "--mount", "test-alpha", "--dry-run"],
+        ["run", "--harness", "generic", "--profile", "build", "--mount", "test-alpha", "--dry-run"],
     )
     assert result.exit_code == 0
     assert "-v" in result.output
@@ -125,7 +125,7 @@ def test_dry_run_includes_mount_in_argv(tmp_path: Path, monkeypatch):
 
 
 def test_dry_run_with_unknown_profile_errors():
-    result = runner.invoke(app, ["run", "--profile", "nope", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "nope", "--dry-run"])
     assert result.exit_code == 2
     assert "Unknown profile" in result.output
 
@@ -133,7 +133,7 @@ def test_dry_run_with_unknown_profile_errors():
 def test_dry_run_with_unknown_mount_errors():
     result = runner.invoke(
         app,
-        ["run", "--profile", "default", "--mount", "does-not-exist", "--dry-run"],
+        ["run", "--harness", "generic", "--profile", "default", "--mount", "does-not-exist", "--dry-run"],
     )
     assert result.exit_code == 2
     assert "unknown mount" in result.output
@@ -150,7 +150,7 @@ def test_run_without_dry_run_calls_run_shell():
     with patch("whizzard.cli._launch.run_shell", return_value=RunResult(None, 0)) as mock_run, \
          patch("whizzard.cli._launch.docker_available", return_value=True), \
          patch("whizzard.cli._launch.image_exists", return_value=True):
-        result = runner.invoke(app, ["run", "--profile", "default"])
+        result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default"])
     assert mock_run.call_count == 1
     assert result.exit_code == 0
 
@@ -162,17 +162,17 @@ def test_dry_run_shows_broad_mount_override_state():
     (was False). `safe` is used here for the "blocked" assertion since it
     still has `allow_broad_mount=False` as a representative locked-down profile.
     """
-    result = runner.invoke(app, ["run", "--profile", "power", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "power", "--dry-run"])
     out = result.output
     assert "Broad-mount override" in out
     assert "allowed" in out
 
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     out = result.output
     assert "Broad-mount override" in out
     assert "allowed" in out  # D-157: default flipped to allow_broad_mount=True
 
-    result = runner.invoke(app, ["run", "--profile", "safe", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "safe", "--dry-run"])
     out = result.output
     assert "Broad-mount override" in out
     assert "blocked" in out
@@ -181,12 +181,12 @@ def test_dry_run_shows_broad_mount_override_state():
 # Stage 5 — session log integration
 
 def test_dry_run_shows_session_id():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert "Session ID" in result.output
 
 
 def test_dry_run_argv_includes_session_label():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert "whizzard.session_id" in result.output
 
 
@@ -195,7 +195,7 @@ def test_dry_run_does_not_write_session_log(tmp_path: Path, monkeypatch):
     from whizzard import session_log
     log_path = tmp_path / "sessions.jsonl"
     monkeypatch.setattr(session_log, "SESSIONS_LOG", log_path)
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert result.exit_code == 0
     assert not log_path.exists()
 
@@ -213,7 +213,7 @@ def test_missing_image_shows_red_error_via_cli(monkeypatch):
         raise AssertionError("run_shell should not be reached when image is missing")
     monkeypatch.setattr(cli_launch, "run_shell", _should_not_be_called)
 
-    result = runner.invoke(app, ["run", "--profile", "default", "--image", "bogus:nope"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--image", "bogus:nope"])
     assert result.exit_code == 125
     assert "error: image" in result.output
     assert "bogus:nope" in result.output
@@ -226,7 +226,7 @@ def test_missing_docker_shows_red_error_via_cli(monkeypatch):
         raise AssertionError("run_shell should not be reached when docker is missing")
     monkeypatch.setattr(cli_launch, "run_shell", _should_not_be_called)
 
-    result = runner.invoke(app, ["run", "--profile", "default"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default"])
     assert result.exit_code == 127
     assert "docker not found" in result.output
 
@@ -234,13 +234,13 @@ def test_missing_docker_shows_red_error_via_cli(monkeypatch):
 # Stage 7 — adapter / harness flag
 
 def test_dry_run_banner_shows_harness_name():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert "Harness" in result.output
     assert "generic" in result.output
 
 
 def test_dry_run_argv_includes_harness_label():
-    result = runner.invoke(app, ["run", "--profile", "default", "--dry-run"])
+    result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default", "--dry-run"])
     assert "whizzard.harness=generic" in result.output
 
 
@@ -359,7 +359,7 @@ def test_launch_aborts_when_snapshot_write_fails(monkeypatch):
          patch("whizzard.cli._launch.docker_available", return_value=True), \
          patch("whizzard.cli._launch.image_exists", return_value=True), \
          patch("whizzard.cli._launch.run_shell") as mock_run:
-        result = runner.invoke(app, ["run", "--profile", "default"])
+        result = runner.invoke(app, ["run", "--harness", "generic", "--profile", "default"])
 
     # The launch must NOT have proceeded to run_shell.
     assert mock_run.call_count == 0, (
