@@ -83,6 +83,51 @@ def test_mediated_container_env_injects_placeholder_not_the_real_key():
     assert "ANTHROPIC_API_KEY" not in adapter.credential_env_keys()
 
 
+def test_onecli_container_env_strips_all_secrets_and_routes_via_gateway(monkeypatch):
+    """D-187 onecli mode: every fetched secret is stripped from the cell env
+    (OneCLI injects them host-side); the cell gets only the proxy + CA trust +
+    a model placeholder."""
+    import types
+
+    from whizzard.adapters import hermes as hz
+
+    monkeypatch.setattr(
+        hz, "fetch_secret",
+        lambda name: types.SimpleNamespace(value="real-" + name, source="host-env"),
+    )
+    adapter = hz.HermesAdapter(config={"secrets": ["DISCORD_BOT_TOKEN"]})
+    adapter.onecli = hz.OneCLIContext(
+        proxy_url="http://x:tok@onecli:10255", ca_host_path="/host/ca.pem"
+    )
+    env = adapter.container_env()
+
+    # egress routed through the gateway
+    assert env["HTTPS_PROXY"] == "http://x:tok@onecli:10255"
+    assert env["HTTP_PROXY"] == "http://x:tok@onecli:10255"
+    # CA trust points at the in-cell mount
+    assert env["NODE_EXTRA_CA_CERTS"] == hz._IN_CELL_ONECLI_CA
+    assert env["REQUESTS_CA_BUNDLE"] == hz._IN_CELL_ONECLI_CA
+    # model client initializes with a placeholder (gateway injects the real one)
+    assert env["ANTHROPIC_API_KEY"] == hz.MEDIATION_PLACEHOLDER
+    # the real fetched secret is NOT in the cell env, and the scrub set is clear
+    assert "DISCORD_BOT_TOKEN" not in env
+    assert adapter.credential_env_keys() == set()
+
+
+def test_onecli_container_mounts_the_ca_cert(monkeypatch):
+    from whizzard.adapters import hermes as hz
+
+    adapter = hz.HermesAdapter()
+    adapter.onecli = hz.OneCLIContext(
+        proxy_url="http://x:tok@onecli:10255", ca_host_path="/host/ca.pem"
+    )
+    mounts = adapter.container_mounts()
+    ca = [m for m in mounts if m.container_path == hz._IN_CELL_ONECLI_CA]
+    assert len(ca) == 1
+    assert str(ca[0].host_path) == "/host/ca.pem"
+    assert ca[0].mode == "ro"
+
+
 def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     fake_vault = {
         "DISCORD_BOT_TOKEN": "discord-secret-xyz",

@@ -72,6 +72,25 @@ class MediationContext:
     placeholder: str = MEDIATION_PLACEHOLDER
 
 
+# In-cell path where the OneCLI gateway CA cert is mounted (onecli mode, D-187).
+_IN_CELL_ONECLI_CA = f"{_IN_CELL_WHIZ_DIR}/onecli-ca.pem"
+# CA-trust env vars a client honors so it trusts the gateway's MITM cert.
+_ONECLI_CA_ENV_VARS = (
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE", "GIT_SSL_CAINFO", "DENO_CERT",
+)
+
+
+@dataclass(frozen=True)
+class OneCLIContext:
+    """Set on the adapter (by _perform_launch) for an 'onecli' launch (D-187).
+    Routes the cell's egress through the OneCLI gateway; OneCLI injects every
+    configured credential host-side, so the cell env carries no real secret."""
+
+    proxy_url: str  # http://x:<token>@<gateway>:<port>
+    ca_host_path: str  # host path to the gateway CA cert (mounted into the cell)
+
+
 # Bare `hermes` drops the user into Hermes's interactive terminal chat — the
 # default cell invocation (D-181, amending D-88). Gateway mode (a messaging-
 # platform daemon that needs platform config and ignores stdin) is NOT the
@@ -553,6 +572,20 @@ class HermesAdapter:
             # with the placeholder; drop it from the credential-scrub set since
             # what the cell holds is no longer a real secret.
             self._credential_sources.pop(mediation.secret_name, None)
+        # onecli mode (D-187): route all egress through the OneCLI gateway,
+        # which injects every configured credential host-side. Strip ALL fetched
+        # secrets from the cell env (the cell holds none) and set only the proxy
+        # + CA trust + a model placeholder so the harness client initializes.
+        onecli = getattr(self, "onecli", None)
+        if onecli is not None:
+            for k in list(self._credential_sources):
+                env.pop(k, None)
+            self._credential_sources.clear()
+            for var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+                env[var] = onecli.proxy_url
+            for var in _ONECLI_CA_ENV_VARS:
+                env[var] = _IN_CELL_ONECLI_CA
+            env["ANTHROPIC_API_KEY"] = MEDIATION_PLACEHOLDER
         return env
 
     def credential_env_keys(self) -> set[str]:
@@ -730,19 +763,31 @@ class HermesAdapter:
         # land with the host UID on raw Linux. On macOS Docker Desktop
         # the translation is transparent, but the parity wiring is the
         # same code path.
+        mounts: list[ContainerMount] = []
         hermes_home = _resolve_hermes_home(self.config)
-        if hermes_home is None:
-            return []
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        _check_no_auth_json(hermes_home)
-        return [
-            ContainerMount(
-                host_path=hermes_home,
-                container_path=_IN_CELL_HERMES_HOME,
-                mode="rw",
-                uid_parity=True,
+        if hermes_home is not None:
+            hermes_home.mkdir(parents=True, exist_ok=True)
+            _check_no_auth_json(hermes_home)
+            mounts.append(
+                ContainerMount(
+                    host_path=hermes_home,
+                    container_path=_IN_CELL_HERMES_HOME,
+                    mode="rw",
+                    uid_parity=True,
+                )
             )
-        ]
+        # onecli mode (D-187): mount the OneCLI gateway CA cert read-only so the
+        # cell trusts the gateway's MITM cert (paired with the CA env vars).
+        onecli = getattr(self, "onecli", None)
+        if onecli is not None:
+            mounts.append(
+                ContainerMount(
+                    host_path=Path(onecli.ca_host_path),
+                    container_path=_IN_CELL_ONECLI_CA,
+                    mode="ro",
+                )
+            )
+        return mounts
 
     def preflight(self) -> PreflightResult:
         # D-87: refuse to launch when a live gateway already holds the lock

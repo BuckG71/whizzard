@@ -19,7 +19,11 @@ from whizzard.adapters import (
     UnknownHarnessTypeError,
     build_adapter,
 )
-from whizzard.adapters.hermes import MEDIATION_PLACEHOLDER, MediationContext
+from whizzard.adapters.hermes import (
+    MEDIATION_PLACEHOLDER,
+    MediationContext,
+    OneCLIContext,
+)
 from whizzard.broker import BrokerError, start_broker, stop_broker
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, get_profile
@@ -37,6 +41,11 @@ from whizzard.mounts import (
     MountRegistryError,
     load_mounts,
     resolve_mount_spec,
+)
+from whizzard.onecli_gateway import (
+    OneCLIGatewayError,
+    start_onecli_route,
+    stop_onecli_route,
 )
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
 from whizzard.session_log import new_session_id
@@ -204,6 +213,8 @@ def _perform_launch(
     console.print(f"[bold]Whizzard Profile:[/bold] {prof.name.upper()}")
     if prof.network_mode == "mediated":
         _net_str = "mediated (broker only — model key stays out of the cell)"
+    elif prof.network_mode == "onecli":
+        _net_str = "onecli gateway (all credentials injected host-side)"
     elif prof.network_enabled:
         _net_str = "enabled"
     else:
@@ -257,6 +268,13 @@ def _perform_launch(
                 base_url_env=mediation_base_url_env,
                 secret_name=mediation_secret,
                 placeholder=mediation_placeholder,
+            )
+        elif prof.network_mode == "onecli":
+            # Dry-run reports intent without touching the OneCLI gateway.
+            mediated_network = f"whiz-oc-{session_id}"
+            adapter.onecli = OneCLIContext(  # type: ignore[attr-defined]
+                proxy_url="http://x:***@onecli:10255",
+                ca_host_path="~/.onecli/gateway-ca.pem",
             )
         argv = build_run_argv(
             prof,
@@ -334,6 +352,7 @@ def _perform_launch(
     # join). Fail closed if it can't start. Torn down in the finally below so
     # the network + container + key file never outlive the session.
     broker_handle = None
+    onecli_handle = None
     if prof.network_mode == "mediated":
         assert mediation_secret is not None  # guaranteed by the check above
         try:
@@ -348,6 +367,19 @@ def _perform_launch(
             placeholder=mediation_placeholder,
         )
         mediated_network = broker_handle.internal_network
+    elif prof.network_mode == "onecli":
+        # Route the cell's egress through the OneCLI gateway (D-187). All
+        # configured credentials are injected host-side; the cell holds none.
+        try:
+            onecli_handle = start_onecli_route(session_id)
+        except OneCLIGatewayError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=125) from e
+        adapter.onecli = OneCLIContext(  # type: ignore[attr-defined]
+            proxy_url=onecli_handle.proxy_url,
+            ca_host_path=onecli_handle.ca_host_path,
+        )
+        mediated_network = onecli_handle.internal_network
 
     launch_started = time.monotonic()
     try:
@@ -377,6 +409,8 @@ def _perform_launch(
     finally:
         if broker_handle is not None:
             stop_broker(broker_handle)
+        if onecli_handle is not None:
+            stop_onecli_route(onecli_handle)
 
     # The container has exited — the user is back on the host shell. Announce
     # the boundary so a silent return can't be mistaken for still being inside.

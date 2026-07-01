@@ -349,16 +349,20 @@ def build_run_argv(
         "--tmpfs", f"/home/{CONTAINER_USER}:rw,size=64m,mode=0755,{home_tmpfs_owner}",
     ]
 
-    # Network posture (D-184). "none" → no interfaces; "mediated" → the cell
-    # joins ONLY the per-session --internal broker network (no route out except
-    # to the broker sidecar); "open" → default bridge (full egress), unchanged.
+    # Network posture (D-184/D-187). "none" → no interfaces; "mediated" → the
+    # cell joins ONLY the per-session --internal broker network; "onecli" → the
+    # cell joins ONLY the per-session --internal network the OneCLI gateway is
+    # attached to; both give egress only through their proxy peer. "open" →
+    # default bridge (full egress), unchanged. mediated_network carries the
+    # per-session isolated network name for either mediated or onecli mode.
     if profile.network_mode == "none":
         argv += ["--network", "none"]
-    elif profile.network_mode == "mediated":
+    elif profile.network_mode in ("mediated", "onecli"):
         if mediated_network is None:
             raise ValueError(
-                "network_mode 'mediated' requires a broker network name "
-                "(mediated_network); the caller must start the broker first"
+                f"network_mode {profile.network_mode!r} requires an isolated "
+                f"network name (mediated_network); the caller must set up the "
+                f"proxy route first"
             )
         argv += ["--network", mediated_network]
 
