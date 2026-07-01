@@ -196,7 +196,8 @@ def _perform_launch(
         console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
     else:
         console.print(
-            "[bold]▶ Entering the Whizzard sandbox[/bold] — this session is contained."
+            "[bold]▶ Entering the Whizzard sandbox[/bold] — this session runs "
+            "within the limits below."
         )
     console.print(f"[bold]Whizzard Profile:[/bold] {prof.name.upper()}")
     console.print(f"[bold]Network:[/bold] {'enabled' if prof.network_enabled else 'disabled'}")
