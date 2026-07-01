@@ -424,6 +424,11 @@ def _stub_through_step_1b(
 ) -> Path:
     """Helper: skip steps 1 + 1b (force Branch B so no Hermes cloner runs)."""
     _stub_step_1_to_succeed(monkeypatch)
+    # D-187: the credential-mode prompt probes OneCLI via docker; keep it
+    # deterministic (and docker-free) in the wizard tests.
+    monkeypatch.setattr(
+        "whizzard.init_wizard.onecli_gateway_available", lambda: False
+    )
     fake_home = tmp_path / "fake-home-step2"
     fake_home.mkdir()
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
@@ -466,6 +471,7 @@ def test_init_step_2_minimal_writes_safe_and_default(
         "",        # step 1 Press Enter
         "",        # step 1b (Branch B) Press Enter
         "2",       # step 2: minimal subset
+        "1",       # step 2: credential mode — protect my model key
         "2",       # step 3: no folders
         "1",       # step 4: bundled hermes preset
         "",        # step 5 Press Enter
@@ -478,6 +484,41 @@ def test_init_step_2_minimal_writes_safe_and_default(
     payload = json.loads(iw.PROFILES_FILE.read_text())
     names = set(payload["profiles"].keys())
     assert names == {"safe", "default"}
+
+
+@pytest.mark.parametrize(
+    "cred_choice,expected_mode",
+    [("1", "mediated"), ("2", "onecli"), ("3", "hybrid")],
+)
+def test_init_credential_mode_choice_sets_default_profile_posture(
+    _isolated_whizzard_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cred_choice: str,
+    expected_mode: str,
+):
+    """D-187: the credential-mode prompt drives the `default` profile's
+    network_mode (mediated / onecli / hybrid)."""
+    _stub_through_step_1b(monkeypatch, tmp_path)
+    # OneCLI present so the onecli/hybrid picks are valid.
+    monkeypatch.setattr(
+        "whizzard.init_wizard.onecli_gateway_available", lambda: True
+    )
+    user_input = "\n".join([
+        "", "", "",       # welcome, step 1, step 1b
+        "1",              # step 2: all 5 defaults
+        cred_choice,      # step 2: credential mode
+        "2",              # step 3: no folders
+        "1",              # step 4: bundled hermes preset
+        "",               # step 5
+    ]) + "\n"
+    result = runner.invoke(app, ["init"], input=user_input)
+    assert result.exit_code == 0
+
+    from whizzard import init_wizard as iw
+
+    payload = json.loads(iw.PROFILES_FILE.read_text())
+    assert payload["profiles"]["default"]["network_mode"] == expected_mode
 
 
 def test_init_step_3_yes_writes_empty_mount_registry(
@@ -510,6 +551,7 @@ def test_init_step_3_interactive_adds_one_folder(
         "",                      # step 1 Press Enter
         "",                      # step 1b (Branch B) Press Enter
         "1",                     # step 2: all 5 defaults
+        "1",       # step 2: credential mode — protect my model key
         "1",                     # step 3: yes, add a folder
         "~/code/scratch",        # path
         "1",                     # folder doesn't exist → create it
@@ -551,6 +593,7 @@ def test_init_step_3_rejects_hard_blocked_path_then_recovers(
     user_input = "\n".join([
         "", "", "",            # welcome, step 1, step 1b
         "1",                   # step 2: all 5 defaults
+        "1",       # step 2: credential mode — protect my model key
         "1",                   # step 3: yes, add a folder
         "/",                   # hard-blocked (exact) → rejected, re-prompt path
         str(valid),            # valid existing path
@@ -592,6 +635,7 @@ def test_init_step_3_pick_uses_folder_dialog(
     user_input = "\n".join([
         "", "", "",            # welcome, step 1, step 1b
         "1",                   # step 2: all 5 defaults
+        "1",       # step 2: credential mode — protect my model key
         "1",                   # step 3: yes, add a folder
         "pick",                # path → opens the (mocked) dialog
         "pickedmount",         # name
@@ -661,6 +705,7 @@ def test_init_step_4_attaches_registered_mount_in_full_interactive(
         "",                      # step 1
         "",                      # step 1b (Branch B)
         "1",                     # step 2: all 5
+        "1",       # step 2: credential mode — protect my model key
         "1",                     # step 3: yes add folder
         "~/code/scratch",        # path
         "1",                     # folder doesn't exist → create it
@@ -696,6 +741,7 @@ def test_init_step_4_skip_writes_empty_presets(
         "",        # step 1
         "",        # step 1b
         "1",       # step 2: all 5
+        "1",       # step 2: credential mode — protect my model key
         "2",       # step 3: no folders
         "3",       # step 4: skip
         "",        # step 5

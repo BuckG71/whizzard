@@ -68,6 +68,7 @@ from whizzard.docker_cmd import (
 )
 from whizzard.harness_config import HARNESSES_FILE, default_harnesses
 from whizzard.mounts import MOUNTS_FILE
+from whizzard.onecli_gateway import onecli_gateway_available
 from whizzard.preset_config import PRESETS_FILE
 from whizzard.safety import (
     OverrideRecord,
@@ -146,6 +147,10 @@ class WizardState:
     mount_names: list[str] = field(default_factory=list)
     preset_count: int = 0
     preset_names: list[str] = field(default_factory=list)
+    #: How the `default` profile keeps credentials out of the cell (D-187):
+    #: "mediated" (model key only), "onecli" (all via OneCLI), or "hybrid"
+    #: (OneCLI for services + broker for the model login).
+    credential_mode: str = "mediated"
 
 
 # ---------- input helpers ----------
@@ -426,6 +431,80 @@ def _default_hermes_cloner(name: str, source: Path) -> Path:
     return result.path
 
 
+_CREDENTIAL_MODE_BY_CHOICE = {1: "mediated", 2: "onecli", 3: "hybrid"}
+
+
+def _prompt_credential_mode(state: WizardState) -> str:
+    """Ask how the `default` profile keeps credentials out of the sandbox and
+    return the chosen network_mode (D-187). Deliberately avoids internal jargon
+    ("broker"/"mediated"/"bar-C") — the labels describe what the user gets."""
+    console.print()
+    console.print("[bold]Keeping your credentials out of the sandbox[/bold]")
+    console.print("─" * 48)
+    console.print()
+    console.print(
+        "Whizzard makes sure the credentials your agent uses — your model "
+        "provider's key or login, plus any service tokens — never enter the "
+        "sandbox. How it does that depends on your setup."
+    )
+    console.print()
+    onecli_ok = onecli_gateway_available()
+    if onecli_ok:
+        console.print("  [green]✓ OneCLI detected and running.[/green]")
+    else:
+        console.print(
+            "  [yellow]• OneCLI not detected[/yellow] — options 2 and 3 below "
+            "need OneCLI running to work."
+        )
+    console.print()
+    console.print(
+        "  [bold]1) Protect my model key[/bold]\n"
+        "     Whizzard holds your model provider's API key outside the sandbox;\n"
+        "     the agent only ever sees a placeholder.\n"
+        "     [dim]Choose this if you don't use OneCLI.[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]2) Let OneCLI handle every credential[/bold]\n"
+        "     OneCLI injects each credential (model and services) into outbound\n"
+        "     requests, so none enter the sandbox.\n"
+        "     [dim]Choose this if you use OneCLI and your model uses an API "
+        "key.[/dim]"
+    )
+    console.print()
+    console.print(
+        "  [bold]3) OneCLI, plus protect my model login[/bold]\n"
+        "     OneCLI injects your service credentials; Whizzard separately keeps\n"
+        "     your model-provider login out of the sandbox.\n"
+        "     [dim]Choose this if you use OneCLI and sign in to your model\n"
+        "     provider (subscription / OAuth) rather than an API key.[/dim]"
+    )
+    console.print()
+
+    if state.non_interactive:
+        # Sensible non-interactive default: full coverage when OneCLI is there,
+        # model-key protection otherwise.
+        choice = 3 if onecli_ok else 1
+    else:
+        choice = _prompt_numeric_choice(
+            "How should credentials be handled for the default profile?",
+            options=[
+                "Protect my model key (no OneCLI)",
+                "Let OneCLI handle every credential",
+                "OneCLI, plus protect my model login",
+            ],
+        )
+    mode = _CREDENTIAL_MODE_BY_CHOICE[choice]
+    if mode in ("onecli", "hybrid") and not onecli_ok:
+        console.print(
+            "  [yellow]⚠ You picked a OneCLI option, but OneCLI isn't running "
+            "right now. Start OneCLI before you launch, or the session will "
+            "stop with a clear error.[/yellow]"
+        )
+    state.credential_mode = mode
+    return mode
+
+
 def step_2_profiles(state: WizardState) -> None:
     """Step 2 — set up profiles.
 
@@ -496,9 +575,11 @@ def step_2_profiles(state: WizardState) -> None:
         names = _step_2_custom_profiles_subflow(state)
     elif choice == 2:
         # Minimal subset: safe + default.
-        names = _write_profiles_subset(["safe", "default"])
+        mode = _prompt_credential_mode(state)
+        names = _write_profiles_subset(["safe", "default"], credential_mode=mode)
     else:
-        names = _write_default_profiles()
+        mode = _prompt_credential_mode(state)
+        names = _write_default_profiles(credential_mode=mode)
 
     state.profile_names = names
     console.print()
@@ -514,7 +595,9 @@ def step_2_profiles(state: WizardState) -> None:
     )
 
 
-def _write_profiles_subset(names: list[str]) -> list[str]:
+def _write_profiles_subset(
+    names: list[str], credential_mode: str = "mediated"
+) -> list[str]:
     """Write only the named subset of bundled profiles."""
     all_defaults = default_profiles()
     selected = {n: all_defaults[n] for n in names if n in all_defaults}
@@ -523,10 +606,11 @@ def _write_profiles_subset(names: list[str]) -> list[str]:
         "profiles": {
             name: {
                 "network_enabled": p.network_enabled,
-                # D-184/D-185: credential privacy by default — the `default`
-                # profile mediates the model key through the broker (bar C).
-                # Other profiles keep their derived posture.
-                "network_mode": "mediated" if name == "default" else p.network_mode,
+                # D-184/D-185/D-187: credential privacy by default — the
+                # `default` profile keeps credentials out of the cell via the
+                # user-chosen posture (mediated / onecli / hybrid). Other
+                # profiles keep their derived posture.
+                "network_mode": credential_mode if name == "default" else p.network_mode,
                 "duration_seconds": p.duration_seconds,
                 "idle_timeout_seconds": p.idle_timeout_seconds,
                 "allow_broad_mount": p.allow_broad_mount,
@@ -1280,6 +1364,70 @@ def step_5_audit_log(state: WizardState) -> None:
         _pause_for_enter("Press Enter to finish setup.")
 
 
+def _print_credential_privacy_summary(mode: str) -> None:
+    """Done-summary line for the chosen credential posture (D-187). Warns (not
+    fails) when the posture's prerequisite isn't satisfied yet."""
+    from whizzard.adapters._credentials import fetch_secret
+
+    if mode == "onecli":
+        if onecli_gateway_available():
+            console.print(
+                "  Credential privacy: [green]on[/green] — OneCLI injects every "
+                "credential; none enter the cell.  [green]✓ OneCLI running[/green]"
+            )
+        else:
+            console.print(
+                "  Credential privacy: [green]on[/green] — OneCLI injects every "
+                "credential; none enter the cell."
+            )
+            console.print(
+                "  [yellow]⚠ OneCLI isn't running — start it before "
+                "[bold]whiz r hermes[/bold], or the launch will stop with a "
+                "clear error.[/yellow]"
+            )
+        return
+
+    if mode == "hybrid":
+        if onecli_gateway_available():
+            console.print(
+                "  Credential privacy: [green]on[/green] — services via OneCLI, "
+                "your model login kept out of the cell.  "
+                "[green]✓ OneCLI running[/green]"
+            )
+        else:
+            console.print(
+                "  Credential privacy: [green]on[/green] — services via OneCLI, "
+                "your model login kept out of the cell."
+            )
+            console.print(
+                "  [yellow]⚠ OneCLI isn't running — start it before "
+                "[bold]whiz r hermes[/bold], or the launch will stop.[/yellow]"
+            )
+        console.print(
+            "  [dim]Your model login must be resolvable host-side (env var or "
+            "OneCLI vault) for the protected model path.[/dim]"
+        )
+        return
+
+    # mediated (default posture)
+    try:
+        fetch_secret("ANTHROPIC_API_KEY")
+        console.print(
+            "  Credential privacy: [green]on[/green] — your model key stays out "
+            "of the cell.  [green]✓ ANTHROPIC_API_KEY found[/green]"
+        )
+    except Exception:
+        console.print(
+            "  Credential privacy: [green]on[/green] — your model key stays out "
+            "of the cell."
+        )
+        console.print(
+            "  [yellow]⚠ ANTHROPIC_API_KEY isn't resolvable yet — set it (env "
+            "var or OneCLI vault) before [bold]whiz r hermes[/bold], or the "
+            "launch will stop with a clear error.[/yellow]"
+        )
+
+
 def step_done_summary(state: WizardState) -> None:
     """Final page — recap what was set up and suggest first commands."""
     from whizzard.config import LOGS_DIR
@@ -1315,28 +1463,10 @@ def step_done_summary(state: WizardState) -> None:
     console.print(f"  Preset:            {presets_str}        [green]{state.preset_count}[/green]")
     console.print(f"  Audit log:         {LOGS_DIR / 'sessions.jsonl'}")
 
-    # bar C / D-184/D-185: credential privacy is on by default — the `default`
-    # profile mediates the model key through the broker so the cell never holds
-    # it. Verify the key resolves now (warn, don't fail) so a fresh user learns
-    # before their first launch rather than at a fail-closed launch error.
-    from whizzard.adapters._credentials import fetch_secret
-
-    try:
-        fetch_secret("ANTHROPIC_API_KEY")
-        console.print(
-            "  Credential privacy: [green]on[/green] — your model key stays "
-            "out of the cell.  [green]✓ ANTHROPIC_API_KEY found[/green]"
-        )
-    except Exception:
-        console.print(
-            "  Credential privacy: [green]on[/green] — your model key stays "
-            "out of the cell."
-        )
-        console.print(
-            "  [yellow]⚠ ANTHROPIC_API_KEY isn't resolvable yet — set it (env "
-            "var or OneCLI vault) before [bold]whiz r hermes[/bold], or the "
-            "launch will stop with a clear error.[/yellow]"
-        )
+    # D-184/D-185/D-187: credential privacy is on by default. Confirm the chosen
+    # posture's prerequisite resolves now (warn, don't fail) so a fresh user
+    # learns before their first launch rather than at a fail-closed launch error.
+    _print_credential_privacy_summary(state.credential_mode)
     console.print()
     console.print("A few first commands to try:")
     console.print()
@@ -1591,7 +1721,7 @@ def run_wizard(
 # ---------- writers (used by later step commits) ----------
 
 
-def _write_default_profiles() -> list[str]:
+def _write_default_profiles(credential_mode: str = "mediated") -> list[str]:
     """Serialize the bundled default profiles to PROFILES_FILE.
 
     Returns the list of profile names that were written.
@@ -1602,10 +1732,11 @@ def _write_default_profiles() -> list[str]:
         "profiles": {
             name: {
                 "network_enabled": p.network_enabled,
-                # D-184/D-185: credential privacy by default — the `default`
-                # profile mediates the model key through the broker (bar C).
-                # Other profiles keep their derived posture.
-                "network_mode": "mediated" if name == "default" else p.network_mode,
+                # D-184/D-185/D-187: credential privacy by default — the
+                # `default` profile keeps credentials out of the cell via the
+                # user-chosen posture (mediated / onecli / hybrid). Other
+                # profiles keep their derived posture.
+                "network_mode": credential_mode if name == "default" else p.network_mode,
                 "duration_seconds": p.duration_seconds,
                 "idle_timeout_seconds": p.idle_timeout_seconds,
                 "allow_broad_mount": p.allow_broad_mount,
