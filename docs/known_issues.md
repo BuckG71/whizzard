@@ -541,6 +541,29 @@ A compromised cell could drive the gateway for anything its policy allows.
 scope/lifetime and, if OneCLI supports it, move to a per-session-scoped token or
 per-attached-network gateway policy. See D-187 Notes.
 
+### SECURITY (onecli/hybrid): the cell can reach the OneCLI management API (:10254)
+In `onecli`/`hybrid` mode we attach the shared OneCLI gateway container to the
+cell's per-session `--internal` net so the cell can use the proxy (`:10255`).
+But the gateway also runs its **management dashboard/API on `:10254`, bound to
+`0.0.0.0` inside the container**, so the attached cell can reach it too — and
+it's **unauthenticated**: a runtime probe from a cell got HTTP 200 on
+`/api/secrets` (full credential *config* inventory — names, hosts, injection
+headers; raw values are 1Password-backed and NOT returned) and `/api/agents`
+(**every agent's proxy `accessToken` in plaintext**). So a compromised cell
+can enumerate the credential inventory and steal all agent proxy tokens
+(cross-agent impersonation to the gateway). Raw provider secrets are not
+exposed today, but `/api/*` is an open management surface. `mediated` (bar-C)
+is UNAFFECTED — it never shares a container with the cell.
+*Source:* runtime security test, 2026-07-01 (follow-up to the Codex/`/security-review`
+pass, which read code but didn't test the network topology).
+*Disposition:* **fix before onecli/hybrid is launch-recommended.** Validated fix
+= a per-session `socat` forwarder shim on a cell-only net that forwards only
+`:10255` to the gateway, so the cell never shares a net with the gateway
+(direct + proxy-to-self paths to `:10254` all confirmed blocked, egress intact).
+Alternative under investigation: configure OneCLI to loopback-bind `:10254`.
+Until fixed, keep `mediated` as the default and treat onecli/hybrid as
+not-yet-hardened.
+
 ## How to keep this doc useful
 
 Add an entry when:
