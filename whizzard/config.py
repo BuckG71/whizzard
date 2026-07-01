@@ -42,7 +42,10 @@ PROFILES_FILE = CONFIG_DIR / "profiles.json"
 #: through the OneCLI gateway (all credentials injected host-side); "hybrid" =
 #: both on one isolated net — the model call goes to the bar-C broker (which
 #: handles subscription-OAuth's two headers) and everything else through
-#: OneCLI, so no credential of any kind lands in the cell.
+#: OneCLI, so no service/model credential lands in the cell. (The cell does
+#: hold the gateway's own proxy-auth token in HTTP(S)_PROXY — an unavoidable
+#: proxy-client capability scoped to driving the gateway; it is scrubbed from
+#: the audit log and never exposes a raw provider secret.)
 NETWORK_MODES = ("none", "open", "mediated", "onecli", "hybrid")
 
 

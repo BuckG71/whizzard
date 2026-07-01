@@ -608,7 +608,15 @@ class HermesAdapter:
         # which container_env() / active_capabilities() / preflight() all
         # trigger before launch. By the time the audit-log writer asks,
         # the set is canonical for this session.
-        return set(self._credential_sources.keys())
+        keys = set(self._credential_sources.keys())
+        # onecli/hybrid (D-187): the HTTP(S)_PROXY values embed the gateway's
+        # basic-auth token — a live secret — so they must be scrubbed from the
+        # audit-log argv too, even though they aren't "fetched" credentials.
+        if getattr(self, "onecli", None) is not None:
+            keys.update(
+                ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
+            )
+        return keys
 
     def working_dir(self) -> str | None:
         wd = self.config.get("working_dir")
@@ -793,7 +801,7 @@ class HermesAdapter:
         if onecli is not None:
             mounts.append(
                 ContainerMount(
-                    host_path=Path(onecli.ca_host_path),
+                    host_path=Path(onecli.ca_host_path).expanduser(),
                     container_path=_IN_CELL_ONECLI_CA,
                     mode="ro",
                 )

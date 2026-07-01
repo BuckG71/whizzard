@@ -352,12 +352,16 @@ def build_run_argv(
     # Network posture (D-184/D-187). "none" → no interfaces; "mediated" → the
     # cell joins ONLY the per-session --internal broker network; "onecli" → the
     # cell joins ONLY the per-session --internal network the OneCLI gateway is
-    # attached to; both give egress only through their proxy peer. "open" →
-    # default bridge (full egress), unchanged. mediated_network carries the
-    # per-session isolated network name for either mediated or onecli mode.
+    # attached to; "hybrid" → the cell joins the per-session --internal net that
+    # carries BOTH the broker and the gateway. All three give egress only
+    # through their proxy peer(s). "open" → default bridge (full egress),
+    # unchanged. mediated_network carries the per-session isolated network name
+    # for the mediated / onecli / hybrid modes. NOTE: hybrid MUST be in this
+    # branch — omitting it makes the cell fall through to the default bridge
+    # (full egress), which fails OPEN and defeats the mode's whole purpose.
     if profile.network_mode == "none":
         argv += ["--network", "none"]
-    elif profile.network_mode in ("mediated", "onecli"):
+    elif profile.network_mode in ("mediated", "onecli", "hybrid"):
         if mediated_network is None:
             raise ValueError(
                 f"network_mode {profile.network_mode!r} requires an isolated "

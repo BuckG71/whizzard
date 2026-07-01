@@ -38,15 +38,8 @@ from whizzard.docker_cmd import _docker_env
 
 #: The OneCLI gateway container name (env-overridable for non-default installs).
 GATEWAY_CONTAINER = os.environ.get("WHIZZARD_ONECLI_CONTAINER", "onecli")
-#: CA-trust env vars OneCLI sets so a client trusts the gateway's MITM cert.
-CA_ENV_VARS = (
-    "NODE_EXTRA_CA_CERTS",
-    "SSL_CERT_FILE",
-    "REQUESTS_CA_BUNDLE",
-    "CURL_CA_BUNDLE",
-    "GIT_SSL_CAINFO",
-    "DENO_CERT",
-)
+#: The CA-trust env vars a client honors to trust the gateway MITM cert live in
+#: hermes._ONECLI_CA_ENV_VARS (the injection side). This module doesn't inject.
 _DEFAULT_CA_PATH = str(Path.home() / ".onecli" / "gateway-ca.pem")
 _REAP_GRACE_S = 180.0
 
@@ -178,6 +171,7 @@ def attach_gateway_to_net(net: str) -> tuple[str, str]:
     mode, which shares the bar-C broker's --internal net so one cell reaches
     both proxies. Returns (proxy_url, ca_host_path). Fail-closed; does NOT
     create or remove the net (the broker owns its lifecycle)."""
+    _reap_orphans()  # also frees the gateway from crashed hybrid sessions' nets
     if not onecli_gateway_available():
         raise OneCLIGatewayError(
             f"the OneCLI gateway container ({GATEWAY_CONTAINER!r}) is not running"
@@ -201,18 +195,30 @@ def detach_gateway_from_net(net: str) -> None:
 
 
 def _reap_orphans() -> None:
-    """Sweep per-session onecli nets left by a crashed session (finally never
-    ran): a whiz-oc-* net whose cell is gone and that is older than the grace.
-    Best-effort; never raises."""
+    """Sweep per-session nets left by a crashed session (finally never ran),
+    gated on no-live-cell + older-than-grace. Best-effort; never raises.
+
+      whiz-oc-*  (pure onecli, we own the net):  detach the gateway AND rm it.
+      whiz-int-* (hybrid, the broker owns the net): only detach the gateway, so
+                 the broker's own reaper can then rm it — docker refuses to
+                 remove a net that still has the gateway attached. (For a
+                 mediated net with no gateway, the disconnect is a harmless
+                 no-op and we never rm a broker-owned net here.)
+    """
     try:
-        listing = _docker(["network", "ls", "--filter", "name=whiz-oc-",
+        listing = _docker(["network", "ls",
+                           "--filter", "name=whiz-oc-",
+                           "--filter", "name=whiz-int-",
                            "--format", "{{.Name}}"])
         if listing.returncode != 0:
             return
         for net in listing.stdout.split():
-            if not net.startswith("whiz-oc-"):
+            if net.startswith("whiz-oc-"):
+                slug, we_own = net[len("whiz-oc-"):], True
+            elif net.startswith("whiz-int-"):
+                slug, we_own = net[len("whiz-int-"):], False
+            else:
                 continue
-            slug = net[len("whiz-oc-"):]
             cell = _docker(["ps", "--filter",
                            f"label=whizzard.session_id={slug}", "--format", "{{.ID}}"])
             if cell.returncode == 0 and cell.stdout.strip():
@@ -220,17 +226,20 @@ def _reap_orphans() -> None:
             if not _older_than_grace(net):
                 continue
             _docker(["network", "disconnect", net, GATEWAY_CONTAINER])
-            _docker(["network", "rm", net])
+            if we_own:
+                _docker(["network", "rm", net])
     except Exception:
         return
 
 
 def _older_than_grace(net: str) -> bool:
-    r = _docker(["network", "inspect", "-f", "{{.Created}}", net])
+    # `-f {{.Created}}` renders Go's time.String() ("... +0000 UTC"), which
+    # datetime.fromisoformat can't parse; `{{json .Created}}` emits RFC3339.
+    r = _docker(["network", "inspect", "--format", "{{json .Created}}", net])
     if r.returncode != 0:
         return False
-    ts = re.sub(r"(\.\d{6})\d+", r"\1", r.stdout.strip()).replace("Z", "+00:00")
-    # Docker network Created may carry a numeric tz offset already.
+    ts = r.stdout.strip().strip('"')
+    ts = re.sub(r"(\.\d{6})\d+", r"\1", ts).replace("Z", "+00:00")
     try:
         created = datetime.fromisoformat(ts)
     except ValueError:

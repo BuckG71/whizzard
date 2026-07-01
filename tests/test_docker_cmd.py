@@ -74,6 +74,31 @@ def test_mediated_without_broker_network_fails_closed():
         build_run_argv(_mediated_profile())
 
 
+def _net_profile(mode):
+    from whizzard.config import Profile
+
+    return Profile(
+        name=mode, network_enabled=True, duration_seconds=None, network_mode=mode,
+    )
+
+
+@pytest.mark.parametrize("mode", ["onecli", "hybrid"])
+def test_onecli_and_hybrid_join_the_isolated_network(mode):
+    # D-187 regression: onecli AND hybrid must attach the cell to the per-session
+    # --internal net. A missing branch here silently falls through to the default
+    # bridge (full egress) — the exact fail-open the modes exist to prevent.
+    argv = build_run_argv(_net_profile(mode), mediated_network="whiz-x-abc123")
+    idx = argv.index("--network")
+    assert argv[idx + 1] == "whiz-x-abc123"
+
+
+@pytest.mark.parametrize("mode", ["onecli", "hybrid"])
+def test_onecli_and_hybrid_fail_closed_without_a_network(mode):
+    # No isolated network name → refuse to build, never fall through to open.
+    with pytest.raises(ValueError):
+        build_run_argv(_net_profile(mode))
+
+
 def test_argv_includes_init_and_rm():
     argv = build_run_argv(get_profile("default"))
     assert "--init" in argv

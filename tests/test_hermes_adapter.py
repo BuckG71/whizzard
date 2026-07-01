@@ -111,7 +111,10 @@ def test_onecli_container_env_strips_all_secrets_and_routes_via_gateway(monkeypa
     assert env["ANTHROPIC_API_KEY"] == hz.MEDIATION_PLACEHOLDER
     # the real fetched secret is NOT in the cell env, and the scrub set is clear
     assert "DISCORD_BOT_TOKEN" not in env
-    assert adapter.credential_env_keys() == set()
+    # the fetched service secret is gone from the scrub set, but the proxy vars
+    # carry the gateway token and MUST be scrubbed from the audit-log argv
+    assert "DISCORD_BOT_TOKEN" not in adapter.credential_env_keys()
+    assert "HTTPS_PROXY" in adapter.credential_env_keys()
 
 
 def test_onecli_container_mounts_the_ca_cert(monkeypatch):
@@ -161,7 +164,10 @@ def test_hybrid_routes_model_to_broker_and_rest_to_onecli(monkeypatch):
     assert env["NODE_EXTRA_CA_CERTS"] == hz._IN_CELL_ONECLI_CA
     assert env["ANTHROPIC_API_KEY"] == hz.MEDIATION_PLACEHOLDER
     assert "DISCORD_BOT_TOKEN" not in env
-    assert adapter.credential_env_keys() == set()
+    # the fetched service secret is gone from the scrub set, but the proxy vars
+    # carry the gateway token and MUST be scrubbed from the audit-log argv
+    assert "DISCORD_BOT_TOKEN" not in adapter.credential_env_keys()
+    assert "HTTPS_PROXY" in adapter.credential_env_keys()
 
 
 def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
