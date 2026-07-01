@@ -499,7 +499,7 @@ def run_shell(
     Stage 15: the container is launched via `subprocess.Popen` and handed to
     `monitor_and_enforce`, which blocks until the container exits or a limit
     is hit. The effective duration limit is `duration_override_seconds` when
-    set (an `whiz adjust --extend` relaunch passes it) else the profile's
+    set (a `whiz adjust --extend` relaunch passes it) else the profile's
     `duration_seconds`; the idle limit is the profile's `idle_timeout_seconds`.
     The session_end event records `expiry_reason` (clean / duration / idle).
     """
@@ -541,7 +541,7 @@ def run_shell(
 
     image_id = get_image_id(image)
     # Stage 15: the effective duration limit is the --extend override when
-    # present (an `whiz adjust --extend` relaunch supplies it), else the
+    # present (a `whiz adjust --extend` relaunch supplies it), else the
     # profile's duration. The session_start event logs the *effective*
     # limit so chained extends accumulate correctly.
     duration_limit = (
