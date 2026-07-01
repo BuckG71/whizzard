@@ -1,0 +1,30 @@
+# Whizzard credential-broker sidecar (bar C / D-183, D-184).
+#
+# A single-purpose reverse proxy that holds the real model credential
+# host-side-of-the-cell and injects it only when forwarding to the one
+# allowlisted upstream. It sits on the cell-facing --internal network as the
+# cell's ONLY reachable peer; it is dual-homed onto an egress network for its
+# own TLS to Anthropic (wired by whizzard/broker.py, not here).
+#
+# Base image is pinned by digest and shared with the cell base (Dockerfile) so
+# the containment surface has one integrity anchor. aiohttp comes from the
+# Debian package (no pip / PyPI supply-chain surface in the security component);
+# ca-certificates backs the broker's real TLS to the upstream.
+
+FROM debian:13-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-aiohttp \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY broker/proxy.py /broker/proxy.py
+
+# Run unprivileged: the broker holds a secret but needs no privileges. The key
+# file is bind-mounted world-readable (0444) into this isolated container only.
+USER nobody
+
+EXPOSE 8080
+ENTRYPOINT ["python3", "/broker/proxy.py"]

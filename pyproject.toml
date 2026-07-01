@@ -157,6 +157,8 @@ exclude = [
     "build",
     "dist",
     "tests",  # tests use monkeypatch + dynamic fixtures; lenient for now
+    "whizzard/_dockerfiles",  # container build context (broker proxy runs
+                              # with aiohttp in-image, not on the host)
 ]
 
 [[tool.mypy.overrides]]
