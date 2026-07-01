@@ -38,11 +38,12 @@ PROFILES_FILE = CONFIG_DIR / "profiles.json"
 
 #: Valid network postures (D-184/D-187). "none" = --network none; "open" =
 #: default bridge (full egress); "mediated" = cell reaches only the bar-C
-#: credential-broker sidecar on a per-session --internal network; "onecli" =
-#: cell egress routes through the OneCLI gateway (all service credentials
-#: injected host-side; the subscription-OAuth model token, if any, is layered
-#: back through the bar-C broker — the phase-2 hybrid).
-NETWORK_MODES = ("none", "open", "mediated", "onecli")
+#: credential-broker sidecar (model key only); "onecli" = cell egress routes
+#: through the OneCLI gateway (all credentials injected host-side); "hybrid" =
+#: both on one isolated net — the model call goes to the bar-C broker (which
+#: handles subscription-OAuth's two headers) and everything else through
+#: OneCLI, so no credential of any kind lands in the cell.
+NETWORK_MODES = ("none", "open", "mediated", "onecli", "hybrid")
 
 
 @dataclass(frozen=True)
@@ -212,7 +213,7 @@ def _parse_profile(name: str, spec: dict) -> Profile:
                 f"profile {name!r}: network_mode must be one of "
                 f"{', '.join(NETWORK_MODES)}"
             )
-        if network_mode in ("mediated", "onecli") and not network_enabled:
+        if network_mode in ("mediated", "onecli", "hybrid") and not network_enabled:
             raise ProfileConfigError(
                 f"profile {name!r}: network_mode {network_mode!r} requires "
                 f"network_enabled true"

@@ -128,6 +128,42 @@ def test_onecli_container_mounts_the_ca_cert(monkeypatch):
     assert ca[0].mode == "ro"
 
 
+def test_hybrid_routes_model_to_broker_and_rest_to_onecli(monkeypatch):
+    """D-187 hybrid: the model call goes to the bar-C broker (NO_PROXY exempts
+    it from the OneCLI proxy); every other credential is injected by OneCLI;
+    the cell holds nothing real."""
+    import types
+
+    from whizzard.adapters import hermes as hz
+
+    monkeypatch.setattr(
+        hz, "fetch_secret",
+        lambda name: types.SimpleNamespace(value="real-" + name, source="host-env"),
+    )
+    adapter = hz.HermesAdapter(config={"secrets": ["DISCORD_BOT_TOKEN"]})
+    adapter.mediation = hz.MediationContext(
+        base_url="http://whiz-broker-abc:8080",
+        base_url_env="ANTHROPIC_BASE_URL",
+        secret_name="ANTHROPIC_API_KEY",
+    )
+    adapter.onecli = hz.OneCLIContext(
+        proxy_url="http://x:tok@onecli:10255", ca_host_path="/host/ca.pem"
+    )
+    env = adapter.container_env()
+
+    # model → bar-C broker; everything else → OneCLI proxy
+    assert env["ANTHROPIC_BASE_URL"] == "http://whiz-broker-abc:8080"
+    assert env["HTTPS_PROXY"] == "http://x:tok@onecli:10255"
+    # NO_PROXY exempts the broker host so the model call bypasses OneCLI
+    assert env["NO_PROXY"] == "whiz-broker-abc"
+    assert env["no_proxy"] == "whiz-broker-abc"
+    # CA trust for the OneCLI MITM; placeholder model key; nothing real in cell
+    assert env["NODE_EXTRA_CA_CERTS"] == hz._IN_CELL_ONECLI_CA
+    assert env["ANTHROPIC_API_KEY"] == hz.MEDIATION_PLACEHOLDER
+    assert "DISCORD_BOT_TOKEN" not in env
+    assert adapter.credential_env_keys() == set()
+
+
 def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     fake_vault = {
         "DISCORD_BOT_TOKEN": "discord-secret-xyz",

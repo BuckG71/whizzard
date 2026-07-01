@@ -24,6 +24,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from whizzard._platform import is_windows
 from whizzard.adapters._credentials import (
@@ -586,6 +587,16 @@ class HermesAdapter:
             for var in _ONECLI_CA_ENV_VARS:
                 env[var] = _IN_CELL_ONECLI_CA
             env["ANTHROPIC_API_KEY"] = MEDIATION_PLACEHOLDER
+            # Hybrid (D-187): when the bar-C broker is ALSO in play (mediation
+            # set), the model call must go straight to the broker, not through
+            # the OneCLI proxy — exempt the broker host via NO_PROXY. The broker
+            # then injects the model credential (incl. subscription-OAuth's two
+            # headers, which OneCLI can't); OneCLI handles every other service.
+            if mediation is not None:
+                broker_host = urlparse(mediation.base_url).hostname or ""
+                if broker_host:
+                    env["NO_PROXY"] = broker_host
+                    env["no_proxy"] = broker_host
         return env
 
     def credential_env_keys(self) -> set[str]:

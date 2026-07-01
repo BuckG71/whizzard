@@ -173,6 +173,33 @@ def stop_onecli_route(handle: OneCLIHandle) -> None:
     _docker(["network", "rm", handle.internal_network])
 
 
+def attach_gateway_to_net(net: str) -> tuple[str, str]:
+    """Attach the OneCLI gateway to an EXISTING per-session net — used by hybrid
+    mode, which shares the bar-C broker's --internal net so one cell reaches
+    both proxies. Returns (proxy_url, ca_host_path). Fail-closed; does NOT
+    create or remove the net (the broker owns its lifecycle)."""
+    if not onecli_gateway_available():
+        raise OneCLIGatewayError(
+            f"the OneCLI gateway container ({GATEWAY_CONTAINER!r}) is not running"
+        )
+    token, port, ca_path = resolve_onecli_wiring()
+    if not os.path.isfile(ca_path):
+        raise OneCLIGatewayError(f"OneCLI gateway CA cert not found at {ca_path}")
+    r = _docker(["network", "connect", net, GATEWAY_CONTAINER])
+    if r.returncode != 0:
+        raise OneCLIGatewayError(
+            f"could not attach the OneCLI gateway to {net}: {r.stderr.strip()}"
+        )
+    return f"http://x:{token}@{GATEWAY_CONTAINER}:{port}", ca_path
+
+
+def detach_gateway_from_net(net: str) -> None:
+    """Detach the gateway from a shared net (hybrid teardown). Best-effort;
+    never raises. Leaves the gateway container + the net (the broker removes
+    the net)."""
+    _docker(["network", "disconnect", net, GATEWAY_CONTAINER])
+
+
 def _reap_orphans() -> None:
     """Sweep per-session onecli nets left by a crashed session (finally never
     ran): a whiz-oc-* net whose cell is gone and that is older than the grace.
