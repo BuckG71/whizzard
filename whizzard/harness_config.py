@@ -55,6 +55,14 @@ _DEFAULT_HARNESSES: dict[str, dict] = {
         "hermes_home": "~/.hermes-whizzard-cell",
         "platforms": ["discord"],
         "description": "Whizzard-wrapped Hermes (interactive chat; gateway/Discord opt-in)",
+        # D-185: model-credential mediation config (bar C). Inert until a
+        # mediated profile uses it; then the broker resolves the key host-side
+        # and the cell sees only a placeholder + the broker URL.
+        "model_credential": {
+            "provider": "anthropic",
+            "secret": "ANTHROPIC_API_KEY",
+            "base_url_env": "ANTHROPIC_BASE_URL",
+        },
     },
 }
 

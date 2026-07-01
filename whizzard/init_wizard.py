@@ -1193,6 +1193,15 @@ def _write_wizard_harnesses() -> None:
             "wrap_up_grace_seconds": 30,
             "hermes_home": "~/.hermes-main",
             "description": "Hermes (interactive chat) inside the Whizzard sandbox",
+            # D-185: how the cell's model credential is mediated (bar C). Inert
+            # until a mediated profile (network_mode="mediated") uses it, at
+            # which point the broker resolves ANTHROPIC_API_KEY host-side and
+            # the cell only ever sees a placeholder + the broker URL.
+            "model_credential": {
+                "provider": "anthropic",
+                "secret": "ANTHROPIC_API_KEY",
+                "base_url_env": "ANTHROPIC_BASE_URL",
+            },
         },
     }
     payload = {"schema_version": 1, "harnesses": harnesses}
