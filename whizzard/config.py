@@ -36,6 +36,12 @@ STATE_DIR = WHIZZARD_HOME / "state"
 PROFILES_FILE = CONFIG_DIR / "profiles.json"
 
 
+#: Valid network postures (D-184). "none" = --network none; "open" = default
+#: bridge (full egress); "mediated" = cell reaches only the credential-broker
+#: sidecar on a per-session --internal network (bar C).
+NETWORK_MODES = ("none", "open", "mediated")
+
+
 @dataclass(frozen=True)
 class Profile:
     name: str
@@ -44,6 +50,15 @@ class Profile:
     allow_broad_mount: bool = False
     description: str = ""
     idle_timeout_seconds: int | None = None  # None = no idle timeout (Stage 15)
+    #: None → derived from network_enabled (False→"none", True→"open") so the
+    #: pre-existing boolean-only profiles keep their behavior. A mediated
+    #: profile sets this explicitly to "mediated".
+    network_mode: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.network_mode is None:
+            derived = "open" if self.network_enabled else "none"
+            object.__setattr__(self, "network_mode", derived)
 
 
 class ProfileConfigError(Exception):
@@ -184,6 +199,22 @@ def _parse_profile(name: str, spec: dict) -> Profile:
         error_cls=ProfileConfigError,
     )
 
+    # network_mode (D-184): optional. Absent → derived from network_enabled.
+    # "mediated" routes cell egress through the credential broker and requires
+    # network_enabled=True (the cell IS on a network, just a restricted one).
+    network_mode = spec.get("network_mode")
+    if network_mode is not None:
+        if network_mode not in NETWORK_MODES:
+            raise ProfileConfigError(
+                f"profile {name!r}: network_mode must be one of "
+                f"{', '.join(NETWORK_MODES)}"
+            )
+        if network_mode == "mediated" and not network_enabled:
+            raise ProfileConfigError(
+                f"profile {name!r}: network_mode 'mediated' requires "
+                f"network_enabled true"
+            )
+
     return Profile(
         name=name,
         network_enabled=network_enabled,
@@ -191,6 +222,7 @@ def _parse_profile(name: str, spec: dict) -> Profile:
         allow_broad_mount=allow_broad_mount,
         description=description,
         idle_timeout_seconds=idle_timeout_seconds,
+        network_mode=network_mode,
     )
 
 

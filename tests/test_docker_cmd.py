@@ -48,6 +48,32 @@ def test_network_enabled_for_default_profile():
         assert argv[idx + 1] != "none"
 
 
+def _mediated_profile():
+    from whizzard.config import Profile
+
+    return Profile(
+        name="med",
+        network_enabled=True,
+        duration_seconds=None,
+        network_mode="mediated",
+    )
+
+
+def test_mediated_profile_joins_the_broker_network():
+    # D-184: the cell attaches ONLY to the per-session broker network.
+    argv = build_run_argv(_mediated_profile(), mediated_network="whiz-int-abc123")
+    idx = argv.index("--network")
+    assert argv[idx + 1] == "whiz-int-abc123"
+
+
+def test_mediated_without_broker_network_fails_closed():
+    # Building a mediated launch with no broker network is a programming error
+    # (the caller must start the broker first) — refuse rather than fall through
+    # to open egress.
+    with pytest.raises(ValueError):
+        build_run_argv(_mediated_profile())
+
+
 def test_argv_includes_init_and_rm():
     argv = build_run_argv(get_profile("default"))
     assert "--init" in argv

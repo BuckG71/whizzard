@@ -288,6 +288,7 @@ def build_run_argv(
     cidfile: Path | None = None,
     adapter: HarnessAdapter | None = None,
     interactive: bool = True,
+    mediated_network: str | None = None,
 ) -> list[str]:
     """Build the `docker run` argv applying baseline + profile + mounts + adapter.
 
@@ -344,8 +345,18 @@ def build_run_argv(
         "--tmpfs", f"/home/{CONTAINER_USER}:rw,size=64m,mode=0755,{home_tmpfs_owner}",
     ]
 
-    if not profile.network_enabled:
+    # Network posture (D-184). "none" → no interfaces; "mediated" → the cell
+    # joins ONLY the per-session --internal broker network (no route out except
+    # to the broker sidecar); "open" → default bridge (full egress), unchanged.
+    if profile.network_mode == "none":
         argv += ["--network", "none"]
+    elif profile.network_mode == "mediated":
+        if mediated_network is None:
+            raise ValueError(
+                "network_mode 'mediated' requires a broker network name "
+                "(mediated_network); the caller must start the broker first"
+            )
+        argv += ["--network", mediated_network]
 
     argv += ["--label", f"whizzard.profile={profile.name}"]
     argv += ["--label", f"whizzard.harness={adapter.name}"]

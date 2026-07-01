@@ -16,3 +16,7 @@ WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
 WHIZZARD_HERMES_IMAGE = os.environ.get(
     "WHIZZARD_HERMES_IMAGE", "whizzard-hermes:latest"
 )
+# Credential-broker sidecar image (bar C / D-184).
+WHIZZARD_BROKER_IMAGE = os.environ.get(
+    "WHIZZARD_BROKER_IMAGE", "whizzard-broker:latest"
+)

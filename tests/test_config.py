@@ -104,6 +104,51 @@ def test_load_parses_user_overrides(tmp_path: Path):
     assert profiles["custom"].description == "test profile"
 
 
+def test_network_mode_derives_from_network_enabled():
+    # D-184: absent network_mode is derived so pre-existing boolean profiles
+    # keep their behavior.
+    from whizzard.config import get_profile
+
+    assert get_profile("default").network_mode == "open"  # network on
+    assert get_profile("safe").network_mode == "none"  # network off
+
+
+def test_network_mode_mediated_parses(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "med": {
+            "network_enabled": True,
+            "duration_seconds": 600,
+            "network_mode": "mediated",
+        },
+    })
+    profiles = load_profiles(f)
+    assert profiles["med"].network_mode == "mediated"
+
+
+def test_network_mode_mediated_requires_network_enabled(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "network_mode": "mediated",
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+def test_network_mode_invalid_value_rejected(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": True,
+            "duration_seconds": 600,
+            "network_mode": "proxy-all-the-things",
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
 def test_load_accepts_null_duration_as_unlimited(tmp_path: Path):
     f = _write_profiles_json(tmp_path / "profiles.json", {
         "always-on": {
