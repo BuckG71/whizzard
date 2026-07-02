@@ -1,28 +1,24 @@
 """Host-side lifecycle for routing a cell's egress through the OneCLI gateway
-(bar C companion / D-187, phase 1).
+(bar C companion / D-187; shim isolation / D-188).
 
-When ``network_mode == "onecli"`` the cell reaches only the user's OneCLI
-gateway container, which MITM-injects every configured service credential
-host-side (GitHub, Slack, tool APIs, and any API-key / single-header-OAuth
-model key) — so none of them ever land in the cell. This module owns the
-Docker plumbing:
+When ``network_mode`` is ``onecli`` or ``hybrid`` the cell's service egress goes
+through the user's OneCLI gateway, which MITM-injects every configured service
+credential host-side — so none of them land in the cell.
 
-    start_onecli_route()                        stop_onecli_route()
-    ├─ confirm the OneCLI gateway is running     ├─ disconnect the gateway from
-    ├─ resolve its proxy token + CA cert         │   the per-session net
-    │  (host-side, from `onecli run`)            └─ remove the net
-    ├─ create a per-session --internal net
-    └─ connect the (persistent, shared) gateway
-       container to that net
+The cell never shares a Docker network with the gateway directly. The gateway
+also serves an unauthenticated management dashboard/API on :10254 (bound
+0.0.0.0, ``AUTH_MODE=local``); a peer on its network can read /api/secrets and
+/api/agents. OneCLI offers no supported way to loopback-bind or disable that
+port, so instead we interpose a per-session forwarder **shim** (D-188):
 
-The cell is launched on the --internal net (no route out) and points its
-HTTP(S)_PROXY at the gateway container by name; the gateway is its only
-reachable peer. The gateway forwards outbound via its own egress interfaces —
-the cell cannot IP-route through it.
+    net-cell  (--internal):  cell ── HTTPS_PROXY ──▶ shim
+    net-link  (--internal):                         shim ──▶ gateway :<proxy-port> ONLY
 
-Unlike the bar-C broker, the OneCLI gateway is a **persistent, shared**
-container (the user's own OneCLI). We only attach/detach it to per-session
-networks; we never start or stop it.
+The shim (``socat``) relays only the proxy port; it never exposes :10254. The
+gateway forwards outbound via its own egress interfaces. Pure ``onecli`` mode
+owns net-cell; ``hybrid`` reuses the bar-C broker's net as net-cell (the broker
+also lives there for the model call). The gateway is a persistent, shared
+container — we only attach/detach it to the per-session net-link.
 """
 
 from __future__ import annotations
@@ -35,6 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from whizzard.docker_cmd import _docker_env
+from whizzard.images import WHIZZARD_ONECLI_SHIM_IMAGE
 
 #: The OneCLI gateway container name (env-overridable for non-default installs).
 GATEWAY_CONTAINER = os.environ.get("WHIZZARD_ONECLI_CONTAINER", "onecli")
@@ -50,9 +47,11 @@ class OneCLIGatewayError(Exception):
 
 @dataclass(frozen=True)
 class OneCLIHandle:
-    internal_network: str
-    gateway_container: str
-    proxy_url: str  # http://x:<token>@<gateway>:<port> — cell HTTP(S)_PROXY
+    internal_network: str  # net-cell — the cell's isolated net
+    owns_internal_network: bool  # True (pure onecli, we rm it) / False (hybrid: broker owns it)
+    shim_container: str  # per-session forwarder shim
+    link_network: str  # net-link — shim <-> gateway (we own it)
+    proxy_url: str  # http://x:<token>@<shim>:<port> — cell HTTP(S)_PROXY
     ca_host_path: str  # host path to the gateway CA cert, mounted into the cell
 
 
@@ -109,13 +108,13 @@ def resolve_onecli_wiring() -> tuple[str, str, str]:
     return token, port, ca_path
 
 
-def start_onecli_route(session_id: str) -> OneCLIHandle:
-    """Bring up a per-session isolated network and attach the OneCLI gateway to
-    it. Fail-closed: raises OneCLIGatewayError (rolling back the net) if the
-    gateway is absent, its wiring can't be resolved, or the CA cert is missing.
-    """
+def _bring_up_shim(
+    session_id: str, cell_net: str, *, owns_cell_net: bool
+) -> OneCLIHandle:
+    """Create net-link, attach the gateway to it, and start the forwarder shim
+    on both net-cell and net-link. Fail-closed with full rollback. Shared by
+    pure-onecli (owns_cell_net=True) and hybrid (False) paths."""
     _reap_orphans()
-
     if not onecli_gateway_available():
         raise OneCLIGatewayError(
             f"the OneCLI gateway container ({GATEWAY_CONTAINER!r}) is not "
@@ -126,122 +125,149 @@ def start_onecli_route(session_id: str) -> OneCLIHandle:
         raise OneCLIGatewayError(f"OneCLI gateway CA cert not found at {ca_path}")
 
     slug = _slug(session_id)
-    net = f"whiz-oc-{slug}"
+    link_net = f"whiz-oclink-{slug}"
+    shim = f"whiz-shim-{slug}"
 
-    created = connected = False
+    link_created = gw_connected = shim_started = False
     try:
-        r = _docker(["network", "create", "--internal", net])
+        r = _docker(["network", "create", "--internal", link_net])
         if r.returncode != 0:
-            raise OneCLIGatewayError(f"network create failed: {r.stderr.strip()}")
-        created = True
+            raise OneCLIGatewayError(f"link network create failed: {r.stderr.strip()}")
+        link_created = True
 
-        r = _docker(["network", "connect", net, GATEWAY_CONTAINER])
+        r = _docker(["network", "connect", link_net, GATEWAY_CONTAINER])
         if r.returncode != 0:
             raise OneCLIGatewayError(
-                f"could not attach the OneCLI gateway to the session net: "
+                f"could not attach the OneCLI gateway to the link net: "
                 f"{r.stderr.strip()}"
             )
-        connected = True
+        gw_connected = True
+
+        # The shim listens on the proxy port on net-cell and relays ONLY that
+        # port to the gateway on net-link. socat is a transparent byte relay, so
+        # the gateway's Proxy-Authorization/CONNECT flow is untouched.
+        r = _docker([
+            "run", "-d", "--name", shim, "--network", cell_net,
+            "--label", f"whizzard.session_id={session_id}",
+            "--label", "whizzard.role=onecli-shim",
+            WHIZZARD_ONECLI_SHIM_IMAGE,
+            f"TCP-LISTEN:{port},fork,reuseaddr", f"TCP:{GATEWAY_CONTAINER}:{port}",
+        ])
+        if r.returncode != 0:
+            raise OneCLIGatewayError(
+                f"could not start the OneCLI forwarder shim (is the "
+                f"{WHIZZARD_ONECLI_SHIM_IMAGE} image built? re-run `whiz init`): "
+                f"{r.stderr.strip()}"
+            )
+        shim_started = True
+
+        r = _docker(["network", "connect", link_net, shim])
+        if r.returncode != 0:
+            raise OneCLIGatewayError(
+                f"could not attach the shim to the link net: {r.stderr.strip()}"
+            )
+
+        if not _shim_running(shim):
+            raise OneCLIGatewayError(
+                "the OneCLI forwarder shim exited immediately after start"
+            )
 
         return OneCLIHandle(
-            internal_network=net,
-            gateway_container=GATEWAY_CONTAINER,
-            proxy_url=f"http://x:{token}@{GATEWAY_CONTAINER}:{port}",
+            internal_network=cell_net,
+            owns_internal_network=owns_cell_net,
+            shim_container=shim,
+            link_network=link_net,
+            proxy_url=f"http://x:{token}@{shim}:{port}",
             ca_host_path=ca_path,
         )
     except Exception:
-        if connected:
-            _docker(["network", "disconnect", net, GATEWAY_CONTAINER])
-        if created:
-            _docker(["network", "rm", net])
+        if shim_started:
+            _docker(["rm", "-f", shim])
+        if gw_connected:
+            _docker(["network", "disconnect", link_net, GATEWAY_CONTAINER])
+        if link_created:
+            _docker(["network", "rm", link_net])
         raise
 
 
-def stop_onecli_route(handle: OneCLIHandle) -> None:
-    """Detach the gateway and remove the per-session net. Best-effort — never
-    raises (safe in a finally). The gateway container itself is left running
-    (it's the user's persistent, shared OneCLI)."""
-    _docker(["network", "disconnect", handle.internal_network,
-             handle.gateway_container])
-    _docker(["network", "rm", handle.internal_network])
+def _shim_running(shim: str) -> bool:
+    r = _docker(["inspect", "-f", "{{.State.Running}}", shim])
+    return r.returncode == 0 and r.stdout.strip() == "true"
 
 
-def attach_gateway_to_net(net: str) -> tuple[str, str]:
-    """Attach the OneCLI gateway to an EXISTING per-session net — used by hybrid
-    mode, which shares the bar-C broker's --internal net so one cell reaches
-    both proxies. Returns (proxy_url, ca_host_path). Fail-closed; does NOT
-    create or remove the net (the broker owns its lifecycle)."""
-    _reap_orphans()  # also frees the gateway from crashed hybrid sessions' nets
-    if not onecli_gateway_available():
-        raise OneCLIGatewayError(
-            f"the OneCLI gateway container ({GATEWAY_CONTAINER!r}) is not running"
-        )
-    token, port, ca_path = resolve_onecli_wiring()
-    if not os.path.isfile(ca_path):
-        raise OneCLIGatewayError(f"OneCLI gateway CA cert not found at {ca_path}")
-    r = _docker(["network", "connect", net, GATEWAY_CONTAINER])
+def start_onecli_route(session_id: str) -> OneCLIHandle:
+    """Pure onecli mode: create the cell's --internal net (which we own) and
+    bring up the shim onto it. Fail-closed; rolls back the net on failure."""
+    slug = _slug(session_id)
+    cell_net = f"whiz-oc-{slug}"
+
+    _reap_orphans()
+    r = _docker(["network", "create", "--internal", cell_net])
     if r.returncode != 0:
-        raise OneCLIGatewayError(
-            f"could not attach the OneCLI gateway to {net}: {r.stderr.strip()}"
-        )
-    return f"http://x:{token}@{GATEWAY_CONTAINER}:{port}", ca_path
+        raise OneCLIGatewayError(f"network create failed: {r.stderr.strip()}")
+    try:
+        return _bring_up_shim(session_id, cell_net, owns_cell_net=True)
+    except Exception:
+        _docker(["network", "rm", cell_net])
+        raise
 
 
-def detach_gateway_from_net(net: str) -> None:
-    """Detach the gateway from a shared net (hybrid teardown). Best-effort;
-    never raises. Leaves the gateway container + the net (the broker removes
-    the net)."""
-    _docker(["network", "disconnect", net, GATEWAY_CONTAINER])
+def start_onecli_shim(session_id: str, cell_net: str) -> OneCLIHandle:
+    """Hybrid mode: bring up the shim onto an EXISTING cell net (the bar-C
+    broker's --internal net, which the broker owns). Fail-closed."""
+    return _bring_up_shim(session_id, cell_net, owns_cell_net=False)
+
+
+def stop_onecli_route(handle: OneCLIHandle) -> None:
+    """Tear down the shim + link net; remove the cell net only if we own it
+    (pure onecli — for hybrid the broker removes its own net). Best-effort —
+    never raises (safe in a finally). The gateway container is left running."""
+    _docker(["rm", "-f", handle.shim_container])
+    _docker(["network", "disconnect", handle.link_network, GATEWAY_CONTAINER])
+    _docker(["network", "rm", handle.link_network])
+    if handle.owns_internal_network:
+        _docker(["network", "rm", handle.internal_network])
 
 
 def _reap_orphans() -> None:
-    """Sweep per-session nets left by a crashed session (finally never ran),
-    gated on no-live-cell + older-than-grace. Best-effort; never raises.
-
-      whiz-oc-*  (pure onecli, we own the net):  detach the gateway AND rm it.
-      whiz-int-* (hybrid, the broker owns the net): only detach the gateway, so
-                 the broker's own reaper can then rm it — docker refuses to
-                 remove a net that still has the gateway attached. (For a
-                 mediated net with no gateway, the disconnect is a harmless
-                 no-op and we never rm a broker-owned net here.)
+    """Sweep the shim + link net + (pure-onecli) cell net left by a crashed
+    session (finally never ran), gated on no-live-cell + older-than-grace. The
+    shim container is the anchor — keying on it cleans up both modes. For hybrid
+    the broker's own reaper removes its whiz-int-* net. Best-effort; never raises.
     """
     try:
-        listing = _docker(["network", "ls",
-                           "--filter", "name=whiz-oc-",
-                           "--filter", "name=whiz-int-",
-                           "--format", "{{.Name}}"])
+        listing = _docker(["ps", "-a", "--filter", "label=whizzard.role=onecli-shim",
+                           "--format", "{{.Names}}"])
         if listing.returncode != 0:
             return
-        for net in listing.stdout.split():
-            if net.startswith("whiz-oc-"):
-                slug, we_own = net[len("whiz-oc-"):], True
-            elif net.startswith("whiz-int-"):
-                slug, we_own = net[len("whiz-int-"):], False
-            else:
+        for shim in listing.stdout.split():
+            if not shim.startswith("whiz-shim-"):
                 continue
+            slug = shim[len("whiz-shim-"):]
             cell = _docker(["ps", "--filter",
                            f"label=whizzard.session_id={slug}", "--format", "{{.ID}}"])
             if cell.returncode == 0 and cell.stdout.strip():
                 continue  # live session — leave it
-            if not _older_than_grace(net):
+            if not _container_older_than_grace(shim):
                 continue
-            _docker(["network", "disconnect", net, GATEWAY_CONTAINER])
-            if we_own:
-                _docker(["network", "rm", net])
+            _docker(["rm", "-f", shim])
+            link_net = f"whiz-oclink-{slug}"
+            _docker(["network", "disconnect", link_net, GATEWAY_CONTAINER])
+            _docker(["network", "rm", link_net])
+            # pure-onecli cell net (we own it); no-op if hybrid (broker owns whiz-int-*)
+            _docker(["network", "rm", f"whiz-oc-{slug}"])
     except Exception:
         return
 
 
-def _older_than_grace(net: str) -> bool:
-    # `-f {{.Created}}` renders Go's time.String() ("... +0000 UTC"), which
-    # datetime.fromisoformat can't parse; `{{json .Created}}` emits RFC3339.
-    r = _docker(["network", "inspect", "--format", "{{json .Created}}", net])
+def _container_older_than_grace(name: str) -> bool:
+    r = _docker(["inspect", "-f", "{{.State.StartedAt}}", name])
     if r.returncode != 0:
         return False
-    ts = r.stdout.strip().strip('"')
+    ts = r.stdout.strip()
     ts = re.sub(r"(\.\d{6})\d+", r"\1", ts).replace("Z", "+00:00")
     try:
-        created = datetime.fromisoformat(ts)
+        started = datetime.fromisoformat(ts)
     except ValueError:
         return False
-    return (datetime.now(UTC) - created).total_seconds() > _REAP_GRACE_S
+    return (datetime.now(UTC) - started).total_seconds() > _REAP_GRACE_S

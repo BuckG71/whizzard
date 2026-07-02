@@ -64,6 +64,7 @@ from whizzard.docker_cmd import (
     WHIZZARD_BROKER_IMAGE,
     WHIZZARD_HERMES_IMAGE,
     WHIZZARD_IMAGE,
+    WHIZZARD_ONECLI_SHIM_IMAGE,
     docker_daemon_status,
 )
 from whizzard.harness_config import HARNESSES_FILE, default_harnesses
@@ -370,6 +371,19 @@ def step_1_image(state: WizardState, build_runner: Callable[[list[str]], int]) -
     if broker_rc != 0:
         console.print(f"[red]Broker image build failed (exit {broker_rc}).[/red]")
         sys.exit(broker_rc)
+
+    # OneCLI forwarder-shim image — isolates the cell from the OneCLI gateway's
+    # management port in onecli/hybrid sessions (D-188). Same build context.
+    shim_dockerfile = Path(
+        str(files("whizzard._dockerfiles") / "Dockerfile.onecli-shim")
+    )
+    shim_rc = build_runner([
+        "docker", "build", "-t", WHIZZARD_ONECLI_SHIM_IMAGE,
+        "-f", str(shim_dockerfile), str(broker_context),
+    ])
+    if shim_rc != 0:
+        console.print(f"[red]OneCLI shim image build failed (exit {shim_rc}).[/red]")
+        sys.exit(shim_rc)
 
     console.print("  [green]✓ sandbox built[/green]")
     console.print()

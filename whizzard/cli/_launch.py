@@ -44,9 +44,8 @@ from whizzard.mounts import (
 )
 from whizzard.onecli_gateway import (
     OneCLIGatewayError,
-    attach_gateway_to_net,
-    detach_gateway_from_net,
     start_onecli_route,
+    start_onecli_shim,
     stop_onecli_route,
 )
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
@@ -372,7 +371,6 @@ def _perform_launch(
     # the network + container + key file never outlive the session.
     broker_handle = None
     onecli_handle = None
-    hybrid_gateway_net: str | None = None
     if prof.network_mode == "mediated":
         assert mediation_secret is not None  # guaranteed by the check above
         try:
@@ -401,11 +399,11 @@ def _perform_launch(
         )
         mediated_network = onecli_handle.internal_network
     elif prof.network_mode == "hybrid":
-        # Hybrid (D-187): the bar-C broker owns the per-session --internal net
-        # and injects the MODEL credential (incl. subscription-OAuth's two
-        # headers); the OneCLI gateway is attached to that same net and injects
-        # every OTHER credential. Both fail closed; broker torn down if the
-        # gateway can't attach.
+        # Hybrid (D-187/D-188): the bar-C broker owns the per-session --internal
+        # net and injects the MODEL credential (incl. subscription-OAuth's two
+        # headers); the OneCLI forwarder shim joins that same net and relays the
+        # gateway's proxy port for every OTHER credential. Both fail closed;
+        # broker torn down if the shim can't come up.
         assert mediation_secret is not None  # guaranteed by the check above
         try:
             broker_handle = start_broker(session_id, mediation_secret)
@@ -413,15 +411,14 @@ def _perform_launch(
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=125) from e
         try:
-            oc_proxy_url, oc_ca_path = attach_gateway_to_net(
-                broker_handle.internal_network
+            onecli_handle = start_onecli_shim(
+                session_id, broker_handle.internal_network
             )
         except OneCLIGatewayError as e:
             stop_broker(broker_handle)
             broker_handle = None
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=125) from e
-        hybrid_gateway_net = broker_handle.internal_network
         adapter.mediation = MediationContext(  # type: ignore[attr-defined]
             base_url=broker_handle.base_url,
             base_url_env=mediation_base_url_env,
@@ -429,8 +426,8 @@ def _perform_launch(
             placeholder=mediation_placeholder,
         )
         adapter.onecli = OneCLIContext(  # type: ignore[attr-defined]
-            proxy_url=oc_proxy_url,
-            ca_host_path=oc_ca_path,
+            proxy_url=onecli_handle.proxy_url,
+            ca_host_path=onecli_handle.ca_host_path,
         )
         mediated_network = broker_handle.internal_network
 
@@ -460,14 +457,14 @@ def _perform_launch(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(code=125) from e
     finally:
-        # Hybrid: detach the gateway from the broker's net BEFORE stop_broker
-        # removes that net (docker refuses to remove a net still in use).
-        if hybrid_gateway_net is not None:
-            detach_gateway_from_net(hybrid_gateway_net)
-        if broker_handle is not None:
-            stop_broker(broker_handle)
+        # Tear the OneCLI shim down FIRST: in hybrid it lives on the broker's
+        # net, and docker refuses to remove a net that still has the shim
+        # attached. stop_onecli_route only removes the cell net when it owns it
+        # (pure onecli), so the broker keeps ownership of its own net in hybrid.
         if onecli_handle is not None:
             stop_onecli_route(onecli_handle)
+        if broker_handle is not None:
+            stop_broker(broker_handle)
 
     # The container has exited — the user is back on the host shell. Announce
     # the boundary so a silent return can't be mistaken for still being inside.

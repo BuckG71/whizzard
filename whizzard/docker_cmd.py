@@ -30,6 +30,7 @@ from whizzard.images import (  # noqa: E402,F401
     WHIZZARD_BROKER_IMAGE,
     WHIZZARD_HERMES_IMAGE,
     WHIZZARD_IMAGE,
+    WHIZZARD_ONECLI_SHIM_IMAGE,
 )
 from whizzard.mounts import Mount, MountMode
 from whizzard.session_log import (

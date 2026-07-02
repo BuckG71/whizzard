@@ -3067,7 +3067,27 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 **Status:** active. Extends D-183/D-184 (bar-C), D-185 (wizard credential step); depends on D-134 (OneCLI credential resolution).
 
-**Notes:** The cell does hold the OneCLI proxy-auth token (in `HTTP(S)_PROXY`) — an unavoidable proxy-client capability, scrubbed from the audit log; it drives the gateway but exposes no raw provider secret. Deferred items (multi-provider placeholder naming; `broker.py`↔`onecli_gateway.py` helper dedup) logged in `known_issues.md`.
+**Notes:** The cell does hold the OneCLI proxy-auth token (in `HTTP(S)_PROXY`) — an unavoidable proxy-client capability, scrubbed from the audit log; it drives the gateway but exposes no raw provider secret. Deferred items (multi-provider placeholder naming; `broker.py`↔`onecli_gateway.py` helper dedup) logged in `known_issues.md`. **Amended by D-188** (the gateway is no longer attached to the cell net directly — a forwarder shim isolates the cell from the gateway's management port).
+
+---
+
+### D-188: Isolate the cell from the OneCLI gateway with a per-session forwarder shim (amends D-187)
+
+**Type:** safety
+
+**Tags:** integration, hermes, oss-launch
+
+**Door Type:** two-way (a network-topology + sidecar-image choice; revisable if OneCLI later offers a supported bind/auth knob, which would let us drop the shim).
+
+**Decision:** In `onecli`/`hybrid` mode the cell no longer shares a Docker network with the OneCLI gateway. Instead a per-session **forwarder shim** (`socat` in a digest-pinned `whizzard-onecli-shim` image) sits on the cell's `--internal` net and relays **only** the gateway's proxy port (`:10255`) over a second `--internal` net it shares with the gateway. The cell reaches the shim, never the gateway directly.
+
+**Rationale:** A runtime security test (post-D-187, follow-up to the Codex/`/security-review` pass — which read code but didn't test the network topology) found the gateway's container also serves an **unauthenticated management dashboard/API on `:10254`** (bound `0.0.0.0`, `AUTH_MODE=local` → synthetic always-admin). The D-187 design attached that whole container to the cell net, so a compromised cell could read `/api/secrets` (full credential-config inventory) and `/api/agents` (every agent's proxy token in plaintext) — a containment breach in a credential-privacy feature (raw provider secrets stay 1Password-backed, so they weren't exposed, but the surface is an open management API). OneCLI (v1.4.1) offers **no supported fix**: the dashboard's bind is Next.js `HOSTNAME=0.0.0.0` (loopback-binding it also breaks the host CLI's `127.0.0.1:10254` access), the dashboard can't be disabled (it's the container's main process), the gateway's `:10255` bind is hardcoded, and the only `/api` auth is full Google OAuth. Rejected: loopback-bind / disable / OAuth — none viable per the source. The shim is the only clean path and is entirely ours. Validated end-to-end: egress still works through the shim; direct, proxy-to-self, and shim-port paths to `:10254` are all blocked; teardown is clean in both modes.
+
+**Source:** conversation 2026-07-01 (runtime test + OneCLI-source research); onecli/onecli v1.4.1.
+
+**Status:** active. Amends D-187; depends on D-134 (OneCLI), D-184 (broker net reuse in hybrid).
+
+**Notes:** Host side was never exposed (both gateway ports publish only to `127.0.0.1`); the breach was strictly peer-container-to-container on the shared net. Caveat: 1Password `op://` secret resolution has the gateway call its *own* `localhost:10254`, which the shim doesn't affect (it only isolates the cell).
 
 ---
 

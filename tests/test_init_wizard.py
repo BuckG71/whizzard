@@ -162,11 +162,11 @@ def test_init_errors_on_windows_container_mode(
 # ---------- step 1: image build (build_runner mocked) ----------
 
 
-def test_init_step_1_invokes_three_builds_in_order(
+def test_init_step_1_invokes_four_builds_in_order(
     _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """Step 1 silently chains base + Hermes + broker image builds — the user
-    sees one "Building sandbox..." line, the runner is invoked three times."""
+    """Step 1 silently chains base + Hermes + broker + onecli-shim image builds
+    — the user sees one "Building sandbox..." line, the runner runs four times."""
     from whizzard import init_wizard as iw
 
     monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
@@ -183,13 +183,14 @@ def test_init_step_1_invokes_three_builds_in_order(
     # Step 1 succeeds; later steps not yet implemented so the wizard
     # currently ends after step 1 with the welcome + step-1 output.
     assert "sandbox built" in result.output
-    assert len(invocations) == 3
+    assert len(invocations) == 4
 
-    # Build order: base → hermes → broker (bar C credential-broker sidecar).
-    base_argv, hermes_argv, broker_argv = invocations
+    # Build order: base → hermes → broker (bar C) → onecli-shim (D-188).
+    base_argv, hermes_argv, broker_argv, shim_argv = invocations
     assert "whizzard-base:latest" in base_argv
     assert "whizzard-hermes:latest" in hermes_argv
     assert "whizzard-broker:latest" in broker_argv
+    assert "whizzard-onecli-shim:latest" in shim_argv
 
 
 def test_init_step_1_propagates_base_build_failure(

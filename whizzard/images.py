@@ -20,3 +20,8 @@ WHIZZARD_HERMES_IMAGE = os.environ.get(
 WHIZZARD_BROKER_IMAGE = os.environ.get(
     "WHIZZARD_BROKER_IMAGE", "whizzard-broker:latest"
 )
+# OneCLI forwarder-shim image (D-188). Isolates the cell from the OneCLI
+# gateway's management port by relaying only the proxy port.
+WHIZZARD_ONECLI_SHIM_IMAGE = os.environ.get(
+    "WHIZZARD_ONECLI_SHIM_IMAGE", "whizzard-onecli-shim:latest"
+)

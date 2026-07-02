@@ -1,0 +1,31 @@
+# Whizzard OneCLI forwarder shim (D-188).
+#
+# A single-purpose TCP forwarder that sits between the cell and the OneCLI
+# gateway in onecli/hybrid mode. The cell reaches ONLY this shim on its
+# per-session --internal network; the shim is dual-homed onto a second
+# --internal network shared with the gateway and forwards its listen port
+# straight through to the gateway's PROXY port (:10255) — and nothing else.
+#
+# Why it exists: the OneCLI gateway container also serves an unauthenticated
+# management dashboard/API on :10254 (bound 0.0.0.0, AUTH_MODE=local). Attaching
+# that container directly to the cell net (the pre-D-188 design) let a
+# compromised cell read /api/secrets and /api/agents. OneCLI offers no supported
+# way to loopback-bind or disable :10254, so we never share a net with the
+# gateway — the shim relays only the proxy port. socat is a transparent byte
+# relay, so the gateway's own Proxy-Authorization/CONNECT flow is untouched.
+#
+# Base image is the same digest-pinned debian as the broker so the containment
+# surface keeps one integrity anchor; socat comes from the Debian package (no
+# pip / PyPI supply-chain surface).
+
+FROM debian:13-slim@sha256:28de0877c2189802884ccd20f15ee41c203573bd87bb6b883f5f46362d24c5c2
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends socat && \
+    rm -rf /var/lib/apt/lists/*
+
+# Unprivileged: the shim holds no secret and needs no privileges. The listen
+# port (>1024) binds fine as nobody. socat args are supplied at `docker run`.
+USER nobody
+
+ENTRYPOINT ["socat"]

@@ -92,6 +92,7 @@ include = ["whizzard*"]
     "Dockerfile.hermes",
     "Dockerfile.broker",
     "broker/proxy.py",
+    "Dockerfile.onecli-shim",
 ]
 
 [tool.pytest.ini_options]
