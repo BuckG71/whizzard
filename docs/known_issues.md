@@ -97,7 +97,12 @@ the in-cell-setup path entirely — require a *configured* host Hermes before
 setup. Couples to the open question of whether to make host-Hermes-first a hard
 prerequisite (strengthening D-182) + a clean credential-via-env path
 (`secrets:` injection, since the clone carries config but not credentials).
-*Disposition:* fix before launch; decide the prerequisite question first.
+*Disposition:* **launch-blocker resolved** — D-182 makes host-Hermes-first the
+model (a configured host profile is cloned with auth excluded), and D-184/D-187
+mediation hands the cell a placeholder + broker URL so it never authenticates
+into its mounted profile — the `auth.lock` poison path can't fire on the
+documented flow. *Residual (post-launch hardening):* confirm/suppress the cell's
+Hermes first-run setup wizard so a user can't manually trigger in-cell auth.
 
 ### Cell credential injection has no auto-wiring; OAuth path hides the token value
 The cell gets LLM credentials via the harness config's `secrets:` block — env
@@ -137,9 +142,13 @@ Hermes problem — **every** harness Whizzard adds (Claude Code, Codex, NanoClaw
 deliverable is a **comprehensive, harness-neutral credential-handling plan** (a
 credential layer the adapters plug into), not a per-harness patch. Treat this as
 a first-class design workstream, not a Hermes footnote.
-*Disposition:* fix before launch — credential onboarding is load-bearing for a
-usable cell; the provider-scale piece is exploration-then-design, and the
-harness-neutral credential plan is its own workstream.
+*Disposition:* **launch-blocking core RESOLVED** — Anthropic credential
+onboarding is handled by D-185 (the `whiz init` credential step) + D-184 (bar-C
+broker) + D-187 (onecli/hybrid), so a fresh user reaches a working, credential-
+private cell without hand-editing config. *Residual (post-launch, not blocking —
+Anthropic-first is the launch scope per D-183/184/185):* the provider-scale piece
+(multi-provider SDK in `Dockerfile.hermes` + per-provider credential injection)
+and the harness-neutral credential-layer plan remain their own design workstreams.
 
 ---
 
@@ -377,32 +386,6 @@ on 2026-06-16. The same deprecation applies to `.github/workflows/ci.yml`.
 Node-24-native (most likely well before September). Bump action
 versions in one maintenance commit; no functional change expected.
 
-### Wizard Docker preflight checks PATH only, not daemon reachability
-`whiz init`'s only Docker check is `docker_available()` —
-`shutil.which("docker") is not None` (binary on PATH). It then
-unconditionally prints "✓ Docker is running". With Docker installed but
-the daemon down (the common Docker-Desktop-not-started state — surfaced
-live during the Windows clean-install test 2026-06-03), this asserts a
-green state it never verified, then fails confusingly at `docker build`.
-Violates fail-closed (D-133). Git needs no check (not a runtime dep);
-Python's floor is pip-enforced via `requires-python`.
-*Fix:* real preflight reusing the daemon-down detection that already
-exists in `adjust.py` / `image_exists()` (`DockerDaemonError`, F-B-01 /
-F-G-10). Four states: binary-missing → install hint; daemon-unreachable
-→ "start Docker Desktop and re-run" (OS-aware); Windows-containers mode
-→ "switch to Linux containers"; daemon-up-Linux → proceed. Folds in the
-previously-deferred "daemon-down message clarity" item. Optionally expose
-as `whiz doctor` (one preflight fn, two callers).
-*Rendering (surfaced 2026-06-03):* Step 1 lists the Windows Linux-backend
-requirement as a dim `›` advisory styled inline with two green `✓` checks,
-so it reads as a pending/grayed checklist item that never resolves — users
-assume it turns green after the build; it doesn't (it's a static print).
-Redesign so every prerequisite line is a *verified* state: daemon
-reachable ✓, Linux backend ✓ (or ✗ + abort on Windows-container mode),
-recipe found ✓ — no advisory-dressed-as-check; non-Windows hosts skip the
-backend line entirely rather than show a grayed item.
-*Disposition:* fix before launch; UX-shaped, so design noted here first.
-
 ### Wizard Hermes-not-installed branch links the repo but gives no install steps
 Step 1b Branch B printed "Install Hermes on your computer" + the bare
 `github.com/NousResearch/hermes-agent` URL — no steps, no necessity framing.
@@ -425,72 +408,6 @@ control — the host profile must come from Hermes itself).
 compatibility matrix + add host-version detect-and-warn at init/profile-create,
 keyed off the cell's pinned version (couples to the `Dockerfile.hermes`
 0.12→0.14 pin-bump, which needs an M7 smoke re-run). See D-182.
-
-### `whiz run` defaults to an unregistered `generic` harness → confusing failure
-`run_cmd`'s `--harness` defaults to `"generic"`, but the wizard registers
-only `hermes-cell` (the generic shell is internal-only per
-[[feedback_no_shell_harness_in_user_surfaces]]). So a bare `whiz run`
-fails with "unknown harness: 'generic'. Available: hermes-cell" — and the
-`--harness` help text advertises "default: generic shell", which both
-surfaces the internal shell *and* names a default that doesn't work.
-Surfaced during the Windows cell-launch test 2026-06-03.
-*Fix options:* (a) make the default harness the registered one / derive it
-from harnesses.json rather than hardcoding `generic`; or (b) if `whiz run`
-stays an internal/dev entry point, scrub the "generic shell" mention from
-help and make the error actionable ("no harness specified — try
-`whiz r hermes` or `--harness hermes-cell`"). Decide which `whiz run` is.
-*Disposition:* fix before launch (confusing first-touch error).
-
-### BUG (OS-agnostic, likely launch-blocking): harness not coupled to its image
-`_perform_launch` uses the passed `image` param directly in
-`build_run_argv(image=image, ...)`; there is **no harness→image
-resolution**, and neither the harness config nor the adapter carries an
-image. Both `run_cmd` and `preset_launch_cmd` default `image` to
-`WHIZZARD_IMAGE` (the base). So launching the `hermes-cell` harness keeps
-the *base* image (which has no `hermes` binary) and dies inside the
-container with `[FATAL tini] exec hermes failed: No such file or
-directory`. Surfaced on the Windows live launch 2026-06-03, but it is
-**not Windows-specific** — it reproduces on any OS.
-Critically, `preset.<x>` carries `.harness` but no image, and
-`preset_launch_cmd` also defaults to base — so **`whiz r hermes` (the
-command the wizard's "first commands to try" advertises) appears to fail
-the same way** unless `--image whizzard-hermes:latest` is passed. (Confirm
-by running `whiz r hermes` bare.) Workaround: explicit
-`--image whizzard-hermes:latest`.
-*Fix:* derive the image from the harness (the harness/adapter should
-declare its required image — e.g. Hermes → `WHIZZARD_HERMES_IMAGE`), or
-let a preset carry an image, so the headline launch path selects the
-correct image without the user knowing image names. Also add a fail-fast
-check: if the harness's expected binary isn't in the chosen image, error
-at the whiz layer rather than as a cryptic in-container tini failure.
-*Disposition:* fix before launch — this blocks the primary documented
-launch command. How did this pass the M7 smoke? (M7 likely ran with an
-explicit hermes image; worth confirming the smoke covers the bare
-preset path.)
-
-### Hermes default start command is gateway-mode, not interactive terminal
-`HermesAdapter._DEFAULT_START_COMMAND = ["hermes", "gateway", "run"]`
-(hermes.py:57) hardcodes the **gateway daemon** as the cell's command. The
-gateway is a messaging-platform listener (Discord/Telegram/etc.) — it
-requires platform config and is *not* interactive, so a default launch
-just idles ("No messaging platforms enabled") and ignores stdin. Surfaced
-on the Windows launch 2026-06-03: the maintainer notes interactive
-**terminal mode should be the default**, with gateway as an explicit
-opt-in the user selects and configures.
-*Fix (command confirmed 2026-06-03):* default the cell command to bare
-`hermes` (the interactive terminal/chat mode — maintainer-confirmed; the
-cell already passes `-it`, so it gives a real in-terminal session).
-Change `_DEFAULT_START_COMMAND = ["hermes", "gateway", "run"]` →
-`["hermes"]`; this also revisits D-88 (which set gateway as the default
-invocation). Gateway mode is **not** a Whizzard flag — per the maintainer,
-the user starts gateway from within their Hermes session if they want it
-(keeps Whizzard harness-neutral; no harness-specific flag on `whiz`).
-Touches the adapter start command, the wizard's Hermes setup, and the
-preset/use-flow docs.
-*Open question:* the correct interactive Hermes command + how the user
-opts into gateway (preset field? `whiz run --gateway`? wizard choice?).
-*Disposition:* fix before launch — the default launch UX is currently a
-dead-end idle daemon.
 
 ### onecli/hybrid: model-key placeholder is hardcoded to `ANTHROPIC_API_KEY`
 In onecli/hybrid mode the adapter strips all fetched secrets and sets only

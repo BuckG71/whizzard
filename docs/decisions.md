@@ -3113,6 +3113,24 @@ The acceptance smoke is the enabling gate: it makes security-forward bumps *safe
 
 ---
 
+### D-190: Launch from the personal GitHub account — no org move (resolves launch Gate G)
+
+**Type:** process
+
+**Tags:** oss-launch, naming
+
+**Door Type:** two-way (an org can be created + the repo transferred later; GitHub redirects the old path, so reversal is modest churn, not a trap).
+
+**Decision:** Whizzard launches from the maintainer's personal GitHub account (`BuckG71/whizzard`). Do NOT create or move to a GitHub organization for launch. The launch-readiness plan's Gate G org-move — and its "rename → create org → transfer → PyPI" sequencing — is dropped.
+
+**Rationale:** Gate G's org-move was sequenced on the Osmotiq rename, which D-186 killed, so its rationale is void. Whizzard is a portfolio artifact, not a multi-maintainer product; an org adds no governance value for a solo maintainer and injects churn (transfer, re-point PyPI/CI/badges/links) onto the launch critical path — and would re-block PyPI reservation + branch protection on a new identity. Rejected: move-to-org-now (churn, no payoff). A later transfer stays available (GitHub path-redirects) if the project ever grows contributors.
+
+**Source:** conversation 2026-07-01.
+
+**Status:** active. Resolves launch_readiness.md Gate G; follows D-186 (rename dropped).
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
