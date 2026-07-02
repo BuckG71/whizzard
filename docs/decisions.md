@@ -3091,6 +3091,28 @@ Rejected: **install the `whizzard` package** — leaks the policy-layer mechanis
 
 ---
 
+### D-189: Dependency-version policy — pin for reproducibility, smoke-gated bumps for security (never freeze)
+
+**Type:** process
+
+**Tags:** integration, safety, oss-launch
+
+**Door Type:** two-way (a maintenance policy; revisable as tooling/deps change).
+
+**Decision:** Pin dependencies for reproducibility, but treat a pin as "adopt deliberately + tested," never "freeze." Two classes, two handlings:
+1. **OneCLI** (a host tool the user installs/manages — we do NOT vendor it): our "pin" is only a *tested-compatibility marker* ("validated with ≥ X"); the D-188 acceptance smoke is the compatibility check; the wizard/preflight **warns but never hard-blocks** when the user's OneCLI is outside the validated range — so our marker never stands between the user and an OneCLI security patch.
+2. **Artifacts we build** (shim/broker/cell images: pinned Debian base by digest + apt/pip packages): pin by digest for reproducibility, but enrol them in the automated dependency-update flow (Dependabot) so patched bases are proposed → smoke-gated → merged.
+
+The acceptance smoke is the enabling gate: it makes security-forward bumps *safe* by verifying each end-to-end before it ships, so we never choose between freeze (stale/vulnerable) and float (silent breakage).
+
+**Rationale:** A bare "pin the version" is a security footgun — pin-and-forget rides known-vulnerable versions until noticed (the maintainer raised exactly this). But floating exposes us to silent breakage of the undocumented OneCLI internals we depend on (env parsing, container name, port, CA path). Rejected: freeze (accumulates unpatched CVEs). Rejected: float/latest (silent integration breakage). Pin + monitor + smoke-gated bump gets both. The OneCLI-vs-bundled split matters because we don't vendor OneCLI: pinning it is a compatibility statement, not a lock that could strand a user on an unpatched gateway.
+
+**Source:** conversation 2026-07-01 (follow-up to D-188).
+
+**Status:** active. Leans on D-188 (the smoke); addresses the `known_issues.md` Codex-#7 item (Dockerfile.hermes mutable inputs) from the pin-and-auto-refresh direction. Governs *maintaining* pinned deps; the dep-hygiene split (dep-careful, harness-yolo) still governs *adding* new ones.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
