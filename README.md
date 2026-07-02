@@ -2,17 +2,9 @@
 
 [![CI](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml/badge.svg)](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml)
 
-Local capability governance for AI agents. Run powerful agent harnesses inside explicit, temporary, human-readable permission boundaries.
+**Run powerful AI-agent harnesses inside explicit, temporary, auditable permission boundaries — on your own machine.**
 
-> **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — see [Install](#install) below.
-
----
-
-## What this is
-
-In one sentence: Whizzard wraps an *agent harness* — a tool that drives an LLM through coding or agent tasks, e.g. Hermes, Claude Code, Cursor — in a hardened, scoped, time-bounded Docker container (hereafter "sandbox") with auditable capability grants. See [docs/vision_and_strategy.md](docs/vision_and_strategy.md) for more detail.
-
-The core invariant:
+Whizzard wraps an *agent harness* (a tool that drives an LLM through real work — Hermes today; Claude Code, Cursor, and others to follow) in a hardened, scoped, time-bounded Docker sandbox. The agent reaches only the files you mounted, the network you allowed, and — critically — **never holds your model or service credentials at all**. You stay in the loop: capabilities only narrow after launch, escalation requires your explicit approval, and every session leaves an append-only audit trail.
 
 ```
 Whizzard controls capabilities.
@@ -20,171 +12,145 @@ Agents request capabilities.
 Agents do not grant themselves capabilities.
 ```
 
-## Concepts at a glance
+> **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — jump to [Quickstart](#quickstart).
 
-- **Sandbox** — the hardened Docker container Whizzard launches each agent session inside.
-- **Profile** — a named bundle of capability defaults (network policy, time limits, image, hardening flags). You launch a session by picking a profile.
-- **Mount** — an explicit path you grant the sandbox visibility into. The set of mounts *is* the agent's filesystem permission.
+---
 
-## Scope and limitations
+## See the boundary
 
-Whizzard sits at the runtime layer of the agent lifecycle: while an agent is executing, Whizzard *bounds what it can reach* — what filesystem paths are visible, what network destinations are reachable, what capabilities the sandbox holds. The product's value rests on those boundaries holding.
+Launch a session on the `safe` profile — network off, nothing mounted:
 
-Whizzard does not claim to be a complete security solution. The list below names what Whizzard does and does not address in `v0.1.0`, with mitigation pointers where applicable.
+```sh
+whiz run --harness hermes --profile safe
+```
 
-### What Whizzard *does* address
+Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `mediated` profile the sandbox holds a worthless placeholder while the real key stays host-side, injected only when a broker forwards the call to the provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds an append-only record of exactly what ran, with what access, and what the agent asked for mid-session.
 
-- **Filesystem capability boundaries.** An agent reaches only the paths you explicitly mounted into the sandbox. Your SSH keys, your browser cookies, your other projects, your password manager, your cloud-credentials directory — none of these are reachable unless you declared them. The mount list *is* the permission model (no implicit access via parent traversal, symlink, or "the agent figured out my home directory"). This closes the entire class of "an agent ran `find ~ -name '*.pem'` and found everything I have."
+That's the whole idea: **whatever the agent does, it can only do it within a capability surface you declared and can read back later.**
 
-- **Network capability boundaries.** Per-profile network policy: `off` means no network at all (no DNS, no outbound HTTP, nothing); `on` means full outbound access. The `off` posture closes data exfiltration entirely — combined with the filesystem boundary above, it closes the "read sensitive data then send it somewhere" loop. The `default` Whizzard profile sets network `on` to minimize friction for everyday use; profiles like `safe` and `quarantine` ship with network `off` for untrusted work. **Per-destination allowlist mode is tagged for v1.0** — see [ROADMAP.md](ROADMAP.md), goal 11. Until then, the on/off boolean is the available granularity.
+## Architecture at a glance
 
-- **Privilege containment.** The agent runs as a non-root user inside the sandbox, with dropped Linux capabilities, a read-only container root filesystem, `no-new-privileges` set, and the Docker socket unreachable. A vulnerability in any tool the agent invokes doesn't get root, can't load kernel modules, can't write outside declared writable mounts, can't escalate via `setuid` binaries, and can't reach back to the host Docker daemon to spawn unconstrained containers.
+```mermaid
+flowchart LR
+    you([you]) --> whiz["whiz CLI<br/>profiles, mounts, time caps"]
+    creds[("your credentials<br/>env / OneCLI / keychain")]
+    mounts["declared mounts<br/>= filesystem permission"]
 
-- **Credential isolation.** Whizzard's own configuration directory — including any credential files belonging to harnesses Whizzard launches — is structurally unreachable from the sandbox: no symlink, no parent-mount, no traversal trick, no rglob bypass reaches it. The sandbox can't read or modify the credentials that govern *future* Whizzard sessions. This closes the "compromise one session, persist via Whizzard's own config" path.
+    subgraph net["per-session isolated network (no route out)"]
+        sandbox["sandbox<br/>the agent runs here<br/>holds only a placeholder"]
+        broker["credential broker"]
+        gw["OneCLI forwarder to gateway"]
+    end
 
-- **One-way capability flow.** Permissions only get narrower, not broader, after a session launches. An agent that needs more access than its profile allows must surface a request to the operator — it cannot grant itself broader permissions, cannot re-launch itself with new flags, cannot escape its profile by editing config. The escalation path is one-way and requires explicit operator approval. There is no "the agent quietly upgraded itself to root" path.
+    whiz -->|"launch: scoped, hardened, time-bounded"| sandbox
+    mounts -. "only these paths" .-> sandbox
+    creds -->|"real key, host-side only"| broker
+    sandbox -->|model calls| broker -->|injects credential| provider([model provider])
+    sandbox -->|service calls| gw -->|injects credential| services([GitHub, Slack, tools])
+    sandbox -.->|"needs more? asks you"| whiz
+```
 
-- **Time-bounded sessions.** Every session carries an explicit duration cap and an idle-timeout cap. When the cap fires, the container is stopped. This closes the "long-running agent gradually accumulates failed attempts until something works" pattern and limits the blast radius of any compromise to the declared session window.
+The sandbox is the untrusted boundary. It never shares a network with anything holding a raw secret, never sees a credential value, and cannot widen its own permissions — it can only *ask*, and you decide. Full treatment in [docs/architecture.md](docs/architecture.md) and the [visual overview](docs/reference/architecture-at-a-glance.html).
 
-- **Append-only audit visibility.** Every session emits a structured, append-only audit log: what was launched, with what profile and mounts, what the agent requested mid-session, how requests were resolved, when the session ended and why. The log is the post-hoc detection surface; even a sophisticated attack has to operate within recorded scope. Tampering with the log requires reaching the config directory, which the sandbox can't do (see credential isolation above).
+## What you get
 
-- **Operator-in-the-loop on escalation.** When an agent needs something beyond its profile (a broader mount, network access when the profile has it off, a longer session), the request lands in a file-mailbox the operator monitors. The operator approves or denies; the agent does not get the permission without explicit grant. No silent escalation, no implicit consent.
+- **Filesystem is opt-in.** The agent reaches only the paths you mounted — no parent-directory traversal, symlink, or glob trick reaches your home directory. The mount list *is* the permission model. Closes the whole "an agent ran `find ~ -name '*.pem'`" class.
+- **Credentials never enter the sandbox.** A host-side broker holds your real model key/login and attaches it only when forwarding to the provider; the sandbox sees a placeholder. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected host-side too. A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
+- **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `mediated` / `onecli` / `hybrid` = outbound only through a credential-injecting proxy. `off` closes data exfiltration entirely.
+- **Privilege is contained.** Non-root user, all Linux capabilities dropped, read-only container root, `no-new-privileges`, Docker socket unreachable. A vulnerable tool the agent invokes gets no root, no host, no escape hatch.
+- **Escalation is one-way, and you decide.** Permissions only narrow after launch. An agent that needs more surfaces a request to a file-mailbox you monitor; you approve or deny. No silent self-upgrade.
+- **Sessions are time-bounded.** Every session carries a duration cap and an idle cap; when they fire, the container stops. Blast radius is the declared window.
+- **Everything is audited.** An append-only log records what launched, with what profile and mounts, what was requested, how it resolved, and why it ended — and the sandbox can't reach the log to tamper with it.
 
-### What Whizzard *does not* address in v0.1.0
+## Credential privacy
 
-- **Deferred-execution attacks via writable mounts.** An agent with write access to a project mount can plant files that execute later on the host — `.git/hooks/pre-commit`, poisoned `package.json` post-install scripts, source backdoors, or pinned-bad dependencies in lockfiles. Whizzard's containment holds while the agent is running, but writes are visible to the host immediately and may execute later when the user resumes normal work.
-  **Mitigation roadmap:** v1.0 introduces an opt-in `--strict-overlay` mode that quarantines writable-mount writes behind a `whiz merge` review gate (see [ROADMAP.md](ROADMAP.md), goal 10). Until then: review diffs before commit, especially for sensitive paths (`.git/hooks/`, build configs, lockfiles).
+This is the piece most sandboxes miss. Containing the *filesystem* doesn't help if the agent can read your `ANTHROPIC_API_KEY` out of its own environment and POST it somewhere. Whizzard's default posture (`mediated`) keeps the model credential **entirely out of the sandbox**:
 
-- **DNS-based exfiltration.** When network access is on, an agent can encode data in DNS lookups. Whizzard does not currently gate DNS independently of the on/off boolean.
-  **Mitigation roadmap:** per-profile constrained-DNS option under consideration as a sub-track of the v1.0 network-allowlist work (see [ROADMAP.md](ROADMAP.md) goal 11). For high-stakes work today: use the `off` network profile (or `safe` / `quarantine`), which blocks everything including DNS.
+- The sandbox launches on a per-session isolated network with **no route out** and a placeholder in place of the key.
+- A **credential broker** on that network holds the real value host-side and attaches it *only* when forwarding to the provider's real domain. The sandbox talks to the broker, never to the internet directly — so it can't exfiltrate a key it never has, and it can't reach any other destination to try.
+- This works for subscription/OAuth logins too (not just API keys) — the broker handles the provider's exact auth flow.
+- If you run **[OneCLI](https://onecli.sh)**, the `onecli` / `hybrid` postures extend this to *all* your service credentials: GitHub, Slack, and tool tokens are injected host-side through an isolated forwarder to the gateway, so none of them land in the sandbox either.
 
-- **Behavioral analysis of the agent.** Whizzard is a containment layer, not a behavioral controller. It does not detect or prevent sophisticated refusal patterns, hidden communication channels in tool outputs, or steganography in agent writes. Those are different problem classes handled by different tools (behavioral testing, audit-log analysis); Whizzard's value is that *whatever the agent does, it can only do it within the declared capability surface*.
+`whiz init` asks which posture fits your setup, in plain language. See the [decision log](docs/decisions.md) for the full credential-privacy rationale, and the [threat model](docs/threat_model.md).
 
-- **Container escape.** Whizzard relies on Docker / OCI runtime boundaries. A kernel-level container escape (a CVE in the runtime itself) is out of scope; the project tracks runtime security advisories but does not invent novel sandboxing primitives.
+## Quickstart
 
-- **Supply-chain attacks on Whizzard itself.** The repo applies industry-standard hardening (branch protection, signed releases, pinned dependencies) but is not third-party audited. Use the pinned-version install path for sensitive work; review pull requests before merging.
+### Prerequisites
 
-This list is not exhaustive. It names the gaps most likely to surprise a user who assumes a Docker wrapper fully isolates the agent's effect. If you find a gap not listed, please open an issue.
+- macOS or Linux (Windows in pre-release verification), Python 3.11+, and a running Docker daemon.
+- A supported agent harness **installed and configured first** — today that's [Hermes](https://github.com/NousResearch/hermes-agent). Whizzard sandboxes a harness you provide; it doesn't install one for you.
 
-## Telemetry
-
-**Whizzard collects no telemetry.** No usage analytics, no crash reporting, no phone-home of any kind — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config (`~/.whizzard/config/`) and your local audit log (`~/.whizzard/logs/`). A capability-governance tool that quietly exfiltrated usage data would be self-defeating; there is no analytics dependency in the codebase to disable.
-
-## Project status
-
-Whizzard is early (0.1.x), solo-maintained, and deliberately narrow: it
-sandboxes one harness (Hermes), pinned to a tested build, on a
-mount-list-is-the-permission model. It is held to a real bar — hardened,
-tested, documented — but support is best-effort with no SLA, and it tracks
-its pinned Hermes build rather than chasing upstream releases. For sensitive
-work, use the pinned-version install and read
-[Scope and limitations](#scope-and-limitations).
-
-## Prerequisites
-
-- macOS, Linux, or Windows (Windows is in pre-release verification for v0.1.0)
-- Python 3.11+
-- Docker Desktop (or any Docker daemon) running
-- A supported agent harness installed **and configured** before `whiz init` — today that's Hermes (see [Hermes setup](#hermes-setup)). Whizzard sandboxes a harness you provide; it does not install one for you.
-
-### Compatibility matrix
-
-| Component | Supported | Notes |
-|---|---|---|
-| Python | 3.11, 3.12 | CI runs the suite on both; 3.11 is the floor |
-| OS | macOS, Linux | primary dev + CI target |
-| OS | Windows | pre-release verification underway for v0.1.0 |
-| Docker | Docker Desktop or any Docker daemon | `host.docker.internal` routing (e.g. local Ollama) is Docker-Desktop only; on native Linux use the bridge gateway IP |
-| Hermes (agent harness) | pinned build, commit `e8b9369a` | The cell installs a **fixed, tested Hermes build** (`HERMES_REF` in `Dockerfile.hermes`); Whizzard intentionally does not track upstream Hermes releases. A newer host Hermes usually works, but can occasionally author a profile the tested cell doesn't fully understand — see [D-182](docs/decisions.md). |
-
-## Install
-
-### Pre-release (v0.1.0 reviewers)
+### Install + set up
 
 ```sh
 pip install whizzard==0.1.0rc1
 whiz init
 ```
 
-That's the entire flow. `whiz init` walks you through five short configuration steps, builds the execution container (about 2 minutes the first time), and sets up the configuration files at `~/.whizzard/config/`. Setup takes about five minutes total.
-
-### Hermes setup
-
-Whizzard currently supports the [Hermes Agent harness by Nous Research](https://github.com/NousResearch/hermes-agent) — an open-source autonomous-agent harness with platform connectors (Discord, Slack), cron scheduling, and skill management. Additional harnesses are planned for future releases.
-
-**Install a supported harness before `whiz init`.** Whizzard sandboxes a harness you provide; it does not install one for you. Install and configure Hermes following [Nous Research's instructions](https://github.com/NousResearch/hermes-agent) so it creates a profile at `~/.hermes/`. Whizzard's execution cell runs a pinned, tested Hermes build — if your host version differs, `whiz init` tells you but does not block: a newer Hermes usually works, but can occasionally author a profile the tested cell doesn't fully understand, so it's the first thing to suspect if a session misbehaves.
-
-`whiz init` then branches on whether a Hermes profile (`~/.hermes/`) exists:
-
-- **If a Hermes profile exists**: the wizard copies it into a Whizzard profile (`~/.hermes-main/`). Your existing Hermes setup on the host is not changed — Whizzard only reads from it. The bundled `hermes` preset is ready to launch.
-- **If none exists yet**: the wizard explains why a harness is needed and the steps to set one up, then completes setup without it. Once Hermes is installed and configured, run `whiz hermes profile create main` to copy `~/.hermes/` into `~/.hermes-main/`.
+`whiz init` walks five short steps, builds the sandbox images (~2 min first time), asks how to keep your credentials out of the sandbox, and writes config to `~/.whizzard/config/`. About five minutes total. If a Hermes profile exists at `~/.hermes/`, the wizard clones it (read-only, auth excluded) into a Whizzard profile; if not, it explains the setup and you run `whiz hermes profile create main` once Hermes is configured.
 
 ### First session
 
-After `whiz init` completes:
-
 ```sh
-whiz                  # show what's running and what you have set up
-whiz r hermes         # launch a Hermes session
-whiz --help           # list every command
+whiz                  # what's running + what you have set up
+whiz r hermes         # launch a Hermes session (default: mediated, credential-private)
+whiz --help           # every command
 ```
 
-## Install (development)
+## Profiles
 
-```sh
-git clone <this-repo>
-cd whizzard
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"     # includes pytest, ruff, mypy
-```
+Bundled profiles (customize during `whiz init` or edit `~/.whizzard/config/profiles.json`):
 
-### Dev workflow
+| Profile | Network | Credential posture | Time cap | For |
+|---|---|---|---|---|
+| `default` | on | **mediated** (key stays out of the sandbox) | none | everyday baseline |
+| `build` | on | mediated | 2 h | development, long compiles |
+| `power` | on (open) | full outbound, no mediation | 1 h | capability-heavy, broad access |
+| `safe` | off | n/a | 30 min | running something you don't trust |
+| `quarantine` | off | n/a | 30 min | untrusted, read-only folders only |
 
-One-command lint + typecheck + test:
+`whiz init` can set the default profile's posture to `onecli` or `hybrid` if you use OneCLI.
 
-```sh
-make check
-```
+## Scope and limitations
 
-Individual targets: `make test`, `make lint`, `make fmt` (auto-fix), `make typecheck`, `make validate-decisions`, `make dx ARGS='<decision-id>'` (browse a decision record from `docs/decisions.md`). Configs for all three tools live in `pyproject.toml`.
+Whizzard bounds an agent **at runtime** — what it can reach while executing. It is a containment layer, not a complete security solution. In `v0.1.0` it deliberately does **not** address:
 
-Pre-commit hooks for the same checks: `pip install pre-commit && pre-commit install`. CI (GitHub Actions, `.github/workflows/ci.yml`) runs the same set on push and PR.
+- **Deferred-execution via writable mounts** — an agent with write access can plant files (`.git/hooks/`, lockfiles, post-install scripts) that run later on the host. *Mitigation:* review diffs before commit; opt-in `--strict-overlay` review gate planned for v1.0 ([ROADMAP](ROADMAP.md) goal 10).
+- **DNS-based exfiltration** when network is `on` — the on/off boolean doesn't gate DNS independently. *Mitigation:* use a network-`off` profile (`safe`/`quarantine`) for high-stakes work; per-profile constrained DNS under consideration ([ROADMAP](ROADMAP.md) goal 11).
+- **Behavioral analysis, container escape, and supply-chain attacks on Whizzard itself** — out of scope; Whizzard relies on Docker / container-runtime boundaries and standard repo hardening, not novel sandboxing or third-party audit.
 
-## Available profiles
+The **[full threat model](docs/threat_model.md)** gives the complete treatment with trust boundaries. This list names the gaps most likely to surprise someone who assumes "it's in Docker, so it's isolated." Found one that isn't listed? Please open an issue.
 
-```sh
-whiz profiles list
-```
+## Telemetry
 
-Bundled profiles: `default` (network on, no time limit, no idle limit — everyday baseline), `safe` (network off, 30 min limit), `build` (network on, 2 hour limit), `power` (network on, 1 hour limit, broad access), `quarantine` (network off, 30 min limit, read-only folders only). `whiz init` writes the full five by default; you can customize during setup or edit `~/.whizzard/config/profiles.json` after.
+**None.** No analytics, no crash reporting, no phone-home — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config and audit log. A capability-governance tool that quietly exfiltrated data would be self-defeating; there is no analytics dependency in the codebase.
 
-## Repository layout
+## Project status
 
-```
-whizzard/
-  whizzard/                # Python package
-    _dockerfiles/          # bundled Dockerfile + Dockerfile.hermes (package data)
-    adapters/              # harness adapters (Hermes + generic Protocol reference)
-    cli/                   # per-subcommand CLI modules
-    init_wizard.py         # `whiz init` orchestration
-  config/                  # example JSON configs (user copies into ~/.whizzard/config/)
-  scripts/                 # maintenance tooling (decisions validator, dx lookup)
-  docs/                    # vision, architecture, decisions, examples
-  tests/                   # unit + integration tests
-  README.md
-  pyproject.toml
-```
+Early (0.1.x), solo-maintained, and deliberately narrow: it sandboxes one harness (Hermes), pinned to a tested build. Held to a real bar — hardened, tested, documented — but support is best-effort with no SLA. For sensitive work, use the pinned-version install and read [Scope and limitations](#scope-and-limitations).
+
+It's also, candidly, a **portfolio artifact**: the engineering rationale is tracked in the open in an append-only decision log ([docs/decisions.md](docs/decisions.md), D-1 → present) — the credential-privacy design, for instance, is D-183 through D-190.
 
 ## Documentation
 
 - [docs/vision_and_strategy.md](docs/vision_and_strategy.md) — what this is, who it's for, where it's going
-- [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract, control layering
-- [docs/reference/architecture-at-a-glance.html](docs/reference/architecture-at-a-glance.html) — visual architecture overview (open in a browser)
+- [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract
+- [docs/reference/architecture-at-a-glance.html](docs/reference/architecture-at-a-glance.html) — visual overview (open in a browser)
 - [docs/threat_model.md](docs/threat_model.md) — threat model and trust boundaries
-- [ROADMAP.md](ROADMAP.md) — v1.0 primary goals + post-launch sequencing
-- [docs/decisions.md](docs/decisions.md) — append-only decisions index
+- [docs/decisions.md](docs/decisions.md) — append-only decision log
+- [ROADMAP.md](ROADMAP.md) — v1.0 goals + post-launch sequencing
+
+## Contributing / development
+
+```sh
+git clone https://github.com/BuckG71/whizzard && cd whizzard
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+make check            # lint + typecheck + test in one shot
+```
+
+Individual targets: `make test`, `make lint`, `make fmt`, `make typecheck`, `make validate-decisions`. Pre-commit hooks: `pip install pre-commit && pre-commit install`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## A note on naming
 
-**Whizzard** is the project name; **`whiz`** is the short CLI alias — both invoke the same tool. The name is settled; no rename is planned.
+**Whizzard** is the project; **`whiz`** is the short CLI alias — both invoke the same tool. The name is settled.
