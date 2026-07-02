@@ -93,6 +93,36 @@ def test_start_onecli_route_builds_shim_topology(monkeypatch):
     assert any("TCP-LISTEN:10255,fork,reuseaddr" in j and "TCP:onecli:10255" in j for j in joined)
     # the gateway is NEVER attached to the cell net (that was the :10254 hole)
     assert not any("network connect whiz-oc-sid123 onecli" in j for j in joined)
+    # the shim is labeled by ROLE only, never session_id — else a crash-orphaned
+    # shim matches its own session_id in the reaper's live-cell probe and is
+    # never swept (D-188 review finding).
+    run_call = next(j for j in joined if "run -d --name whiz-shim-sid123" in j)
+    assert "whizzard.role=onecli-shim" in run_call
+    assert "whizzard.session_id" not in run_call
+
+
+def test_reap_orphans_sweeps_a_crash_orphan_shim(monkeypatch):
+    """A shim whose cell is gone (host crashed, socat survived) must be reaped —
+    the self-match bug would have made the live-cell probe see the shim itself."""
+    calls: list[list[str]] = []
+
+    def fake(args, **kw):
+        out = ""
+        if args[:2] == ["ps", "-a"]:  # shim discovery by role
+            out = "whiz-shim-dead"
+        elif args[:1] == ["ps"]:  # live-cell probe → cell is gone
+            out = ""
+        elif args[:1] == ["inspect"]:  # StartedAt → long ago (past grace)
+            out = "2000-01-01T00:00:00.000000Z"
+        calls.append(args)
+        return types.SimpleNamespace(returncode=0, stdout=out, stderr="")
+
+    monkeypatch.setattr(og, "_docker", fake)
+    og._reap_orphans()
+    joined = [" ".join(c) for c in calls]
+    assert any("rm -f whiz-shim-dead" in j for j in joined)
+    assert any("network rm whiz-oclink-dead" in j for j in joined)
+    assert any("network rm whiz-oc-dead" in j for j in joined)
 
 
 def test_hybrid_shim_does_not_own_cell_net(monkeypatch):

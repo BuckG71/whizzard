@@ -56,10 +56,20 @@ class OneCLIHandle:
 
 
 def _docker(args: list[str], *, timeout: float = 30.0) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["docker", *args], env=_docker_env(),
-        capture_output=True, text=True, timeout=timeout,
-    )
+    # Swallow a docker-CLI hang into a failed result rather than raising
+    # TimeoutExpired: callers branch on returncode and map failure to
+    # OneCLIGatewayError, so a hang stays fail-closed (and doesn't escape a
+    # caller that only catches OneCLIGatewayError, e.g. hybrid, leaking the
+    # broker).
+    try:
+        return subprocess.run(
+            ["docker", *args], env=_docker_env(),
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args, returncode=124, stdout="", stderr=f"docker {args[0]} timed out"
+        )
 
 
 def _slug(session_id: str) -> str:
@@ -146,9 +156,13 @@ def _bring_up_shim(
         # The shim listens on the proxy port on net-cell and relays ONLY that
         # port to the gateway on net-link. socat is a transparent byte relay, so
         # the gateway's Proxy-Authorization/CONNECT flow is untouched.
+        # NB: label the shim ONLY with role, never with session_id. The reaper
+        # discovers shims by role and derives the slug from the name; its
+        # live-cell probe queries `whizzard.session_id=<slug>`. If the shim also
+        # carried that label, a crash-orphaned shim (socat survives host death)
+        # would match its OWN session_id, look "live", and never be reaped.
         r = _docker([
             "run", "-d", "--name", shim, "--network", cell_net,
-            "--label", f"whizzard.session_id={session_id}",
             "--label", "whizzard.role=onecli-shim",
             WHIZZARD_ONECLI_SHIM_IMAGE,
             f"TCP-LISTEN:{port},fork,reuseaddr", f"TCP:{GATEWAY_CONTAINER}:{port}",
