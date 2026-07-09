@@ -37,6 +37,19 @@ def test_looks_like_daemon_error_real_mac_message():
     assert looks_like_daemon_error(stderr)
 
 
+def test_looks_like_daemon_error_bad_docker_host_unix_socket():
+    # Newer Docker CLIs (≥28) emit this verbatim when DOCKER_HOST points at a
+    # missing unix socket. Regression: this used to fall through the matcher
+    # and surface as "image not found — build it" instead of "start Docker".
+    stderr = (
+        "failed to connect to the docker API at "
+        "unix:///nonexistent/docker.sock; check if the path is correct and "
+        "if the daemon is running: dial unix /nonexistent/docker.sock: "
+        "connect: no such file or directory"
+    )
+    assert looks_like_daemon_error(stderr)
+
+
 def test_looks_like_daemon_error_ignores_unrelated_stderr():
     assert not looks_like_daemon_error("Error: No such image: whizzard:latest")
     assert not looks_like_daemon_error("")
