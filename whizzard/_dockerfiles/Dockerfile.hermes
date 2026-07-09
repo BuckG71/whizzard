@@ -7,7 +7,7 @@
 #   docker build -f whizzard/_dockerfiles/Dockerfile.hermes -t whizzard-hermes:latest .
 #
 # Used for Stage 8 M7 manual smoke. The pinned HERMES_REF matches the
-# version Bryan runs on the host so the smoke validates against the
+# maintainer's host version so the smoke validates against the
 # known-good Hermes shape.
 #
 # This image is the MVP-shape derived target; Stage 8 M8 (packaging closeout)
@@ -41,8 +41,10 @@ RUN apt-get update && \
 # Install Hermes via pip from GitHub at a pinned commit.
 # --break-system-packages: PEP 668 marker on Debian 12+; acceptable in a
 # single-purpose container where there is no other system Python user.
-# Pinned to Bryan's host HEAD at smoke time; bump as needed.
-ARG HERMES_REF=e8b9369a9
+# Pinned to a full 40-char commit SHA for build determinism (Codex #7): a
+# short ref is theoretically ambiguous and can drift, a full SHA cannot.
+# Bump deliberately + re-run the acceptance smoke (D-189).
+ARG HERMES_REF=e8b9369a9d2df36139a5055cae3ed3c15691e03e
 RUN pip install --no-cache-dir --break-system-packages \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
 

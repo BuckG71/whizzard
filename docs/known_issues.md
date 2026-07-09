@@ -194,6 +194,21 @@ actionable until that work begins.
 
 ## Tech debt
 
+### `Dockerfile.hermes` pip installs still float (`anthropic`, `mcp`)
+Codex review finding #7 (Hermes image mutable build inputs) is **partially
+closed**: `HERMES_REF` is now a full 40-char commit SHA (was a short ref), so
+the Hermes source is deterministic. Still floating: `pip install "anthropic>=0.39.0"`
+and `pip install mcp` — a fresh build pulls whatever is latest on PyPI.
+*Why deferred:* pinning these to exact versions needs a Hermes image build-smoke
+to pick tested-good versions (latest `anthropic` likely breaks the pinned old
+Hermes commit — see D-189's acceptance-gate policy), and they are the *harness's
+own* runtime deps, i.e. the deliberately-loose "yolo on harnesses" zone of the
+dep-hygiene split. Low severity: reproducibility of a harness image, not a
+containment property.
+*Fix shape:* build the image, capture the versions that build+run, pin
+`anthropic==X`/`mcp==Y`, re-smoke on bump. Governed by D-189.
+*Source:* Codex security review 2026-07-01, finding #7.
+
 ### In-sandbox `snapshot.json` is writable by the agent
 The per-session `/run/whiz` mount is `:rw` because the sandbox legitimately writes
 `events.jsonl` and `requests/*.json` there. `snapshot.json` (the agent's
