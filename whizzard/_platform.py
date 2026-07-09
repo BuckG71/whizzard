@@ -98,6 +98,11 @@ DAEMON_DOWN_INDICATORS = (
     "Cannot connect to the Docker daemon",
     "Is the docker daemon running",
     "error during connect",  # Windows named-pipe variant
+    # Newer Docker CLIs (≥28) emit this for an unreachable unix socket
+    # (e.g. a bad DOCKER_HOST pointing at a missing sock). Without it the
+    # error falls through to "image not found — build it", which sends the
+    # user to `whizzard image build` when the real fix is to start Docker.
+    "failed to connect to the docker API",
 )
 
 
