@@ -40,3 +40,14 @@ def init_cmd(
         console.print()
         console.print("[yellow]setup aborted.[/yellow] re-run `whiz init` to retry.")
         raise typer.Exit(code=130) from None
+    except EOFError:
+        # stdin closed at an interactive prompt (Ctrl-D, or piped/empty input).
+        # Without this the EOFError propagates uncaught and dumps a Python
+        # traceback; instead, abort cleanly and point at the non-interactive path.
+        console.print()
+        console.print(
+            "[yellow]setup aborted:[/yellow] no input available (stdin closed). "
+            "Run `whiz init` in an interactive terminal, or `whiz init --yes` to "
+            "accept defaults non-interactively."
+        )
+        raise typer.Exit(code=1) from None

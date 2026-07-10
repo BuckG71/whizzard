@@ -895,29 +895,37 @@ def test_wizard_crash_mid_config_write_leaves_original_intact(
     assert iw.PROFILES_FILE.read_text() == sentinel
 
 
-def test_wizard_eof_during_prompt_does_not_traceback(
+def test_init_cmd_converts_eof_to_clean_abort(
     _isolated_whizzard_home: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A Ctrl-D / closed stdin during an interactive prompt must not
-    surface a raw Python traceback to the user — the wizard either
-    exits cleanly or surfaces a user-readable error.
+    """EOF at an interactive prompt (Ctrl-D / closed or piped stdin) must abort
+    with a user-readable message and exit 1 — never leak an uncaught EOFError,
+    which would dump a raw Python traceback to the user.
 
-    Drive the interactive (non-`--yes`) flow with an input string
-    that ends abruptly (no terminating newline for the last prompt).
-    CliRunner's behavior with truncated input mirrors stdin closing."""
-    from whizzard import init_wizard as iw
+    Regression: ``init_cmd`` caught only ``KeyboardInterrupt``, and the prompt
+    helpers ``_prompt_text`` / ``_prompt_numeric_choice`` don't guard ``EOFError``
+    (only ``_pause_for_enter`` does), so a real EOF surfaced a traceback. The
+    prior test asserted ``"Traceback" not in result.output`` — but Typer's
+    CliRunner stores exceptions in ``result.exception`` and never writes a
+    traceback to ``result.output``, so it could not catch this at all.
 
-    monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
-    monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+    Patch ``run_wizard`` (a dependency of ``init_cmd``, not the subject) to raise
+    ``EOFError``, exactly as a prompt would, and assert the handler."""
+    from whizzard.cli import init as init_mod
 
-    # Empty input → first prompt hits EOFError immediately.
-    result = runner.invoke(app, ["init"], input="")
+    def _raise_eof(**kwargs: object) -> None:
+        raise EOFError
 
-    # Acceptable: any non-zero exit code OR clean exit, but NO Python
-    # traceback noise in the user-facing output.
-    assert "Traceback" not in result.output, (
-        f"raw traceback surfaced to the user:\n{result.output}"
+    monkeypatch.setattr(init_mod, "run_wizard", _raise_eof)
+    result = runner.invoke(app, ["init"])
+
+    assert result.exit_code == 1
+    # EOF is HANDLED, not surfaced as an unhandled exception:
+    assert not isinstance(result.exception, EOFError), (
+        f"EOFError leaked unhandled: {result.exception!r}"
     )
+    assert "no input available" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_wizard_image_build_failure_leaves_no_partial_config(

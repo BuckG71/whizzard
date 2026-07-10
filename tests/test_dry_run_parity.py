@@ -19,6 +19,8 @@ preview would otherwise lie about a security-relevant launch flag.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from whizzard.config import get_profile
 from whizzard.docker_cmd import build_run_argv
 
@@ -55,18 +57,26 @@ def test_dry_run_argv_matches_real_launch_argv_modulo_tracking_flags():
         session_id=session_id,
     )
 
-    # Real-launch shape: with cidfile (tracking), explicit interactive
+    # Real-launch shape: with a real cidfile Path (as production passes) so the
+    # `--cidfile` divergence this test guards is actually emitted and exercised —
+    # cidfile=None would silently skip it, making _INTENTIONAL_REAL_ONLY_FLAGS
+    # dead and the parity check blind to the one flag it exists to allow.
     real_argv = build_run_argv(
         profile,
         image=image,
         resolved_mounts=None,
         session_id=session_id,
-        cidfile=None,  # exercise the keyword; production passes a Path
+        cidfile=Path("/tmp/parity-cid.txt"),
         interactive=True,
     )
 
+    # Sanity: the real path really does add --cidfile (else the test proves
+    # nothing about the allowance).
+    assert "--cidfile" in real_argv
+
     extra = _argv_difference(real_argv, preview_argv)
-    unexpected = set(extra) - _INTENTIONAL_REAL_ONLY_FLAGS
+    assert "--cidfile" in extra  # the documented divergence is present...
+    unexpected = set(extra) - _INTENTIONAL_REAL_ONLY_FLAGS  # ...and allowed
     assert not unexpected, (
         f"real-launch argv has flags the dry-run preview omits: {unexpected}. "
         f"If this is intentional, add to _INTENTIONAL_REAL_ONLY_FLAGS with a "
