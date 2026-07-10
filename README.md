@@ -81,7 +81,7 @@ See the [decision log](docs/decisions.md) for the full credential-privacy ration
 ### Install + set up
 
 ```sh
-pip install whizzard==0.1.0rc1
+pip install whizzard==0.1.0
 whiz init
 ```
 
