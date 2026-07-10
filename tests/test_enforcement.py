@@ -485,29 +485,6 @@ def test_monitor_attributes_self_exit_as_clean_even_at_duration_boundary():
 # --- F-F-01: monotonic clock — laptop-sleep jumps must not fire spurious expiry
 
 
-class _JumpingClock:
-    """First call returns t0; second call jumps `jump` seconds forward.
-    Simulates laptop lid-close mid-session: wall-clock would jump; monotonic
-    clock does NOT — so the enforcement code (which now takes a monotonic-
-    style start_time) should not see the jump under real conditions. This
-    test simulates the corollary: if start_time + elapsed reads see a
-    discontinuity, the loop must still rely on its own clock callable, and
-    we pass a faithful one here."""
-
-    def __init__(self, start: float, jump: float):
-        self._t = start
-        self._jump = jump
-        self._calls = 0
-
-    def __call__(self) -> float:
-        self._calls += 1
-        if self._calls == 2:
-            self._t += self._jump
-        else:
-            self._t += 1.0  # normal tick
-        return self._t
-
-
 def test_monitor_now_callable_drives_elapsed_not_real_wall_clock():
     """The monitor must read `now()` callable for elapsed-time
     computations — never `time.time()` directly. Verified by injecting a
