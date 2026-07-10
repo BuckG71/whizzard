@@ -127,7 +127,12 @@ def test_onecli_container_mounts_the_ca_cert(monkeypatch):
     mounts = adapter.container_mounts()
     ca = [m for m in mounts if m.container_path == hz._IN_CELL_ONECLI_CA]
     assert len(ca) == 1
-    assert str(ca[0].host_path) == "/host/ca.pem"
+    # Assert the DOCKER-facing host path (what actually goes into `-v`), via the
+    # same helper the product uses (docker_cmd renders every mount through it).
+    # A raw str(host_path) is backslashed on Windows — a Path artifact, not a
+    # product difference, since docker_host_path/as_posix normalizes it.
+    from whizzard._platform import docker_host_path
+    assert docker_host_path(ca[0].host_path) == "/host/ca.pem"
     assert ca[0].mode == "ro"
 
 
