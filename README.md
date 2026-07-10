@@ -6,13 +6,7 @@
 
 Whizzard wraps an *agent harness* — a tool that drives an LLM through real work (Hermes today; Claude Code, Cursor, and others to follow) — in a hardened, time-bounded Docker sandbox. Inside it, the agent reaches only the files you mounted and the network you allowed. It never holds your model or service credentials; those stay on your machine. And you stay in the loop: capabilities only narrow after launch, any escalation needs your approval, and every session leaves an audit trail you can read back.
 
-```
-Whizzard controls capabilities.
-Agents request capabilities.
-Agents do not grant themselves capabilities.
-```
-
-> **Status:** v0.1.0 OSS launch in preparation. Pre-release reviewers welcome — jump to [Quickstart](#quickstart).
+> **Status:** v0.1.0 OSS launch in preparation. Jump to [Quickstart](#quickstart).
 
 ---
 
@@ -126,13 +120,13 @@ The **[full threat model](docs/threat_model.md)** gives the complete treatment w
 
 ## Telemetry
 
-**None.** No analytics, no crash reporting, no phone-home — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config and audit log. A capability-governance tool that quietly exfiltrated data would be self-defeating; there is no analytics dependency in the codebase.
+**None.** No analytics, no crash reporting, no phone-home — nothing leaves your machine except the network traffic your agent sessions make under the policy you set. The only files Whizzard writes are your local config and audit log. There is no analytics dependency in the codebase.
 
 ## Project status
 
-Early (0.1.x), solo-maintained, and deliberately narrow: it sandboxes one harness (Hermes), pinned to a tested build. Held to a real bar — hardened, tested, documented — but support is best-effort with no SLA. For sensitive work, use the pinned-version install and read [Scope and limitations](#scope-and-limitations).
+Early (0.1.x), solo-maintained, and deliberately narrow: it sandboxes one harness (Hermes), pinned to a tested build. Support is best-effort with no SLA. For sensitive work, use the pinned-version install and read [Scope and limitations](#scope-and-limitations).
 
-The engineering rationale is documented in the open, in an append-only decision log ([docs/decisions.md](docs/decisions.md), D-1 → D-191) — the credential-privacy design, for instance, is D-183 through D-191.
+The engineering rationale is documented in the open, in an append-only decision log ([docs/decisions.md](docs/decisions.md), D-1 → D-191).
 
 ## Documentation
 
@@ -156,4 +150,4 @@ Individual targets: `make test`, `make lint`, `make fmt`, `make typecheck`, `mak
 
 ## A note on naming
 
-**Whizzard** is the project; **`whiz`** is the short CLI alias — both invoke the same tool. The name is settled.
+**Whizzard** is the project; **`whiz`** is the short CLI alias — both invoke the same tool.
