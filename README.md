@@ -10,17 +10,18 @@ Whizzard wraps an *agent harness* — a tool that drives an LLM through real wor
 
 ---
 
-## See the boundary
+## An example of the boundary in action
 
-Launch a session on the `safe` profile — network off, nothing mounted:
-
-```sh
-whiz run --harness hermes --profile safe
-```
-
-Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `native` mode the sandbox holds only a placeholder while the real key stays on your machine, attached only when the call is forwarded to the model provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds a log of exactly what ran, with what access, and what the agent asked for mid-session.
-
-That's the whole idea: **whatever the agent does, it can only do it within a capability surface you declared and can read back later.**
+> [!TIP]
+> Launch a session on the `safe` profile — network off, nothing mounted:
+>
+> ```sh
+> whiz run --harness hermes --profile safe
+> ```
+>
+> Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its credentials aren't in there either — your real keys stay on your machine and never enter the sandbox. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds a log of exactly what ran, with what access, and what the agent asked for mid-session.
+>
+> That's the whole idea: **whatever the agent does, it can only do it within a capability surface you declared and can read back later.**
 
 ## Architecture at a glance
 
