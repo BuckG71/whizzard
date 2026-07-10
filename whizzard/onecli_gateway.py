@@ -23,6 +23,7 @@ container — we only attach/detach it to the per-session net-link.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -39,6 +40,85 @@ GATEWAY_CONTAINER = os.environ.get("WHIZZARD_ONECLI_CONTAINER", "onecli")
 #: hermes._ONECLI_CA_ENV_VARS (the injection side). This module doesn't inject.
 _DEFAULT_CA_PATH = str(Path.home() / ".onecli" / "gateway-ca.pem")
 _REAP_GRACE_S = 180.0
+
+# ---- OneCLI version compatibility (D-189 / D-191) --------------------------
+# We do NOT vendor OneCLI; these are a *tested-compatibility marker*, not a lock.
+# The acceptance smoke (D-188) validates against a specific version; the wizard
+# and launch preflight WARN (never hard-block, D-189) when the user's OneCLI is
+# outside the validated range, so our marker never stands between the user and
+# an OneCLI security patch. Bump both when a new version is smoke-validated.
+#: Oldest OneCLI we've validated the gateway wiring against.
+ONECLI_VALIDATED_MIN = "1.4.1"
+#: Newest OneCLI we've validated against (== MIN until we test a range).
+ONECLI_LAST_TESTED = "1.4.1"
+
+
+def _parse_semver(v: str) -> tuple[int, ...] | None:
+    """Parse a dotted numeric version into a comparable tuple, or None.
+
+    Deliberately strict-but-forgiving: takes the leading numeric-dotted run
+    (so ``1.5.0-rc1`` → ``(1, 5, 0)``) and returns None on anything it can't
+    read, so callers fail soft (skip the warning) rather than crash.
+    """
+    m = re.match(r"\s*v?(\d+(?:\.\d+)*)", v or "")
+    if not m:
+        return None
+    try:
+        return tuple(int(p) for p in m.group(1).split("."))
+    except ValueError:
+        return None
+
+
+def installed_onecli_version() -> str | None:
+    """Return the installed OneCLI version string (e.g. ``"1.4.1"``), or None.
+
+    Reads ``onecli version`` (JSON: ``{"version": "1.4.1"}``). Fail-soft on any
+    error — missing binary, timeout, non-zero exit, unparseable output — so a
+    version *probe* failure never blocks or crashes a launch.
+    """
+    try:
+        r = subprocess.run(
+            ["onecli", "version"], capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        v = json.loads(r.stdout).get("version")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    return v if isinstance(v, str) and v else None
+
+
+def check_onecli_version() -> str | None:
+    """Return a human-facing warning if OneCLI is outside the validated range.
+
+    Direction-aware (D-191): *older* than the validated floor nudges an
+    upgrade (a safe, always-good action); *newer* than last-tested is
+    awareness-only and never says "downgrade" (that would forfeit an OneCLI
+    security patch, which D-189 forbids). Returns None when in range or when
+    the version can't be determined (fail-soft).
+    """
+    v = installed_onecli_version()
+    if v is None:
+        return None
+    vt = _parse_semver(v)
+    if vt is None:
+        return None
+    if vt < _parse_semver(ONECLI_VALIDATED_MIN):  # type: ignore[operator]
+        return (
+            f"OneCLI {v} is older than the version Whizzard validated against "
+            f"({ONECLI_VALIDATED_MIN}). Consider upgrading OneCLI."
+        )
+    if vt > _parse_semver(ONECLI_LAST_TESTED):  # type: ignore[operator]
+        return (
+            f"OneCLI {v} is newer than Whizzard's last-validated version "
+            f"({ONECLI_LAST_TESTED}). It should be fine; if onecli/hybrid "
+            "sessions misbehave, this version gap is the first thing to "
+            "suspect — please open an issue so we can re-validate."
+        )
+    return None
 
 
 class OneCLIGatewayError(Exception):

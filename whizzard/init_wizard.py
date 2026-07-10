@@ -69,7 +69,7 @@ from whizzard.docker_cmd import (
 )
 from whizzard.harness_config import HARNESSES_FILE, default_harnesses
 from whizzard.mounts import MOUNTS_FILE
-from whizzard.onecli_gateway import onecli_gateway_available
+from whizzard.onecli_gateway import check_onecli_version, onecli_gateway_available
 from whizzard.preset_config import PRESETS_FILE
 from whizzard.safety import (
     OverrideRecord,
@@ -465,6 +465,11 @@ def _prompt_credential_mode(state: WizardState) -> str:
     onecli_ok = onecli_gateway_available()
     if onecli_ok:
         console.print("  [green]✓ OneCLI detected and running.[/green]")
+        # D-191: OneCLI is *the* service-credential path; a version outside the
+        # validated range warns (never blocks) so a mismatch is a known suspect.
+        _v_warn = check_onecli_version()
+        if _v_warn:
+            console.print(f"  [yellow]⚠ {_v_warn}[/yellow]")
     else:
         console.print(
             "  [yellow]• OneCLI not detected[/yellow] — options 2 and 3 below "

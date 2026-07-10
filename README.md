@@ -69,7 +69,7 @@ This is the piece most sandboxes miss. Containing the *filesystem* doesn't help 
 - The sandbox launches on a per-session isolated network with **no route out** and a placeholder in place of the key.
 - A **credential broker** on that network holds the real value host-side and attaches it *only* when forwarding to the provider's real domain. The sandbox talks to the broker, never to the internet directly — so it can't exfiltrate a key it never has, and it can't reach any other destination to try.
 - This works for subscription/OAuth logins too (not just API keys) — the broker handles the provider's exact auth flow.
-- If you run **[OneCLI](https://onecli.sh)**, the `onecli` / `hybrid` postures extend this to *all* your service credentials: GitHub, Slack, and tool tokens are injected host-side through an isolated forwarder to the gateway, so none of them land in the sandbox either.
+- Native mode protects your **model** credential and only that — it's the zero-dependency default. To keep your **service** credentials (GitHub, Slack, tool APIs) out of the sandbox too, run **[OneCLI](https://onecli.sh)**: the `onecli` / `hybrid` postures inject *all* of them host-side through an isolated forwarder to the gateway, so none land in the sandbox either. OneCLI is opt-in — it's the service-credential story, not a requirement. If it's ever unavailable, a session still runs model-only via `--credential-handling native`.
 
 `whiz init` asks which posture fits your setup, in plain language. See the [decision log](docs/decisions.md) for the full credential-privacy rationale, and the [threat model](docs/threat_model.md).
 

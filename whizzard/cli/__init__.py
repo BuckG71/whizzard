@@ -182,6 +182,16 @@ def run_cmd(
             help="Named harness from harnesses.json (required, e.g. hermes-cell).",
         ),
     ] = None,
+    credential_handling: Annotated[
+        str | None,
+        typer.Option(
+            "--credential-handling",
+            help="Override how credentials are kept out of the sandbox for this "
+                 "session: native (model key only, via Whizzard's own broker — "
+                 "no OneCLI needed), onecli (all via OneCLI), or hybrid. Use "
+                 "'native' to run when OneCLI is unavailable.",
+        ),
+    ] = None,
 ) -> None:
     """Launch a contained agent session under the given profile."""
     if harness is None:
@@ -198,6 +208,7 @@ def run_cmd(
         allow_broad_mount=allow_broad_mount,
         harness=harness,
         allow_ephemeral=allow_ephemeral,
+        credential_handling=credential_handling,
     )
 
 
