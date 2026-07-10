@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml/badge.svg)](https://github.com/BuckG71/whizzard/actions/workflows/ci.yml)
 
-**Run powerful AI-agent harnesses inside explicit, temporary, auditable permission boundaries — on your own machine.**
+**Run powerful agent harnesses inside explicit, temporary, auditable permission boundaries — on your own machine.**
 
-Whizzard wraps an *agent harness* (a tool that drives an LLM through real work — Hermes today; Claude Code, Cursor, and others to follow) in a hardened, scoped, time-bounded Docker sandbox. The agent reaches only the files you mounted, the network you allowed, and — critically — **never holds your model or service credentials at all**. You stay in the loop: capabilities only narrow after launch, escalation requires your explicit approval, and every session leaves an append-only audit trail.
+Whizzard wraps an *agent harness* — a tool that drives an LLM through real work (Hermes today; Claude Code, Cursor, and others to follow) — in a hardened, time-bounded Docker sandbox. Inside it, the agent reaches only the files you mounted and the network you allowed. It never holds your model or service credentials; those stay on your machine. And you stay in the loop: capabilities only narrow after launch, any escalation needs your approval, and every session leaves an audit trail you can read back.
 
 ```
 Whizzard controls capabilities.
@@ -24,7 +24,7 @@ Launch a session on the `safe` profile — network off, nothing mounted:
 whiz run --harness hermes --profile safe
 ```
 
-Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `native` posture the sandbox holds a worthless placeholder while the real key stays host-side, attached only when the call is forwarded to the provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds an append-only record of exactly what ran, with what access, and what the agent asked for mid-session.
+Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `native` mode the sandbox holds only a placeholder while the real key stays on your machine, attached only when the call is forwarded to the model provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds a log of exactly what ran, with what access, and what the agent asked for mid-session.
 
 That's the whole idea: **whatever the agent does, it can only do it within a capability surface you declared and can read back later.**
 
@@ -39,12 +39,12 @@ flowchart LR
     subgraph net["per-session isolated network (no route out)"]
         sandbox["sandbox<br/>the agent runs here<br/>holds only a placeholder"]
         broker["credential broker"]
-        gw["OneCLI forwarder to gateway"]
+        gw["OneCLI gateway"]
     end
 
     whiz -->|"launch: scoped, hardened, time-bounded"| sandbox
     mounts -. "only these paths" .-> sandbox
-    creds -->|"real key, host-side only"| broker
+    creds -->|"real key, on your machine only"| broker
     sandbox -->|model calls| broker -->|injects credential| provider([model provider])
     sandbox -->|service calls| gw -->|injects credential| services([GitHub, Slack, tools])
     sandbox -.->|"needs more? asks you"| whiz
@@ -55,7 +55,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 ## What you get
 
 - **Filesystem is opt-in.** The agent reaches only the paths you mounted — no parent-directory traversal, symlink, or glob trick reaches your home directory. The mount list *is* the permission model. Closes the whole "an agent ran `find ~ -name '*.pem'`" class.
-- **Credentials never enter the sandbox.** A host-side broker holds your real model key/login and attaches it only when forwarding to the provider; the sandbox sees a placeholder. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected host-side too. A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
+- **Credentials never enter the sandbox.** A credential broker on your machine holds your real model key/login and attaches it only when forwarding to the model provider; the sandbox never sees the real value. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected on your machine too. A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
 - **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `native` / `onecli` / `hybrid` = outbound only through a credential-injecting proxy. `off` closes data exfiltration entirely.
 - **Privilege is contained.** Non-root user, all Linux capabilities dropped, read-only container root, `no-new-privileges`, Docker socket unreachable. A vulnerable tool the agent invokes gets no root, no host, no escape hatch.
 - **Escalation is one-way, and you decide.** Permissions only narrow after launch. An agent that needs more surfaces a request to a file-mailbox you monitor; you approve or deny. No silent self-upgrade.
@@ -64,9 +64,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 
 ## Credential privacy
 
-This is the piece most sandboxes miss. Containing the *filesystem* doesn't help if the agent can read your `ANTHROPIC_API_KEY` out of its own environment and POST it somewhere.
-
-**No credential of any kind ever enters the sandbox** — not your model key, not your service tokens. Whatever the agent uses, the real value stays on your machine and is attached to a request only as it leaves for the provider; inside the container there is only a placeholder. A fully-compromised agent cannot read or exfiltrate a secret it never holds.
+**No credential of any kind ever enters the sandbox** — not your model key, not your service tokens. Whatever the agent uses, the real value stays on your machine and is attached to a request only as it leaves the sandbox for its real destination; inside the container there is only a placeholder. A fully-compromised agent cannot read or exfiltrate a secret it never holds.
 
 You choose **how** credentials are handled, based on how you sign in. Pick one of three — `whiz init` walks you through it, or set it per session with `--credential-handling`:
 
@@ -106,7 +104,7 @@ whiz --help           # every command
 
 Bundled profiles (customize during `whiz init` or edit `~/.whizzard/config/profiles.json`):
 
-| Profile | Network | Credential posture | Time cap | For |
+| Profile | Network | Credentials | Time cap | For |
 |---|---|---|---|---|
 | `default` | on | **native** (key stays out of the sandbox) | none | everyday baseline |
 | `build` | on | native | 2 h | development, long compiles |
@@ -114,11 +112,11 @@ Bundled profiles (customize during `whiz init` or edit `~/.whizzard/config/profi
 | `safe` | off | n/a | 30 min | running something you don't trust |
 | `quarantine` | off | n/a | 30 min | untrusted, read-only folders only |
 
-`whiz init` can set the default profile's posture to `onecli` or `hybrid` if you use OneCLI. (In `profiles.json` the `native` posture is stored as `network_mode: "mediated"` — the internal name.)
+`whiz init` can set the default to `onecli` or `hybrid` if you use OneCLI.
 
 ## Scope and limitations
 
-Whizzard bounds an agent **at runtime** — what it can reach while executing. It is a containment layer, not a complete security solution. In `v0.1.0` it deliberately does **not** address:
+**Whizzard reduces risk; it does not eliminate it.** It bounds an agent **at runtime** — what it can reach while executing — a containment layer, not a complete security solution. In `v0.1.0` it deliberately does **not** address:
 
 - **Deferred-execution via writable mounts** — an agent with write access can plant files (`.git/hooks/`, lockfiles, post-install scripts) that run later on the host. *Mitigation:* review diffs before commit; opt-in `--strict-overlay` review gate planned for v1.0 ([ROADMAP](ROADMAP.md) goal 10).
 - **DNS-based exfiltration** when network is `on` — the on/off boolean doesn't gate DNS independently. *Mitigation:* use a network-`off` profile (`safe`/`quarantine`) for high-stakes work; per-profile constrained DNS under consideration ([ROADMAP](ROADMAP.md) goal 11).
@@ -134,14 +132,14 @@ The **[full threat model](docs/threat_model.md)** gives the complete treatment w
 
 Early (0.1.x), solo-maintained, and deliberately narrow: it sandboxes one harness (Hermes), pinned to a tested build. Held to a real bar — hardened, tested, documented — but support is best-effort with no SLA. For sensitive work, use the pinned-version install and read [Scope and limitations](#scope-and-limitations).
 
-It's also, candidly, a **portfolio artifact**: the engineering rationale is tracked in the open in an append-only decision log ([docs/decisions.md](docs/decisions.md), D-1 → present) — the credential-privacy design, for instance, is D-183 through D-190.
+The engineering rationale is documented in the open, in an append-only decision log ([docs/decisions.md](docs/decisions.md), D-1 → D-191) — the credential-privacy design, for instance, is D-183 through D-191.
 
 ## Documentation
 
 - [docs/vision_and_strategy.md](docs/vision_and_strategy.md) — what this is, who it's for, where it's going
-- [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract
 - [docs/reference/architecture-at-a-glance.html](docs/reference/architecture-at-a-glance.html) — visual overview (open in a browser)
 - [docs/threat_model.md](docs/threat_model.md) — threat model and trust boundaries
+- [docs/architecture.md](docs/architecture.md) — system structure, safety policy, adapter contract
 - [docs/decisions.md](docs/decisions.md) — append-only decision log
 - [ROADMAP.md](ROADMAP.md) — v1.0 goals + post-launch sequencing
 
