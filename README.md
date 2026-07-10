@@ -24,7 +24,7 @@ Launch a session on the `safe` profile — network off, nothing mounted:
 whiz run --harness hermes --profile safe
 ```
 
-Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `mediated` profile the sandbox holds a worthless placeholder while the real key stays host-side, injected only when a broker forwards the call to the provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds an append-only record of exactly what ran, with what access, and what the agent asked for mid-session.
+Inside that sandbox the agent has **no network** (no DNS, no outbound anything) and can see **none of your files** — not `~/.ssh`, not your other projects, not your password manager — only the paths you explicitly mounted (here, none). Its model credential isn't in there either: on Whizzard's default `native` posture the sandbox holds a worthless placeholder while the real key stays host-side, attached only when the call is forwarded to the provider. When the session ends — or its time cap fires — the container is gone, and `~/.whizzard/logs/` holds an append-only record of exactly what ran, with what access, and what the agent asked for mid-session.
 
 That's the whole idea: **whatever the agent does, it can only do it within a capability surface you declared and can read back later.**
 
@@ -56,7 +56,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 
 - **Filesystem is opt-in.** The agent reaches only the paths you mounted — no parent-directory traversal, symlink, or glob trick reaches your home directory. The mount list *is* the permission model. Closes the whole "an agent ran `find ~ -name '*.pem'`" class.
 - **Credentials never enter the sandbox.** A host-side broker holds your real model key/login and attaches it only when forwarding to the provider; the sandbox sees a placeholder. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected host-side too. A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
-- **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `mediated` / `onecli` / `hybrid` = outbound only through a credential-injecting proxy. `off` closes data exfiltration entirely.
+- **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `native` / `onecli` / `hybrid` = outbound only through a credential-injecting proxy. `off` closes data exfiltration entirely.
 - **Privilege is contained.** Non-root user, all Linux capabilities dropped, read-only container root, `no-new-privileges`, Docker socket unreachable. A vulnerable tool the agent invokes gets no root, no host, no escape hatch.
 - **Escalation is one-way, and you decide.** Permissions only narrow after launch. An agent that needs more surfaces a request to a file-mailbox you monitor; you approve or deny. No silent self-upgrade.
 - **Sessions are time-bounded.** Every session carries a duration cap and an idle cap; when they fire, the container stops. Blast radius is the declared window.
@@ -64,14 +64,19 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 
 ## Credential privacy
 
-This is the piece most sandboxes miss. Containing the *filesystem* doesn't help if the agent can read your `ANTHROPIC_API_KEY` out of its own environment and POST it somewhere. Whizzard's default posture (`mediated`) keeps the model credential **entirely out of the sandbox**:
+This is the piece most sandboxes miss. Containing the *filesystem* doesn't help if the agent can read your `ANTHROPIC_API_KEY` out of its own environment and POST it somewhere.
 
-- The sandbox launches on a per-session isolated network with **no route out** and a placeholder in place of the key.
-- A **credential broker** on that network holds the real value host-side and attaches it *only* when forwarding to the provider's real domain. The sandbox talks to the broker, never to the internet directly — so it can't exfiltrate a key it never has, and it can't reach any other destination to try.
-- This works for subscription/OAuth logins too (not just API keys) — the broker handles the provider's exact auth flow.
-- Native mode protects your **model** credential and only that — it's the zero-dependency default. To keep your **service** credentials (GitHub, Slack, tool APIs) out of the sandbox too, run **[OneCLI](https://onecli.sh)**: the `onecli` / `hybrid` postures inject *all* of them host-side through an isolated forwarder to the gateway, so none land in the sandbox either. OneCLI is opt-in — it's the service-credential story, not a requirement. If it's ever unavailable, a session still runs model-only via `--credential-handling native`.
+**No credential of any kind ever enters the sandbox** — not your model key, not your service tokens. Whatever the agent uses, the real value stays on your machine and is attached to a request only as it leaves for the provider; inside the container there is only a placeholder. A fully-compromised agent cannot read or exfiltrate a secret it never holds.
 
-`whiz init` asks which posture fits your setup, in plain language. See the [decision log](docs/decisions.md) for the full credential-privacy rationale, and the [threat model](docs/threat_model.md).
+You choose **how** credentials are handled, based on how you sign in. Pick one of three — `whiz init` walks you through it, or set it per session with `--credential-handling`:
+
+- **`native`** — the default, no extra tools. Whizzard keeps your **model** credential out of the sandbox. Choose this if you don't need the agent to use service tokens (GitHub, Slack, tool APIs).
+- **`onecli`** — [OneCLI](https://onecli.sh) keeps **every** credential out of the sandbox, model and services alike. Choose this if you use OneCLI and sign in to your model provider with an **API key**.
+- **`hybrid`** — Choose this if you sign in to your model provider with **OAuth** (a subscription login rather than an API key). OneCLI can't handle OAuth logins, so Whizzard covers your model login while OneCLI covers your service tokens — both kept out of the sandbox.
+
+OneCLI is opt-in — the way to extend the guarantee to your service tokens, not a requirement. If it's ever unavailable, a session still runs model-only with `--credential-handling native`. (The `off` and `open` profiles deliberately skip credential mediation — for untrusted work, or when you want broad, unmediated access.)
+
+See the [decision log](docs/decisions.md) for the full credential-privacy rationale, and the [threat model](docs/threat_model.md).
 
 ## Quickstart
 
@@ -93,7 +98,7 @@ whiz init
 
 ```sh
 whiz                  # what's running + what you have set up
-whiz r hermes         # launch a Hermes session (default: mediated, credential-private)
+whiz r hermes         # launch a Hermes session (default: native, credential-private)
 whiz --help           # every command
 ```
 
@@ -103,13 +108,13 @@ Bundled profiles (customize during `whiz init` or edit `~/.whizzard/config/profi
 
 | Profile | Network | Credential posture | Time cap | For |
 |---|---|---|---|---|
-| `default` | on | **mediated** (key stays out of the sandbox) | none | everyday baseline |
-| `build` | on | mediated | 2 h | development, long compiles |
+| `default` | on | **native** (key stays out of the sandbox) | none | everyday baseline |
+| `build` | on | native | 2 h | development, long compiles |
 | `power` | on (open) | full outbound, no mediation | 1 h | capability-heavy, broad access |
 | `safe` | off | n/a | 30 min | running something you don't trust |
 | `quarantine` | off | n/a | 30 min | untrusted, read-only folders only |
 
-`whiz init` can set the default profile's posture to `onecli` or `hybrid` if you use OneCLI.
+`whiz init` can set the default profile's posture to `onecli` or `hybrid` if you use OneCLI. (In `profiles.json` the `native` posture is stored as `network_mode: "mediated"` — the internal name.)
 
 ## Scope and limitations
 
