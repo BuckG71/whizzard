@@ -368,3 +368,40 @@ def test_launch_aborts_when_snapshot_write_fails(monkeypatch):
     # And the user must see a clear error.
     assert result.exit_code == 2, result.output
     assert "snapshot" in result.output.lower()
+
+
+# --- --credential-handling override (D-191) --------------------------------
+
+
+def test_credential_handling_rejects_unknown_value():
+    result = runner.invoke(
+        app,
+        ["run", "--harness", "generic", "--profile", "default",
+         "--credential-handling", "bogus", "--dry-run"],
+    )
+    assert result.exit_code == 2
+    assert "native" in result.output and "onecli" in result.output
+
+
+def test_credential_handling_rejects_internal_name():
+    """The internal 'mediated' name is not an accepted alias — 'native' is the
+    one user-facing term (D-191 naming)."""
+    result = runner.invoke(
+        app,
+        ["run", "--harness", "generic", "--profile", "default",
+         "--credential-handling", "mediated", "--dry-run"],
+    )
+    assert result.exit_code == 2
+
+
+def test_credential_handling_onecli_overrides_profile():
+    """Override forces the session's credential posture regardless of profile;
+    the dry-run banner reflects the overridden mode."""
+    result = runner.invoke(
+        app,
+        ["run", "--harness", "generic", "--profile", "safe",
+         "--credential-handling", "onecli", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    # 'safe' is network-off by default; the override flips it to the onecli path.
+    assert "onecli gateway" in result.output

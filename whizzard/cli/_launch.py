@@ -9,6 +9,7 @@ code.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 import typer
 
@@ -44,6 +45,7 @@ from whizzard.mounts import (
 )
 from whizzard.onecli_gateway import (
     OneCLIGatewayError,
+    check_onecli_version,
     start_onecli_route,
     start_onecli_shim,
     stop_onecli_route,
@@ -56,6 +58,33 @@ from whizzard.snapshot import write_snapshot
 # ran and exited (or an early error) rather than a real working session — worth
 # a nudge so the quick return doesn't read as a crash.
 _FAST_EXIT_SECONDS = 10
+
+
+def _print_onecli_down(err: object, *, harness: str, model_via_broker: bool) -> None:
+    """Fail-with-instructions when OneCLI is unavailable at launch (D-191).
+
+    OneCLI is *the* service-credential path; there is no native private
+    service-credential story to silently fall back to. So instead of a bare
+    error we name what's down and give the two real options: fix OneCLI, or
+    run this session model-only via the native (broker) path.
+    """
+    console.print(f"[red]error: {err}[/red]")
+    console.print(
+        "[yellow]OneCLI is your service-credential provider, and it isn't "
+        "reachable right now.[/yellow]"
+    )
+    if model_via_broker:
+        console.print(
+            "  Your model login already runs through Whizzard's own broker, so "
+            "only service-credential injection is affected this session."
+        )
+    console.print("  Two options:")
+    console.print("    • Start / fix OneCLI, then launch again.")
+    console.print(
+        f"    • Run this session model-only (no service credentials), keeping "
+        f"your model key private:\n"
+        f"        [bold]whiz r {harness} --credential-handling native[/bold]"
+    )
 
 
 def _print_sandbox_exit_banner(
@@ -106,6 +135,7 @@ def _perform_launch(
     preset_name: str | None = None,
     duration_override_seconds: int | None = None,
     allow_ephemeral: bool = False,
+    credential_handling: str | None = None,
 ) -> None:
     """Shared launch core. Called by `run` (CLI flags) and `preset launch`
     (preset-resolved args). Handles profile / harness / mount resolution,
@@ -128,6 +158,25 @@ def _perform_launch(
     except ProfileConfigError as e:
         console.print(f"[red]error loading profiles.json: {e}[/red]")
         raise typer.Exit(code=2) from e
+
+    # --credential-handling override (D-191): force this session's credential
+    # posture regardless of the profile. "native" is the user-facing name for
+    # the bar-C broker path (mediated) — the zero-dependency, model-key-private
+    # fallback when OneCLI is unavailable. Enables the network these modes need.
+    if credential_handling is not None:
+        # Accept only the user-facing names; "native" maps to the internal
+        # "mediated" network_mode. The internal name is deliberately NOT an
+        # accepted alias — native is the one user-facing term (D-191 naming).
+        _wanted = {"native": "mediated", "onecli": "onecli", "hybrid": "hybrid"}.get(
+            credential_handling
+        )
+        if _wanted is None:
+            console.print(
+                f"[red]error: --credential-handling must be one of "
+                f"native, onecli, hybrid (got {credential_handling!r})[/red]"
+            )
+            raise typer.Exit(code=2)
+        prof = replace(prof, network_mode=_wanted, network_enabled=True)
 
     # Resolve the harness adapter from harnesses.json.
     try:
@@ -388,10 +437,13 @@ def _perform_launch(
     elif prof.network_mode == "onecli":
         # Route the cell's egress through the OneCLI gateway (D-187). All
         # configured credentials are injected host-side; the cell holds none.
+        _v_warn = check_onecli_version()  # D-191: heads-up, never blocks
+        if _v_warn:
+            console.print(f"[yellow]⚠ {_v_warn}[/yellow]")
         try:
             onecli_handle = start_onecli_route(session_id)
         except OneCLIGatewayError as e:
-            console.print(f"[red]{e}[/red]")
+            _print_onecli_down(e, harness=harness, model_via_broker=False)
             raise typer.Exit(code=125) from e
         adapter.onecli = OneCLIContext(  # type: ignore[attr-defined]
             proxy_url=onecli_handle.proxy_url,
@@ -405,6 +457,9 @@ def _perform_launch(
         # gateway's proxy port for every OTHER credential. Both fail closed;
         # broker torn down if the shim can't come up.
         assert mediation_secret is not None  # guaranteed by the check above
+        _v_warn = check_onecli_version()  # D-191: heads-up, never blocks
+        if _v_warn:
+            console.print(f"[yellow]⚠ {_v_warn}[/yellow]")
         try:
             broker_handle = start_broker(session_id, mediation_secret)
         except BrokerError as e:
@@ -417,7 +472,9 @@ def _perform_launch(
         except OneCLIGatewayError as e:
             stop_broker(broker_handle)
             broker_handle = None
-            console.print(f"[red]{e}[/red]")
+            # Hybrid already runs the model login through the broker, so only
+            # service-credential injection is lost — say so (D-191).
+            _print_onecli_down(e, harness=harness, model_via_broker=True)
             raise typer.Exit(code=125) from e
         adapter.mediation = MediationContext(  # type: ignore[attr-defined]
             base_url=broker_handle.base_url,

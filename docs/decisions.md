@@ -3131,6 +3131,24 @@ The acceptance smoke is the enabling gate: it makes security-forward bumps *safe
 
 ---
 
+### D-191: OneCLI is the opt-in service-credential story; native fallback is model-only (R3)
+
+**Type:** architecture
+
+**Tags:** integration, oss-launch, safety
+
+**Door Type:** two-way (positioning + a launch flag + warn copy; all revisable without data migration).
+
+**Decision:** OneCLI is positioned as *the* way to get credential-private **service**-token injection (GitHub, Slack, tool APIs) — an **opt-in dependency**, not required. bar-C (the native broker, "native" mode) stays the zero-dependency, model-key-private default; it deliberately has **no** private service-credential path (the one native mechanism, `secrets`, puts raw tokens in the sandbox and is not offered as a fallback). Concretely: (1) a **version warn** — the wizard + launch preflight compare `onecli version` against a validated range and warn, never block (D-189), direction-aware (older → "upgrade"; newer → awareness-only, never "downgrade"); (2) when OneCLI is unavailable at launch, **fail with instructions** (fix OneCLI, or run model-only via `--credential-handling native`) rather than silently degrading; (3) a new `--credential-handling native|onecli|hybrid` launch flag to force the posture for one session.
+
+**Rationale:** Since we validate one OneCLI version, nearly every user is off-by-something, so the warn is only useful paired with a real escape hatch. Rejected **fully requiring OneCLI (R1)**: it retires bar-C (a portfolio-valuable from-scratch OAuth-aware broker) and reverses D-189's "never block on OneCLI, we don't vendor it," making any OneCLI breakage break all of Whizzard. Rejected **silent auto-fallback**: an onecli/hybrid user opted into a service-cred workflow; silently dropping their service tokens is more surprising than a clear failure. R3 keeps the frictionless Docker+key quickstart *and* the bar-C showcase, closes the service-cred gap honestly (no native private service story is promised), and never lets our version marker stand between a user and an OneCLI patch.
+
+**Source:** conversation 2026-07-09 (follow-up to D-187/D-188/D-189).
+
+**Status:** active. Extends D-187 (OneCLI broker), D-188 (shim isolation), D-189 (dependency-version policy).
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

@@ -150,3 +150,65 @@ def test_stop_onecli_route_removes_cell_net_only_when_owned(monkeypatch):
     assert any("rm -f whiz-shim-b" in j for j in joined)
     assert any("network rm whiz-oclink-b" in j for j in joined)
     assert not any("network rm whiz-int-b" in j for j in joined)  # broker owns it
+
+
+# --- version compatibility warn (D-189 / D-191) ----------------------------
+
+
+def _fake_version(json_out: str, returncode: int = 0):
+    def _run(args, **k):
+        return types.SimpleNamespace(returncode=returncode, stdout=json_out, stderr="")
+    return _run
+
+
+def test_parse_semver_reads_dotted_and_leading_numeric():
+    assert og._parse_semver("1.4.1") == (1, 4, 1)
+    assert og._parse_semver("v1.4.1") == (1, 4, 1)
+    assert og._parse_semver("1.5.0-rc1") == (1, 5, 0)
+    assert og._parse_semver("") is None
+    assert og._parse_semver("nightly") is None
+
+
+def test_installed_version_parses_json(monkeypatch):
+    monkeypatch.setattr(og.subprocess, "run", _fake_version('{"version": "1.4.1"}'))
+    assert og.installed_onecli_version() == "1.4.1"
+
+
+def test_installed_version_fail_soft(monkeypatch):
+    # non-zero exit, bad json, and a missing binary all return None (never raise)
+    monkeypatch.setattr(og.subprocess, "run", _fake_version("", returncode=1))
+    assert og.installed_onecli_version() is None
+    monkeypatch.setattr(og.subprocess, "run", _fake_version("not json"))
+    assert og.installed_onecli_version() is None
+
+    def _boom(*a, **k):
+        raise FileNotFoundError("onecli")
+    monkeypatch.setattr(og.subprocess, "run", _boom)
+    assert og.installed_onecli_version() is None
+
+
+def test_check_version_in_range_is_silent(monkeypatch):
+    monkeypatch.setattr(og, "installed_onecli_version", lambda: og.ONECLI_VALIDATED_MIN)
+    assert og.check_onecli_version() is None
+
+
+def test_check_version_older_nudges_upgrade(monkeypatch):
+    monkeypatch.setattr(og, "installed_onecli_version", lambda: "1.3.0")
+    msg = og.check_onecli_version()
+    assert msg is not None
+    assert "older" in msg and "upgrad" in msg.lower()
+    assert "downgrade" not in msg.lower()
+
+
+def test_check_version_newer_is_awareness_only_never_downgrade(monkeypatch):
+    monkeypatch.setattr(og, "installed_onecli_version", lambda: "1.6.0")
+    msg = og.check_onecli_version()
+    assert msg is not None
+    assert "newer" in msg
+    # D-191: the newer-case must NEVER tell the user to downgrade
+    assert "downgrade" not in msg.lower()
+
+
+def test_check_version_unknown_is_silent(monkeypatch):
+    monkeypatch.setattr(og, "installed_onecli_version", lambda: None)
+    assert og.check_onecli_version() is None
