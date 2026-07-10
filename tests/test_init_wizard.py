@@ -284,11 +284,19 @@ def test_hermes_profile_detection_returns_none_when_absent(
 
 
 def _stub_step_1_to_succeed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Helper: skip Step 1 so a test can focus on later steps."""
+    """Helper: skip Step 1 so a test can focus on later steps.
+
+    Presents a Docker-present world (Step 1's real preflight is verified
+    separately by ``test_init_exits_127_when_docker_missing``). That also means
+    the later credential step's OneCLI probe must be stubbed — otherwise it
+    calls the real `docker` binary, which isn't on PATH on the macOS/Windows CI
+    runners, and the wizard raises instead of the intended flow.
+    """
     from whizzard import init_wizard as iw
 
     monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+    monkeypatch.setattr(iw, "onecli_gateway_available", lambda: False)
 
 
 def test_init_step_1b_branch_a_clones_hermes_profile(
@@ -842,6 +850,9 @@ def test_wizard_leaves_no_tmp_files_after_successful_run(
 
     monkeypatch.setattr(iw, "docker_daemon_status", lambda: ("ok", ""))
     monkeypatch.setattr(iw, "_default_build_runner", lambda argv: 0)
+    # Docker-present world; stub the credential-step OneCLI probe so it doesn't
+    # call the real `docker` binary (absent on macOS/Windows CI runners).
+    monkeypatch.setattr(iw, "onecli_gateway_available", lambda: False)
 
     result = runner.invoke(app, ["init", "--yes"])
     assert result.exit_code == 0
