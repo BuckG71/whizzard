@@ -36,3 +36,7 @@ jobs:
           # pull-requests:write, which we deliberately do not grant.
           reporter: local
           fail_level: error
+          # nofilter: lint every workflow file on each run (a gate, not a
+          # diff-scoped reviewer). Avoids reviewdog's "diff command is empty"
+          # non-zero exit on PRs whose diff doesn't touch the flagged file.
+          filter_mode: nofilter

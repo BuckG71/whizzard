@@ -193,7 +193,7 @@ jobs:
         # so pip-audit doesn't try to look the local whizzard package
         # up on PyPI. We audit our INPUTS, not the project itself.
         run: |
-          pip install typer>=0.12.0 rich>=13.0.0 mcp>=1.0
+          pip install 'typer>=0.12.0' 'rich>=13.0.0' 'mcp>=1.0'
           pip install pip-audit
       - name: pip-audit (PyPI advisories)
         # --ignore-vuln entries: transitive issues outside our direct
