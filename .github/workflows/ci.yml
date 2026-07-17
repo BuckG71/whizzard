@@ -1,20 +1,16 @@
 name: CI
 
-# Cost-tiered CI (runner minutes on a private repo are billed; macOS 10x,
-# Windows 2x, Linux 1x). Three levers keep the bill down without losing
-# coverage:
+# CI scope. The repo is public, so GitHub Actions minutes are free — the full
+# test matrix runs on every pull_request and every push to main (no event-based
+# tiering). Two levers still scope *when* CI fires, purely to avoid pointless
+# runs:
 #   1. Trigger only on the main merge gate — pull_request into main, and
 #      push to main (post-merge safety net). Feature-branch iteration is
-#      covered by local `make check`; cloud CI no longer fires on every
-#      branch push (and the old push+PR double-run is gone).
+#      covered by local `make check`; cloud CI does not fire on every branch
+#      push (and the old push+PR double-run is gone).
 #   2. paths filter — skip runs when a commit touches only docs/prose. The
 #      one doc that DOES gate CI is docs/decisions.md (the validate-decisions
-#      job must see its changes). No branch protection / required checks are
-#      configured, so a skipped run never blocks a merge.
-#   3. The test job's OS x Python matrix is sized by event (see below):
-#      pull_request runs Linux + current Python only; push to main runs the
-#      full matrix, so the expensive mac/Windows legs run once per merge —
-#      where a platform regression would ship — not on every iteration.
+#      job must see its changes).
 
 on:
   push:
@@ -91,20 +87,16 @@ jobs:
       fail-fast: false
       matrix:
         # Launch-readiness §K: unit suite on Ubuntu + macOS + Windows ×
-        # 3.11/3.12. The mac/Windows legs catch platform-specific path and
-        # behavior drift the Linux legs miss (the Windows leg exercises the
-        # os.name=="nt" branches for real — safety._windows_exclusions, the
-        # uid-parity fallback, and _is_pid_alive's ctypes path).
-        # Integration tests (real Docker) stay Ubuntu-only — GitHub's
-        # macOS/Windows runners don't provide a Linux-container Docker.
-        #
-        # Cost tiering (lever 3): the matrix is sized by event. A push (only
-        # main reaches here) runs the FULL matrix — the mac (10x) / Windows
-        # (2x) legs validate every merge. A pull_request runs Linux + current
-        # Python only, for fast, cheap iteration feedback. Platform coverage
-        # is preserved at the merge gate; it just stops billing on every push.
-        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest", "macos-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
-        python-version: ${{ fromJSON(github.event_name == 'push' && '["3.11", "3.12"]' || '["3.12"]') }}
+        # 3.11/3.12, on every PR and push (the repo is public — minutes are
+        # free, so there is no reason to tier by event). The mac/Windows legs
+        # catch platform-specific path and behavior drift the Linux legs miss
+        # (the Windows leg exercises the os.name=="nt" branches for real —
+        # safety._windows_exclusions, the uid-parity fallback, and
+        # _is_pid_alive's ctypes path). Integration tests (real Docker) stay
+        # Ubuntu-only — GitHub's macOS/Windows runners don't provide a
+        # Linux-container Docker.
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
