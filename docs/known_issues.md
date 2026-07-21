@@ -190,6 +190,30 @@ our proxy:
 *Disposition:* design constraint for goal 11 implementation; not
 actionable until that work begins.
 
+### Deferred-execution via writable mounts (overlay-quarantine)
+An agent with write access to a project mount can plant files that execute
+later on the host — `.git/hooks/pre-commit`, poisoned `package.json`
+`postinstall`, `.vscode`/`.idea` task configs, an edited virtualenv
+interpreter, backdoored source, pinned-bad lockfile deps. Whizzard contains
+the live process but not the downstream execution of the files it leaves
+behind: the host's own git/IDE/python run them *after* the cell exits.
+*Source:* `docs/threat_model.md` §6.1 (canonical); decision D-135
+(overlay-quarantine default + `whiz merge` review gate, v1.0 goal #10);
+open sub-questions D-174 (direct-mount + push creds), D-175 (shared-cache
+poisoning), D-176 (DNS), and §6.8 (opt-in vs opt-out default). External
+real-world confirmation: Pillar Security "Week of Sandbox Escapes" (2026-07) —
+the same class exploited across Cursor (CVE-2026-48124 `.claude` hooks; venv
+interpreter; fsmonitor), Codex CLI (`git show` arg-vs-name), Gemini CLI +
+Antigravity (Docker socket; Seatbelt denylist; `.vscode` tasks). Whizzard
+already hard-blocks the Docker-socket vector (`safety._DEEP_HARD_BLOCKS`); the
+residual is exactly the left-behind-file class D-135 addresses.
+*Disposition:* design constraint for D-135 implementation. Refinement flagged
+by Pillar's data: D-135's HIGH-risk flag list should explicitly add
+`.vscode`/`.idea` task configs and virtualenv/interpreter paths (currently
+names `.git/hooks/`, `.github/workflows/`, lockfiles, build configs, dotfiles).
+Not actionable until v1.0 overlay work begins; ship-now interim controls are
+possible under the current direct-mount model (post-session HIGH-path warning).
+
 ---
 
 ## Tech debt
