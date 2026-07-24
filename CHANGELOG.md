@@ -5,7 +5,7 @@ All notable user-facing changes to Whizzard land here. Format follows
 [Semantic Versioning](https://semver.org/) once the public API stabilizes at
 v1.0.
 
-## [0.1.0] - 2026-07-14
+## [0.1.0] - 2026-07-24
 
 First public release. Runs an agent harness (Hermes) inside a hardened,
 scoped, time-bounded Docker sandbox, with the agent's credentials kept out of

@@ -21,6 +21,19 @@ def _packaged_dockerfile_resources() -> set[str]:
     )
 
 
+def test_declared_version_matches_package_version():
+    """pyproject.toml [project].version and whizzard.__version__ must agree, so
+    a build never ships metadata that lies about the version. They drifted once
+    (pyproject '0.1.0' vs __init__ '0.1.0rc1'); this guard keeps them locked."""
+    from whizzard import __version__
+
+    data = tomllib.loads((_REPO / "pyproject.toml").read_text())
+    assert data["project"]["version"] == __version__, (
+        f"version mismatch: pyproject={data['project']['version']!r} "
+        f"vs whizzard.__version__={__version__!r}"
+    )
+
+
 def test_broker_build_assets_are_packaged():
     listed = _packaged_dockerfile_resources()
     assert "Dockerfile.broker" in listed
