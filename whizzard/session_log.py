@@ -161,6 +161,7 @@ def log_session_start(
     overrides_used: list[dict[str, Any]] | None = None,
     preset_name: str | None = None,
     allow_ephemeral: bool = False,
+    resource_caps: dict[str, Any] | None = None,
     path: Path | None = None,
 ) -> None:
     event: dict[str, Any] = {
@@ -190,6 +191,10 @@ def log_session_start(
     # Only written when set; absent for the common non-ephemeral path.
     if allow_ephemeral:
         event["allow_ephemeral"] = True
+    # Resource caps applied to the container (--memory/--cpus/--pids-limit etc).
+    # Only written when at least one cap is set; absent for uncapped profiles.
+    if resource_caps:
+        event["resource_caps"] = resource_caps
     append_event(event, path=path)
 
 

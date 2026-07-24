@@ -269,6 +269,14 @@ unrestricted egress.
 | Sandbox runs as non-root with no Docker client and no permission to reach the host's Docker socket via any path | D-12 / D-93 |
 | Future harnesses that themselves spawn containers (NanoClaw) use delegated nested-VM mechanisms (Docker Sandboxes / Sysbox) rather than docker-socket sharing — preserved at v1.0 | D-178 (planned for v1.0 per the NanoClaw build plan) |
 
+### 4.7 Host resource availability (CPU / memory / PIDs)
+
+| Defense | Reference |
+|---|---|
+| Per-profile `--memory`, `--cpus`, and `--pids-limit` caps, emitted after the baseline flags; untrusted profiles (`safe`/`quarantine`) also set `--memory-swap == --memory` for a hard, swap-free ceiling | D-192 |
+| Bundled defaults scale by trust: `quarantine` tightest (1g / 1 CPU / 256 PIDs), `build`/`power` generous soft caps; every value editable per-profile in `profiles.json` | D-192 |
+| Caps bound the blast radius of a fork bomb, memory balloon, or CPU-pin from a misbehaving agent — and of a wedged unlimited-profile enforcer (§6.7) | D-192 |
+
 ---
 
 ## 5. Attack surfaces (and what defends them)
@@ -488,6 +496,11 @@ the host indefinitely.
 
 **Mitigation roadmap:** add a periodic liveness probe on the
 unlimited path. Queued on the security-review backlog.
+
+**Partial mitigation (shipped, D-192):** per-profile memory and
+PID caps now bound the *host damage* a wedged unlimited session can
+do — even if the enforcer hangs, the cell cannot exhaust host memory
+or PIDs. The liveness-probe fix for the hang itself remains queued.
 
 ### 6.8 Default-direction question for overlay-quarantine (D-135)
 

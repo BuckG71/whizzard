@@ -24,6 +24,13 @@ the container. See [ROADMAP.md](ROADMAP.md) for what's planned through v1.0.
   [OneCLI](https://onecli.sh) — `hybrid` is required when you sign in to your
   model provider with OAuth, which OneCLI can't inject. The wizard asks which
   fits, in plain language, and writes it as the default.
+- **Per-profile resource caps.** Each profile can bound container memory, CPU,
+  and process count via `memory_limit`, `memory_swap`, `cpus`, and `pids_limit`
+  in `profiles.json` (all optional; absent = no cap). Defaults scale by trust —
+  the untrusted `quarantine`/`safe` profiles get a hard, swap-free memory
+  ceiling; `build`/`power` get generous soft caps — and every value is editable.
+  A fork bomb, memory balloon, or CPU-pin is now contained rather than
+  unbounded, and the applied caps are recorded in the session audit log.
 - **`whiz init` first-run wizard.** Walks new users through five short
   configuration steps + a Hermes profile sub-step. Builds both the base
   and Hermes execution images, sets up profiles / mounts / harnesses /

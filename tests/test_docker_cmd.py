@@ -792,3 +792,58 @@ def test_run_shell_cleans_cidfile_on_clean_exit(tmp_path, monkeypatch):
 
     orphans = list((tmp_path / "state").glob("cid-*.txt"))
     assert orphans == []
+
+
+# Resource caps — argv emission (profile-tunable memory/cpu/pids)
+
+def _capped_profile(**caps):
+    from whizzard.config import Profile
+
+    return Profile(
+        name="capped",
+        network_enabled=False,
+        duration_seconds=None,
+        **caps,
+    )
+
+
+def _cap_value(argv, flag):
+    """Return the token following `flag` in argv, or None if flag is absent."""
+    return argv[argv.index(flag) + 1] if flag in argv else None
+
+
+def test_argv_emits_all_resource_caps_for_quarantine():
+    argv = build_run_argv(get_profile("quarantine"))
+    assert _cap_value(argv, "--memory") == "1g"
+    assert _cap_value(argv, "--memory-swap") == "1g"
+    assert _cap_value(argv, "--cpus") == "1"
+    assert _cap_value(argv, "--pids-limit") == "256"
+
+
+def test_argv_omits_unset_resource_caps():
+    # default profile bounds memory + pids only; no swap, no cpu cap.
+    argv = build_run_argv(get_profile("default"))
+    assert _cap_value(argv, "--memory") == "4g"
+    assert _cap_value(argv, "--pids-limit") == "1024"
+    assert "--memory-swap" not in argv
+    assert "--cpus" not in argv
+
+
+def test_argv_cpus_formatted_without_trailing_zero():
+    assert _cap_value(build_run_argv(_capped_profile(cpus=2.0)), "--cpus") == "2"
+    assert _cap_value(build_run_argv(_capped_profile(cpus=1.5)), "--cpus") == "1.5"
+
+
+def test_argv_no_resource_caps_when_profile_uncapped():
+    argv = build_run_argv(_capped_profile())  # all caps None
+    for flag in ("--memory", "--memory-swap", "--cpus", "--pids-limit"):
+        assert flag not in argv
+
+
+def test_resource_caps_do_not_weaken_baseline():
+    # A capped profile still carries every mandatory baseline flag.
+    argv = build_run_argv(get_profile("quarantine"))
+    joined = " ".join(argv)
+    assert "--cap-drop=ALL" in argv
+    assert "--read-only" in argv
+    assert "no-new-privileges" in joined
