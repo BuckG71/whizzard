@@ -445,8 +445,9 @@ shadow/conflict with a real install; we'd own a config format we don't
 control — the host profile must come from Hermes itself).
 *Remaining (separate unit):* declare the tested Hermes version in the
 compatibility matrix + add host-version detect-and-warn at init/profile-create,
-keyed off the cell's pinned version (couples to the `Dockerfile.hermes`
-0.12→0.14 pin-bump, which needs an M7 smoke re-run). See D-182.
+keyed off the cell's pinned version. The cell pin is now **v0.19.0** (git tag
+v2026.7.20, commit `3ef6bbd`), bumped and smoke-validated per D-193/D-189;
+host-version detect-and-warn is still the open piece. See D-182/D-193.
 
 ### onecli/hybrid: model-key placeholder is hardcoded to `ANTHROPIC_API_KEY`
 In onecli/hybrid mode the adapter strips all fetched secrets and sets only

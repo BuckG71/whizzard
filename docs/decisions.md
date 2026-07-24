@@ -3167,6 +3167,24 @@ The acceptance smoke is the enabling gate: it makes security-forward bumps *safe
 
 ---
 
+### D-193: Bump Hermes pin to v0.19.0 (git tag v2026.7.20)
+
+**Type:** process
+
+**Tags:** hermes, integration
+
+**Door Type:** two-way (a pin bump; revert is a one-line SHA change + rebuild, per D-189's smoke-gated-bump policy).
+
+**Decision:** Bump `HERMES_REF` in `Dockerfile.hermes` from `e8b9369` (untagged, 2026-05-28) to `3ef6bbd201263d354fd83ec55b3c306ded2eb72a` — the **v0.19.0 release**, git tag **v2026.7.20** (the repo uses date-based tags `vYYYY.M.D`; "v0.19.0" is the release name carried in that tag's commit). Adopted per D-189: validated end-to-end before the bump (image build + all 3 hermes integration smokes + a tool-calling check), not pinned on faith. The target SHA and tag were verified against the upstream repo (not the handoff's label, which mislabeled the git tag).
+
+**Rationale:** Retargets the cell to current Hermes so the web-search build (D-19x, forthcoming) targets a supported base rather than a two-month-old untagged commit. Two upstream deltas confirmed non-blocking: `requires-python` gained a `<3.14` upper bound (our Debian base is 3.11, in range); the `[anthropic]` extra pins `anthropic==0.87.0` (we install `anthropic` separately, no conflict). ~6,757 commits between the two refs, but every harness-relevant surface (entrypoint, `-z` one-shot, no-provider error string, MCP config format) is unchanged.
+
+**Source:** conversation 2026-07-24 (validated in the parallel web-search investigation session; adopted here as the first step of the web-search build).
+
+**Status:** active. Applies D-189 (smoke-gated pin bump).
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

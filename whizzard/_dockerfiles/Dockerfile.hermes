@@ -44,7 +44,11 @@ RUN apt-get update && \
 # Pinned to a full 40-char commit SHA for build determinism (Codex #7): a
 # short ref is theoretically ambiguous and can drift, a full SHA cannot.
 # Bump deliberately + re-run the acceptance smoke (D-189).
-ARG HERMES_REF=e8b9369a9d2df36139a5055cae3ed3c15691e03e
+# Current: release v0.19.0, git tag v2026.7.20 (2026-07-20). NOTE: the repo
+# uses date-based git tags (vYYYY.M.D); "v0.19.0" is the release name in that
+# tag's commit. Validated compatible before this bump (build + 3 hermes
+# smokes + tool-calling). Prev: e8b9369 (untagged, 2026-05-28).
+ARG HERMES_REF=3ef6bbd201263d354fd83ec55b3c306ded2eb72a
 RUN pip install --no-cache-dir --break-system-packages \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
 
