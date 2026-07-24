@@ -123,6 +123,11 @@ def test_reap_orphans_sweeps_a_crash_orphan_shim(monkeypatch):
     assert any("rm -f whiz-shim-dead" in j for j in joined)
     assert any("network rm whiz-oclink-dead" in j for j in joined)
     assert any("network rm whiz-oc-dead" in j for j in joined)
+    # Also sweeps the broker's internal net so a hard-crashed HYBRID session
+    # doesn't leak whiz-int-<slug> (bug_004): the broker reaper's own
+    # `network rm whiz-int-*` fails silently while the shim is still attached,
+    # so this pass is the only one that can finish the job.
+    assert any("network rm whiz-int-dead" in j for j in joined)
 
 
 def test_hybrid_shim_does_not_own_cell_net(monkeypatch):

@@ -350,6 +350,11 @@ def _reap_orphans() -> None:
             _docker(["network", "rm", link_net])
             # pure-onecli cell net (we own it); no-op if hybrid (broker owns whiz-int-*)
             _docker(["network", "rm", f"whiz-oc-{slug}"])
+            # Also sweep the broker's internal net in hybrid: if the broker was
+            # already reaped (broker.py:301 fails silently while the shim is
+            # still attached), nothing else revisits whiz-int-<slug> and it
+            # leaks. No-op in pure-onecli (that net never existed here).
+            _docker(["network", "rm", f"whiz-int-{slug}"])
     except Exception:
         return
 

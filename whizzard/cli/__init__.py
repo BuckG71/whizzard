@@ -340,6 +340,15 @@ def r_cmd(
         str | None,
         typer.Option("--harness", help="Run-flag path: harness name."),
     ] = None,
+    credential_handling: Annotated[
+        str | None,
+        typer.Option(
+            "--credential-handling",
+            help="Override credential posture for this session: native (model "
+                 "key only, via Whizzard's own broker — no OneCLI needed), "
+                 "onecli, or hybrid. Applies to both the preset and run paths.",
+        ),
+    ] = None,
 ) -> None:
     """Shortcut: `whiz r` → preset launch (positional) or run (flags).
 
@@ -376,6 +385,7 @@ def r_cmd(
             allow_broad_mount=allow_broad_mount,
             harness=harness,
             allow_ephemeral=allow_ephemeral,
+            credential_handling=credential_handling,
         )
         return
 
@@ -389,7 +399,10 @@ def r_cmd(
             raise typer.Exit(code=2)
         preset_name = last
 
-    preset_launch_cmd(name=preset_name, dry_run=dry_run, image=image)
+    preset_launch_cmd(
+        name=preset_name, dry_run=dry_run, image=image,
+        credential_handling=credential_handling,
+    )
 
 
 @app.command("s", rich_help_panel=_PANEL_SHORTCUTS)

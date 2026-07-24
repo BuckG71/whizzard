@@ -258,6 +258,40 @@ def test_preset_launch_unknown_errors():
     assert "unknown preset" in result.output
 
 
+def test_preset_launch_accepts_credential_handling_override(fake_credential_fetch):
+    """`--credential-handling` overrides the preset's profile posture. The
+    `hermes` preset uses the `default` (native/mediated) profile; forcing
+    `onecli` must reach _perform_launch and flip the dry-run banner."""
+    result = runner.invoke(
+        app, ["preset", "launch", "hermes",
+               "--credential-handling", "onecli", "--dry-run"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "onecli gateway" in result.output
+
+
+def test_r_preset_accepts_credential_handling_override(fake_credential_fetch):
+    """Regression (ultrareview merged_bug_001): the README documents
+    `whiz r hermes` as the primary launch AND `--credential-handling` as a
+    per-session override — so `whiz r hermes --credential-handling onecli`
+    must work (it previously errored 'No such option'). The flag must not be
+    treated as a run-style flag, so it stays on the preset path."""
+    result = runner.invoke(
+        app, ["r", "hermes", "--credential-handling", "onecli", "--dry-run"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "onecli gateway" in result.output
+
+
+def test_r_preset_credential_handling_rejects_bad_value():
+    """Validation is inherited from _perform_launch — a bogus value is
+    rejected on the `whiz r` preset path too, not silently accepted."""
+    result = runner.invoke(
+        app, ["r", "hermes", "--credential-handling", "bogus", "--dry-run"],
+    )
+    assert result.exit_code == 2
+
+
 def test_preset_launch_dry_run_does_not_check_docker(fake_credential_fetch):
     """Dry-run should not require Docker to be present (matches `whiz run`
     dry-run behavior)."""

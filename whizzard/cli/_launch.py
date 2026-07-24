@@ -83,7 +83,7 @@ def _print_onecli_down(err: object, *, harness: str, model_via_broker: bool) -> 
     console.print(
         f"    • Run this session model-only (no service credentials), keeping "
         f"your model key private:\n"
-        f"        [bold]whiz r {harness} --credential-handling native[/bold]"
+        f"        [bold]whiz run --harness {harness} --credential-handling native[/bold]"
     )
 
 
