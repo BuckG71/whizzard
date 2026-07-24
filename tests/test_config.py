@@ -320,3 +320,153 @@ def test_load_accepts_missing_schema_version(tmp_path: Path):
     }))
     profiles = load_profiles(f)
     assert "x" in profiles
+
+
+# Resource limits — profile-tunable memory / cpu / pids caps
+
+def test_default_profiles_carry_resource_caps():
+    q = get_profile("quarantine")
+    assert q.memory_limit == "1g"
+    assert q.memory_swap == "1g"  # hard cap: swap disabled
+    assert q.cpus == 1.0
+    assert q.pids_limit == 256
+
+
+def test_default_profile_caps_memory_and_pids_but_not_cpu():
+    # The always-on baseline bounds memory + pids so a leak/fork-bomb can't
+    # exhaust the host, but leaves CPU and swap unbounded so it never throttles.
+    p = default_profiles()["default"]
+    assert p.memory_limit == "4g"
+    assert p.pids_limit == 1024
+    assert p.cpus is None
+    assert p.memory_swap is None
+
+
+def test_absent_resource_caps_default_to_none(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bare": {"network_enabled": False, "duration_seconds": 600},
+    })
+    p = load_profiles(f)["bare"]
+    assert p.memory_limit is None
+    assert p.memory_swap is None
+    assert p.cpus is None
+    assert p.pids_limit is None
+
+
+def test_load_parses_resource_caps(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "capped": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_limit": "512m",
+            "memory_swap": "512m",
+            "cpus": 1.5,
+            "pids_limit": 128,
+        },
+    })
+    p = load_profiles(f)["capped"]
+    assert p.memory_limit == "512m"
+    assert p.memory_swap == "512m"
+    assert p.cpus == 1.5
+    assert p.pids_limit == 128
+
+
+def test_cpus_as_json_int_normalizes_to_float(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "ok": {"network_enabled": False, "duration_seconds": 600, "cpus": 2},
+    })
+    assert load_profiles(f)["ok"].cpus == 2.0
+
+
+def test_memory_swap_requires_memory_limit(tmp_path: Path):
+    # Docker rejects --memory-swap without --memory; catch it at parse time.
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_swap": "1g",  # no memory_limit
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+@pytest.mark.parametrize("bad_mem", ["banana", "1x", "0", "-1", "1.5g", ""])
+def test_invalid_memory_string_rejected(tmp_path: Path, bad_mem):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_limit": bad_mem,
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+@pytest.mark.parametrize("bad_cpus", [0, -1, True, "2"])
+def test_invalid_cpus_rejected(tmp_path: Path, bad_cpus):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "cpus": bad_cpus,
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+@pytest.mark.parametrize("bad_pids", [0, -1, True, "5", 1.5])
+def test_invalid_pids_limit_rejected(tmp_path: Path, bad_pids):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "pids_limit": bad_pids,
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+def test_memory_swap_smaller_than_limit_rejected(tmp_path: Path):
+    # Docker requires --memory-swap >= --memory; catch it at parse time rather
+    # than letting `docker run` fail with a cryptic error.
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_limit": "2g",
+            "memory_swap": "1g",
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)
+
+
+def test_memory_swap_equal_to_limit_accepted(tmp_path: Path):
+    # swap == limit is the hard-cap (swap-disabled) case and must be allowed.
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "ok": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_limit": "2g",
+            "memory_swap": "2g",
+        },
+    })
+    assert load_profiles(f)["ok"].memory_swap == "2g"
+
+
+@pytest.mark.parametrize("tiny_mem", ["5", "512k", "1m"])
+def test_memory_below_docker_minimum_rejected(tmp_path: Path, tiny_mem):
+    # Format-valid but below Docker's 6MB floor → rejected at config time.
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "bad": {
+            "network_enabled": False,
+            "duration_seconds": 600,
+            "memory_limit": tiny_mem,
+        },
+    })
+    with pytest.raises(ProfileConfigError):
+        load_profiles(f)

@@ -5,34 +5,50 @@
       "network_enabled": false,
       "duration_seconds": 1800,
       "allow_broad_mount": false,
-      "description": "Most restrictive. Network off, no mounts by default."
+      "memory_limit": "2g",
+      "memory_swap": "2g",
+      "cpus": 2,
+      "pids_limit": 512,
+      "description": "Most restrictive. Network off, no mounts by default. Hard memory ceiling (memory_swap == memory_limit disables swap)."
     },
     "default": {
       "network_enabled": true,
       "network_mode": "mediated",
       "duration_seconds": null,
       "allow_broad_mount": false,
-      "description": "SAFE-NET baseline, secure-by-default. network_mode keeps credentials out of the sandbox: 'mediated' = model key via a local broker (this is the internal name for what the CLI and docs call 'native'); 'onecli' = all credentials via the OneCLI gateway; 'hybrid' = model login via broker + everything else via OneCLI (needs OneCLI running). 'open' = full outbound with no mediation; 'none' = no network."
+      "memory_limit": "4g",
+      "pids_limit": 1024,
+      "description": "SAFE-NET baseline, secure-by-default. network_mode keeps credentials out of the sandbox: 'mediated' = model key via a local broker (this is the internal name for what the CLI and docs call 'native'); 'onecli' = all credentials via the OneCLI gateway; 'hybrid' = model login via broker + everything else via OneCLI (needs OneCLI running). 'open' = full outbound with no mediation; 'none' = no network. Resource caps: memory + pids bounded, CPU and swap left generous for the always-on baseline."
     },
     "build": {
       "network_enabled": true,
       "network_mode": "mediated",
       "duration_seconds": 7200,
       "allow_broad_mount": false,
-      "description": "Development work. Network on (model key mediated), rw mounts allowed."
+      "memory_limit": "8g",
+      "cpus": 4,
+      "pids_limit": 2048,
+      "description": "Development work. Network on (model key mediated), rw mounts allowed. Generous soft caps (swap left enabled)."
     },
     "power": {
       "network_enabled": true,
       "network_mode": "open",
       "duration_seconds": 3600,
       "allow_broad_mount": true,
+      "memory_limit": "8g",
+      "cpus": 4,
+      "pids_limit": 2048,
       "description": "Capability-heavy, full egress (network_mode 'open' — no credential mediation). Shorter duration intentional."
     },
     "quarantine": {
       "network_enabled": false,
       "duration_seconds": 1800,
       "allow_broad_mount": false,
-      "description": "Untrusted execution. Network off, ro mounts only."
+      "memory_limit": "1g",
+      "memory_swap": "1g",
+      "cpus": 1,
+      "pids_limit": 256,
+      "description": "Untrusted execution. Network off, ro mounts only. Tightest caps, hard memory ceiling (swap disabled)."
     }
   }
 }

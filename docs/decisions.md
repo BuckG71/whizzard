@@ -3149,6 +3149,24 @@ The acceptance smoke is the enabling gate: it makes security-forward bumps *safe
 
 ---
 
+### D-192: Per-profile resource caps (memory / CPU / PIDs)
+
+**Type:** architecture
+
+**Tags:** safety, profiles
+
+**Door Type:** two-way (the caps are additive config + a thin argv emission; values are editable in `profiles.json` and the whole mechanism is removable without data migration).
+
+**Decision:** Profiles gain four optional resource-cap fields — `memory_limit`, `memory_swap`, `cpus`, `pids_limit` — emitted by `build_run_argv` *after* the unconditional baseline flags (so a profile can bound resources but never weaken the baseline). Absent/`null` = no cap. Bundled defaults scale by trust: `quarantine` tightest (1g / 1 CPU / 256 PIDs) and `safe` (2g / 2 / 512) get a **hard, swap-free** ceiling (`memory_swap == memory_limit`); `build`/`power` get generous **soft** caps (8g / 4 / 2048, swap left on); the always-on `default` caps memory + PIDs (4g / 1024) but leaves CPU and swap unbounded so the productive baseline never throttles or gets abruptly OOM-killed. Every value is editable per-profile in `profiles.json`; applied caps are recorded in the `session_start` audit event.
+
+**Rationale:** Whizzard bounded a cell's *time* (duration + idle) but not its *resources* — a fork bomb, memory balloon, or CPU-pin from a misbehaving agent was unbounded, and it compounded the §6.7 unlimited-enforcer-hang. External signal: the NanoClaw hardening guide ships `--cpus`/`--memory` while Whizzard shipped neither — the one containment control it had that we lacked. Chose profile-tunable (mirroring how duration/idle already live on the profile) over a hard unconditional baseline so heavy `build`/`power` workloads aren't OOM-killed; the swap-free hard ceiling is reserved for the untrusted profiles where a firm cap matters more than avoiding a surprise kill. Verified end-to-end via an integration smoke driving the real argv path (OOM-kill under a 64m cap; fork storm contained under `--pids-limit`).
+
+**Source:** conversation 2026-07-24 (NanoClaw hardening comparison surfaced the gap).
+
+**Status:** active.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

@@ -15,6 +15,10 @@ Schema for profiles.json:
           "duration_seconds": <int> | null,        # null = unlimited
           "idle_timeout_seconds": <int> | null,    # optional; null = no idle timeout
           "allow_broad_mount": true | false,       # default false
+          "memory_limit": "<size>" | null,         # optional; e.g. "2g", "512m"; null = no cap
+          "memory_swap": "<size>" | null,          # optional; == memory_limit disables swap; null = Docker default
+          "cpus": <number> | null,                 # optional; e.g. 2 or 1.5; null = no cap
+          "pids_limit": <int> | null,              # optional; fork-bomb guard; null = no cap
           "description": "..."                      # default ""
         },
         ...
@@ -26,6 +30,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +66,15 @@ class Profile:
     #: pre-existing boolean-only profiles keep their behavior. A mediated
     #: profile sets this explicitly to "mediated".
     network_mode: str | None = None
+    #: Resource caps (all optional; None = no limit → Docker default). Emitted
+    #: by build_run_argv after the unconditional baseline flags. Every field is
+    #: editable per-profile in profiles.json so caps fine-tune without a code
+    #: change. memory_limit/memory_swap are Docker size strings ("2g", "512m");
+    #: setting memory_swap == memory_limit disables swap for a hard ceiling.
+    memory_limit: str | None = None
+    memory_swap: str | None = None
+    cpus: float | None = None      # fractional CPUs allowed (e.g. 1.5)
+    pids_limit: int | None = None  # fork-bomb guard
 
     def __post_init__(self) -> None:
         if self.network_mode is None:
@@ -116,6 +130,69 @@ def validate_positive_int_or_none(
         raise error_cls(f"{field_label} must be positive (got {value})")
 
 
+#: Docker memory size: a positive integer with an optional b/k/m/g unit.
+_MEMORY_RE = re.compile(r"[1-9]\d*[bkmgBKMG]?")
+
+
+def validate_memory_or_none(
+    value: object,
+    *,
+    field_label: str,
+    error_cls: type[Exception],
+) -> None:
+    """Enforce Docker memory-string format OR None.
+
+    Accepts a positive integer optionally suffixed with a byte unit (b/k/m/g,
+    either case): e.g. ``"512m"``, ``"2g"``, ``"1073741824"``. ``None`` means
+    "no limit". Shared by ``memory_limit`` and ``memory_swap``.
+    """
+    if value is None:
+        return
+    if not isinstance(value, str) or not _MEMORY_RE.fullmatch(value):
+        raise error_cls(
+            f"{field_label} must be a positive integer with an optional "
+            f"b/k/m/g suffix (e.g. '512m', '2g'), or null; got {value!r}"
+        )
+
+
+def validate_positive_number_or_none(
+    value: object,
+    *,
+    field_label: str,
+    error_cls: type[Exception],
+) -> None:
+    """Enforce 'positive number (int or float) OR None'.
+
+    Used for ``cpus`` (fractional CPUs allowed). ``bool`` is rejected (a
+    Python bool is an int and would slip through a naive check). ``None``
+    means "no cap".
+    """
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise error_cls(f"{field_label} must be a number or null")
+    if value <= 0:
+        raise error_cls(f"{field_label} must be positive (got {value})")
+
+
+_MEM_UNIT_BYTES = {"b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
+#: Docker's floor for --memory. Values below this parse fine but are rejected
+#: by `docker run`, so we catch them at config time.
+_DOCKER_MIN_MEMORY_BYTES = 6 * 1024 * 1024
+
+
+def _memory_to_bytes(value: str) -> int:
+    """Convert a `_MEMORY_RE`-validated memory string to bytes.
+
+    Assumes `value` already passed ``validate_memory_or_none`` (digits with an
+    optional b/k/m/g unit); unit-less values are bytes.
+    """
+    unit = value[-1].lower()
+    if unit in _MEM_UNIT_BYTES:
+        return int(value[:-1]) * _MEM_UNIT_BYTES[unit]
+    return int(value)
+
+
 # Bundled defaults. Used when the user has no profiles.json or as the
 # template that ships in config/profiles.json.example.
 _DEFAULT_PROFILES: dict[str, Profile] = {
@@ -124,6 +201,11 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         network_enabled=False,
         duration_seconds=30 * 60,
         idle_timeout_seconds=15 * 60,
+        # Hard memory ceiling (swap disabled: memory_swap == memory_limit).
+        memory_limit="2g",
+        memory_swap="2g",
+        cpus=2.0,
+        pids_limit=512,
         description="Most restrictive. Network off, no mounts by default.",
     ),
     "default": Profile(
@@ -135,6 +217,13 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
                                  # or preset). Two-gate model preserved per
                                  # D-46. Supersedes D-38 on this field only.
         idle_timeout_seconds=None,  # always-on baseline — no idle kill
+        # Always-on long-runner: cap memory + pids so a leak/fork-bomb can't
+        # exhaust the host, but leave CPU uncapped and swap at Docker's default
+        # (up to 2x the memory limit) so the productive baseline never feels
+        # throttled or gets abruptly OOM-killed.
+        memory_limit="4g",
+        cpus=None,
+        pids_limit=1024,
         description="SAFE-NET baseline. Network on, mounts opt-in. Always-on.",
     ),
     "build": Profile(
@@ -142,6 +231,10 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         network_enabled=True,
         duration_seconds=2 * 60 * 60,
         idle_timeout_seconds=30 * 60,
+        # Heavy dev workloads: generous, soft caps (swap left enabled).
+        memory_limit="8g",
+        cpus=4.0,
+        pids_limit=2048,
         description="Development work. Network on, rw mounts allowed.",
     ),
     "power": Profile(
@@ -150,6 +243,9 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         duration_seconds=60 * 60,
         allow_broad_mount=True,
         idle_timeout_seconds=15 * 60,
+        memory_limit="8g",
+        cpus=4.0,
+        pids_limit=2048,
         description="Capability-heavy. Shorter duration intentional.",
     ),
     "quarantine": Profile(
@@ -157,6 +253,11 @@ _DEFAULT_PROFILES: dict[str, Profile] = {
         network_enabled=False,
         duration_seconds=30 * 60,
         idle_timeout_seconds=15 * 60,
+        # Untrusted: tightest caps, hard memory ceiling (swap disabled).
+        memory_limit="1g",
+        memory_swap="1g",
+        cpus=1.0,
+        pids_limit=256,
         description="Untrusted execution. Network off, ro mounts only.",
     ),
 }
@@ -222,6 +323,53 @@ def _parse_profile(name: str, spec: dict) -> Profile:
                 f"network_enabled true"
             )
 
+    # Resource caps (all optional; absent/null → no limit). Every field is
+    # editable per-profile in profiles.json so caps fine-tune without a code
+    # change.
+    memory_limit = spec.get("memory_limit")
+    validate_memory_or_none(
+        memory_limit,
+        field_label=f"profile {name!r}: memory_limit",
+        error_cls=ProfileConfigError,
+    )
+    if memory_limit is not None and _memory_to_bytes(memory_limit) < _DOCKER_MIN_MEMORY_BYTES:
+        raise ProfileConfigError(
+            f"profile {name!r}: memory_limit must be at least 6m "
+            f"(Docker's minimum), got {memory_limit!r}"
+        )
+    memory_swap = spec.get("memory_swap")
+    validate_memory_or_none(
+        memory_swap,
+        field_label=f"profile {name!r}: memory_swap",
+        error_cls=ProfileConfigError,
+    )
+    if memory_swap is not None and memory_limit is None:
+        raise ProfileConfigError(
+            f"profile {name!r}: memory_swap requires memory_limit "
+            f"(Docker rejects --memory-swap without --memory)"
+        )
+    if (
+        memory_swap is not None
+        and memory_limit is not None
+        and _memory_to_bytes(memory_swap) < _memory_to_bytes(memory_limit)
+    ):
+        raise ProfileConfigError(
+            f"profile {name!r}: memory_swap ({memory_swap}) must be >= "
+            f"memory_limit ({memory_limit}) — Docker requires swap >= memory"
+        )
+    cpus = spec.get("cpus")
+    validate_positive_number_or_none(
+        cpus,
+        field_label=f"profile {name!r}: cpus",
+        error_cls=ProfileConfigError,
+    )
+    pids_limit = spec.get("pids_limit")
+    validate_positive_int_or_none(
+        pids_limit,
+        field_label=f"profile {name!r}: pids_limit",
+        error_cls=ProfileConfigError,
+    )
+
     return Profile(
         name=name,
         network_enabled=network_enabled,
@@ -230,6 +378,10 @@ def _parse_profile(name: str, spec: dict) -> Profile:
         description=description,
         idle_timeout_seconds=idle_timeout_seconds,
         network_mode=network_mode,
+        memory_limit=memory_limit,
+        memory_swap=memory_swap,
+        cpus=float(cpus) if cpus is not None else None,
+        pids_limit=pids_limit,
     )
 
 

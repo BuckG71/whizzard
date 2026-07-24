@@ -350,6 +350,20 @@ def build_run_argv(
         "--tmpfs", f"/home/{CONTAINER_USER}:rw,size=64m,mode=0755,{home_tmpfs_owner}",
     ]
 
+    # Resource caps (profile-tunable; None = no limit → Docker default).
+    # Emitted after the baseline so a profile can bound memory/CPU/PIDs but can
+    # never weaken the mandatory baseline flags above. memory_swap == memory
+    # disables swap for a hard ceiling (config enforces swap-requires-limit);
+    # cpus is formatted with %g so 2.0 → "2" and 1.5 → "1.5".
+    if profile.memory_limit is not None:
+        argv += ["--memory", profile.memory_limit]
+    if profile.memory_swap is not None:
+        argv += ["--memory-swap", profile.memory_swap]
+    if profile.cpus is not None:
+        argv += ["--cpus", format(profile.cpus, "g")]
+    if profile.pids_limit is not None:
+        argv += ["--pids-limit", str(profile.pids_limit)]
+
     # Network posture (D-184/D-187). "none" → no interfaces; "mediated" → the
     # cell joins ONLY the per-session --internal broker network; "onecli" → the
     # cell joins ONLY the per-session --internal network the OneCLI gateway is
@@ -575,6 +589,18 @@ def run_shell(
         else profile.duration_seconds
     )
     idle_limit = profile.idle_timeout_seconds
+    # Resource caps applied to the container, for the audit record. Only the
+    # set caps are logged (None = no limit is simply absent).
+    resource_caps = {
+        k: v
+        for k, v in (
+            ("memory_limit", profile.memory_limit),
+            ("memory_swap", profile.memory_swap),
+            ("cpus", profile.cpus),
+            ("pids_limit", profile.pids_limit),
+        )
+        if v is not None
+    }
     # F-F-01: split wall-clock from monotonic clock. The audit log needs
     # wall-clock timestamps (humans + log consumers expect real dates);
     # the enforcement loop needs monotonic time (immune to laptop
@@ -599,6 +625,7 @@ def run_shell(
         start_time=wall_start_time,
         overrides_used=overrides_used or [],
         preset_name=preset_name,
+        resource_caps=resource_caps,
         # A1+A2: pull --allow-ephemeral off the adapter (set by
         # _perform_launch via F-C-04) so adjust + wake can rehydrate it.
         allow_ephemeral=bool(getattr(adapter, "allow_ephemeral", False)),

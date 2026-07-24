@@ -5,6 +5,19 @@ All notable user-facing changes to Whizzard land here. Format follows
 [Semantic Versioning](https://semver.org/) once the public API stabilizes at
 v1.0.
 
+## [Unreleased]
+
+### Added
+
+- **Per-profile resource caps.** Each profile can now bound container memory,
+  CPU, and process count via `memory_limit`, `memory_swap`, `cpus`, and
+  `pids_limit` in `profiles.json` (all optional; absent = no cap). The bundled
+  profiles ship defaults that scale by trust — the untrusted `quarantine`/`safe`
+  profiles get a hard, swap-free memory ceiling; `build`/`power` get generous
+  soft caps — and every value is editable. A fork bomb, memory balloon, or
+  CPU-pin from a misbehaving agent is now contained rather than unbounded, and
+  the applied caps are recorded in the session audit log.
+
 ## [0.1.0] - 2026-07-14
 
 First public release. Runs an agent harness (Hermes) inside a hardened,

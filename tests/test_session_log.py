@@ -621,3 +621,48 @@ def test_session_start_carries_v_stamp(tmp_path: Path):
     )
     entry = json.loads(target.read_text().splitlines()[0])
     assert entry["v"] == 1
+
+
+def test_log_session_start_records_resource_caps(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-cap",
+        profile_name="quarantine",
+        network_enabled=False,
+        duration_limit_seconds=1800,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        resource_caps={
+            "memory_limit": "1g",
+            "memory_swap": "1g",
+            "cpus": 1.0,
+            "pids_limit": 256,
+        },
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert record["resource_caps"]["memory_limit"] == "1g"
+    assert record["resource_caps"]["pids_limit"] == 256
+
+
+def test_log_session_start_omits_resource_caps_when_absent(tmp_path: Path):
+    target = tmp_path / "sessions.jsonl"
+    log_session_start(
+        session_id="sess-nocap",
+        profile_name="default",
+        network_enabled=True,
+        duration_limit_seconds=None,
+        allow_broad_mount=False,
+        image_tag="x",
+        image_id=None,
+        mounts=[],
+        argv=[],
+        start_time=1_700_000_000.0,
+        path=target,
+    )
+    record = json.loads(target.read_text())
+    assert "resource_caps" not in record
