@@ -205,6 +205,15 @@ def preset_launch_cmd(
                  "(memories/skills ephemeral with the container).",
         ),
     ] = False,
+    credential_handling: Annotated[
+        str | None,
+        typer.Option(
+            "--credential-handling",
+            help="Override the credential posture for this session: native "
+                 "(model key only, via Whizzard's own broker — no OneCLI "
+                 "needed), onecli, or hybrid. Overrides the preset's profile.",
+        ),
+    ] = None,
 ) -> None:
     """Launch a session using the named preset."""
     try:
@@ -234,4 +243,5 @@ def preset_launch_cmd(
         platform_restriction=list(preset.platforms) if preset.platforms else None,
         preset_name=preset.name,
         allow_ephemeral=allow_ephemeral,
+        credential_handling=credential_handling,
     )

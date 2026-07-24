@@ -41,7 +41,8 @@ jobs:
       - name: whiz --version reports 0.1.0
         run: |
           out=$(whiz --version); echo "$out"
-          echo "$out" | grep -q "whizzard 0.1.0"
+          # Anchored: reject pre-release/dev/post suffixes (0.1.0rc1, 0.1.0.post1…)
+          echo "$out" | grep -qE "whizzard 0\.1\.0$"
       - name: whiz --help renders
         run: whiz --help
       - name: whiz (bare) → status, on a clean home

@@ -405,3 +405,32 @@ def test_credential_handling_onecli_overrides_profile():
     assert result.exit_code == 0
     # 'safe' is network-off by default; the override flips it to the onecli path.
     assert "onecli gateway" in result.output
+
+
+def test_onecli_down_banner_suggests_a_parseable_command():
+    """Regression (ultrareview merged_bug_001): the OneCLI-down recovery banner
+    must suggest a command the CLI actually accepts. It previously printed
+    `whiz r <harness> --credential-handling native`, which typer rejects
+    (--credential-handling isn't on r_cmd; a harness name isn't a preset name).
+    Capture the banner, extract the suggested `whiz ...` invocation, and assert
+    it parses through the real CLI."""
+    import re
+
+    console = Console(record=True, width=200)
+    with patch.object(_launch, "console", console):
+        _launch._print_onecli_down(
+            RuntimeError("gateway unreachable"),
+            harness="hermes-cell",
+            model_via_broker=False,
+        )
+    text = console.export_text()
+    m = re.search(r"whiz (run .+?--credential-handling native)", text)
+    assert m, f"no `whiz run ... --credential-handling native` suggestion in:\n{text}"
+    args = m.group(1).split()
+    # --help short-circuits before launch, so this exercises option parsing
+    # (would exit 2 on an unknown option / bad command) without running docker.
+    result = runner.invoke(app, args + ["--help"])
+    assert result.exit_code == 0, (
+        f"suggested recovery command does not parse: `whiz {m.group(1)}`\n"
+        f"{result.output}"
+    )
