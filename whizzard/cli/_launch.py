@@ -215,20 +215,34 @@ def _perform_launch(
     if isinstance(adapter, HermesAdapter):
         adapter.allow_ephemeral = allow_ephemeral
 
-    # D-194 Phase C: contained web search rides the model broker's internal
-    # network (the search broker joins it), so it requires a broker-backed
-    # network mode. Web search is a Hermes-only concept today, gated the same
-    # way image selection is. Fail loud rather than silently launch without it.
-    web_search_enabled = (
-        isinstance(adapter, HermesAdapter) and prof.web_search == "firecrawl"
+    # D-194 Phase C: web-search backend gating. Web search is a Hermes-only
+    # concept today, gated the same way image selection is. Two rungs with
+    # opposite network requirements — fail loud rather than silently launch
+    # without search:
+    #   • firecrawl (CONTAINED): rides the model broker's internal net (the
+    #     search broker joins it) → requires a broker-backed mode.
+    #   • ddgs (OPEN): keyless, fans out directly to many search hosts via TLS
+    #     impersonation, un-brokerable → requires open egress.
+    web_search_backend = (
+        prof.web_search if isinstance(adapter, HermesAdapter) else "off"
     )
-    if web_search_enabled and prof.network_mode not in ("mediated", "hybrid"):
+    firecrawl_search = web_search_backend == "firecrawl"
+    if firecrawl_search and prof.network_mode not in ("mediated", "hybrid"):
         console.print(
             f"[red]profile web_search is 'firecrawl' but network_mode is "
             f"{prof.network_mode!r} — contained web search needs a broker-backed "
             f"network (mediated or hybrid), which carries the search broker the "
             f"cell reaches. Set network_mode to 'mediated' or 'hybrid' (or pass "
             f"--credential-handling native/hybrid).[/red]"
+        )
+        raise typer.Exit(code=2)
+    if web_search_backend == "ddgs" and prof.network_mode != "open":
+        console.print(
+            f"[red]profile web_search is 'ddgs' but network_mode is "
+            f"{prof.network_mode!r} — keyless ddgs search fans out directly to "
+            f"many search-engine hosts and can't be brokered, so it needs open "
+            f"egress. Set network_mode to 'open' (network_enabled true), or use "
+            f"'firecrawl' for the contained, broker-routed backend.[/red]"
         )
         raise typer.Exit(code=2)
 
@@ -306,6 +320,20 @@ def _perform_launch(
     else:
         _net_str = "disabled"
     console.print(f"[bold]Network:[/bold] {_net_str}")
+    # D-194 Phase C: web-search posture + its trade-off, so the user sees at
+    # launch which rung is active and what it costs.
+    if web_search_backend == "firecrawl":
+        console.print(
+            "[bold]Web search:[/bold] firecrawl — contained (routed through a "
+            "broker; needs FIRECRAWL_API_KEY host-side)"
+        )
+    elif web_search_backend == "ddgs":
+        console.print("[bold]Web search:[/bold] ddgs — keyless")
+        console.print(
+            "[yellow]  ⚠ expanded security surface: the cell reaches many "
+            "search-engine hosts directly over open egress, not contained to a "
+            "single broker.[/yellow]"
+        )
     console.print(f"[bold]Duration:[/bold] {duration}")
     console.print(f"[bold]Broad-mount override:[/bold] {'allowed' if prof.allow_broad_mount else 'blocked'}")
     console.print(f"[bold]Image:[/bold] {image}")
@@ -377,9 +405,10 @@ def _perform_launch(
                 ca_host_path="~/.onecli/gateway-ca.pem",
             )
         # D-194 Phase C: report the FIRECRAWL_* env the real launch would set.
-        # web_search_enabled implies mediated/hybrid (validated above), so the
-        # search broker's name mirrors the model broker slug used above.
-        if web_search_enabled:
+        # firecrawl_search implies mediated/hybrid (validated above), so the
+        # search broker's name mirrors the model broker slug used above. (ddgs
+        # needs no broker/env — it talks to the internet directly.)
+        if firecrawl_search:
             adapter.search = SearchContext(  # type: ignore[attr-defined]
                 base_url=f"http://whiz-search-broker-{session_id}:8080",
             )
@@ -534,11 +563,11 @@ def _perform_launch(
 
     # D-194 Phase C: contained web search. Bring up the search broker — a second
     # broker instance pinned to api.firecrawl.dev — on the cell's internal net
-    # (owned by the model broker, guaranteed present since web_search_enabled was
+    # (owned by the model broker, guaranteed present since firecrawl_search was
     # validated to require mediated/hybrid). The cell reaches only this broker
     # for search; the broker holds the real Firecrawl key and its own egress net.
     search_handle = None
-    if web_search_enabled:
+    if firecrawl_search:
         assert broker_handle is not None  # mediated/hybrid ⇒ model broker is up
         try:
             search_handle = start_search_broker(

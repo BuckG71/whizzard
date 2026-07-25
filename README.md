@@ -71,6 +71,20 @@ OneCLI is opt-in — the way to extend the guarantee to your service tokens, not
 
 See the [decision log](docs/decisions.md) for the full credential-privacy rationale, and the [threat model](docs/threat_model.md).
 
+## Web search
+
+Agents often need the live web. Whizzard gives a cell web search **without opening a hole in the sandbox** — it's off by default (the harness fails closed rather than fabricating results), and you turn it on per profile with `web_search`:
+
+- **`firecrawl`** (contained, recommended) — search runs through a Whizzard broker the same way your model key does: the cell reaches only the broker, and the broker holds your [Firecrawl](https://firecrawl.dev) key and is its single, pinned route to the internet. Set `FIRECRAWL_API_KEY` on the host (a free tier covers light use); needs a broker-backed profile (`native` or `hybrid` credential handling).
+- **`ddgs`** (keyless) — no signup: [ddgs](https://pypi.org/project/ddgs/) queries search engines directly. The trade is an **expanded security surface** — the cell reaches many search-engine hosts over open egress, so it can't be pinned to one endpoint; it needs an `open`-network profile, and Whizzard says so at launch.
+
+Web search rides a search-enabled cell image (the search clients aren't baked into the lean base image). Build it once, then enable a backend in `~/.whizzard/config/profiles.json`:
+
+```sh
+whiz hermes image build --search          # adds the search clients on top of the Hermes image
+# then set "web_search": "firecrawl" (or "ddgs") on a profile
+```
+
 ## Quickstart
 
 ### Prerequisites

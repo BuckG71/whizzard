@@ -390,3 +390,49 @@ def test_web_search_requires_broker_backed_network(fake_credential_fetch):
     assert result.exit_code == 2, result.output
     assert "web_search" in result.output
     assert "mediated" in result.output
+
+
+def test_ddgs_open_rung_uses_search_image_no_broker_env(fake_credential_fetch):
+    """D-194 Phase C: ddgs is the keyless OPEN rung — it uses the search image
+    (ddgs client baked in) but no search broker, so NO FIRECRAWL_* env, and the
+    launch surfaces the expanded-security-surface notice."""
+    from whizzard import config
+    from whizzard.images import WHIZZARD_HERMES_SEARCH_IMAGE
+
+    config.PROFILES_FILE.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": {
+            "ddgs": {"network_enabled": True, "network_mode": "open",
+                     "duration_seconds": 600, "web_search": "ddgs"},
+        },
+    }))
+
+    result = runner.invoke(
+        app, ["run", "--harness", "hermes-cell", "--profile", "ddgs", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert WHIZZARD_HERMES_SEARCH_IMAGE in result.output
+    # keyless + un-brokerable: no firecrawl broker env in the argv
+    assert "FIRECRAWL_API_URL" not in result.output
+    assert "whiz-search-broker-" not in result.output
+    # the trade-off is surfaced at launch
+    assert "expanded security surface" in result.output
+
+
+def test_ddgs_requires_open_egress(fake_credential_fetch):
+    """D-194 Phase C: ddgs can't be brokered, so a mediated (broker-only) net
+    can't reach its search hosts — fail loud rather than launch a dead backend."""
+    from whizzard import config
+
+    config.PROFILES_FILE.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": {
+            "bad": {"network_enabled": True, "network_mode": "mediated",
+                    "duration_seconds": 600, "web_search": "ddgs"},
+        },
+    }))
+
+    result = runner.invoke(
+        app, ["run", "--harness", "hermes-cell", "--profile", "bad", "--dry-run"])
+    assert result.exit_code == 2, result.output
+    assert "ddgs" in result.output
+    assert "open egress" in result.output
