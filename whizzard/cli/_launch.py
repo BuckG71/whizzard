@@ -37,6 +37,7 @@ from whizzard.docker_cmd import (
     run_shell,
 )
 from whizzard.harness_config import HarnessConfigError, get_harness_config
+from whizzard.images import WHIZZARD_HERMES_SEARCH_IMAGE
 from whizzard.mounts import (
     Mount,
     MountMode,
@@ -201,6 +202,11 @@ def _perform_launch(
     # to die inside the container with `exec hermes: No such file or directory`.
     if image is None:
         image = adapter.default_image
+        # D-194 Phase C: a web-search profile needs the search-enabled cell
+        # image — the firecrawl/ddgs clients aren't in the base Hermes image
+        # (least-privilege). Only when no explicit --image was given.
+        if isinstance(adapter, HermesAdapter) and prof.web_search != "off":
+            image = WHIZZARD_HERMES_SEARCH_IMAGE
 
     # F-C-04: propagate the --allow-ephemeral opt-in into the adapter so
     # preflight knows whether the user is OK with no persistent HERMES_HOME.

@@ -330,3 +330,31 @@ def test_dry_run_reflects_and_cleans_up_managed_scope(fake_credential_fetch):
     # no leak: the per-session managed dir was cleaned up on the dry-run exit
     root = hermes_module._managed_root()
     assert not root.exists() or list(root.iterdir()) == []
+
+
+def test_web_search_profile_selects_search_image_dry_run(fake_credential_fetch):
+    """D-194 Phase C: a profile with web_search enabled launches the
+    search-enabled cell image (firecrawl/ddgs clients aren't in the base
+    Hermes image); an off profile uses the plain Hermes image."""
+    from whizzard import config
+    from whizzard.images import WHIZZARD_HERMES_IMAGE, WHIZZARD_HERMES_SEARCH_IMAGE
+
+    config.PROFILES_FILE.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": {
+            "search": {"network_enabled": True, "duration_seconds": 600,
+                       "web_search": "firecrawl"},
+            "plain": {"network_enabled": True, "duration_seconds": 600},
+        },
+    }))
+
+    search = runner.invoke(
+        app, ["run", "--harness", "hermes-cell", "--profile", "search", "--dry-run"])
+    assert search.exit_code == 0, search.output
+    assert WHIZZARD_HERMES_SEARCH_IMAGE in search.output
+
+    plain = runner.invoke(
+        app, ["run", "--harness", "hermes-cell", "--profile", "plain", "--dry-run"])
+    assert plain.exit_code == 0, plain.output
+    assert WHIZZARD_HERMES_SEARCH_IMAGE not in plain.output
+    assert WHIZZARD_HERMES_IMAGE in plain.output
