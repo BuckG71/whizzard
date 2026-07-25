@@ -86,6 +86,9 @@ def isolated_whizzard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 "wrap_up_grace_seconds": 30,
                 "hermes_home": str(hermes_home),
                 "platforms": ["discord"],
+                # Enables mediated/hybrid dry-runs (D-184) — only the secret
+                # NAME is read at dry-run time, never fetched.
+                "model_credential": {"secret": "ANTHROPIC_API_KEY"},
             },
         },
     }))
@@ -335,15 +338,16 @@ def test_dry_run_reflects_and_cleans_up_managed_scope(fake_credential_fetch):
 def test_web_search_profile_selects_search_image_dry_run(fake_credential_fetch):
     """D-194 Phase C: a profile with web_search enabled launches the
     search-enabled cell image (firecrawl/ddgs clients aren't in the base
-    Hermes image); an off profile uses the plain Hermes image."""
+    Hermes image); an off profile uses the plain Hermes image. Web search
+    requires a broker-backed net, so the search profile is mediated."""
     from whizzard import config
     from whizzard.images import WHIZZARD_HERMES_IMAGE, WHIZZARD_HERMES_SEARCH_IMAGE
 
     config.PROFILES_FILE.write_text(json.dumps({
         "schema_version": 1,
         "profiles": {
-            "search": {"network_enabled": True, "duration_seconds": 600,
-                       "web_search": "firecrawl"},
+            "search": {"network_enabled": True, "network_mode": "mediated",
+                       "duration_seconds": 600, "web_search": "firecrawl"},
             "plain": {"network_enabled": True, "duration_seconds": 600},
         },
     }))
@@ -352,9 +356,37 @@ def test_web_search_profile_selects_search_image_dry_run(fake_credential_fetch):
         app, ["run", "--harness", "hermes-cell", "--profile", "search", "--dry-run"])
     assert search.exit_code == 0, search.output
     assert WHIZZARD_HERMES_SEARCH_IMAGE in search.output
+    # dry-run fidelity: the argv the real launch would run points the firecrawl
+    # backend at the search broker (D-194 Phase C), not at api.firecrawl.dev.
+    assert "FIRECRAWL_API_URL" in search.output
+    assert "whiz-search-broker-" in search.output
+    assert "api.firecrawl.dev" not in search.output
 
     plain = runner.invoke(
         app, ["run", "--harness", "hermes-cell", "--profile", "plain", "--dry-run"])
     assert plain.exit_code == 0, plain.output
     assert WHIZZARD_HERMES_SEARCH_IMAGE not in plain.output
     assert WHIZZARD_HERMES_IMAGE in plain.output
+    assert "FIRECRAWL_API_URL" not in plain.output
+
+
+def test_web_search_requires_broker_backed_network(fake_credential_fetch):
+    """D-194 Phase C: web_search='firecrawl' rides the model broker's internal
+    net, so it must fail loud (not silently launch without search) when the
+    profile's network_mode isn't broker-backed."""
+    from whizzard import config
+
+    config.PROFILES_FILE.write_text(json.dumps({
+        "schema_version": 1,
+        "profiles": {
+            # open egress (network_enabled, default network_mode) + web_search
+            "bad": {"network_enabled": True, "duration_seconds": 600,
+                    "web_search": "firecrawl"},
+        },
+    }))
+
+    result = runner.invoke(
+        app, ["run", "--harness", "hermes-cell", "--profile", "bad", "--dry-run"])
+    assert result.exit_code == 2, result.output
+    assert "web_search" in result.output
+    assert "mediated" in result.output

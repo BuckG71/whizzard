@@ -24,6 +24,7 @@ from whizzard.adapters.hermes import (
     MEDIATION_PLACEHOLDER,
     MediationContext,
     OneCLIContext,
+    SearchContext,
     cleanup_managed_dir,
 )
 from whizzard.broker import BrokerError, start_broker, stop_broker
@@ -53,6 +54,7 @@ from whizzard.onecli_gateway import (
     stop_onecli_route,
 )
 from whizzard.safety import OverrideRecord, SafetyViolation, check_mount_path
+from whizzard.search_broker import start_search_broker, stop_search_broker
 from whizzard.session_log import new_session_id
 from whizzard.snapshot import write_snapshot
 
@@ -213,6 +215,23 @@ def _perform_launch(
     if isinstance(adapter, HermesAdapter):
         adapter.allow_ephemeral = allow_ephemeral
 
+    # D-194 Phase C: contained web search rides the model broker's internal
+    # network (the search broker joins it), so it requires a broker-backed
+    # network mode. Web search is a Hermes-only concept today, gated the same
+    # way image selection is. Fail loud rather than silently launch without it.
+    web_search_enabled = (
+        isinstance(adapter, HermesAdapter) and prof.web_search == "firecrawl"
+    )
+    if web_search_enabled and prof.network_mode not in ("mediated", "hybrid"):
+        console.print(
+            f"[red]profile web_search is 'firecrawl' but network_mode is "
+            f"{prof.network_mode!r} — contained web search needs a broker-backed "
+            f"network (mediated or hybrid), which carries the search broker the "
+            f"cell reaches. Set network_mode to 'mediated' or 'hybrid' (or pass "
+            f"--credential-handling native/hybrid).[/red]"
+        )
+        raise typer.Exit(code=2)
+
     # F-C-10: run the adapter preflight before any docker work.
     # `preflight()` is defined on the Protocol (gateway.lock concurrency
     # guard, the D-80 auth.json mount-time check, the F-C-04 hermes_home
@@ -356,6 +375,13 @@ def _perform_launch(
             adapter.onecli = OneCLIContext(  # type: ignore[attr-defined]
                 proxy_url="http://x:***@onecli:10255",
                 ca_host_path="~/.onecli/gateway-ca.pem",
+            )
+        # D-194 Phase C: report the FIRECRAWL_* env the real launch would set.
+        # web_search_enabled implies mediated/hybrid (validated above), so the
+        # search broker's name mirrors the model broker slug used above.
+        if web_search_enabled:
+            adapter.search = SearchContext(  # type: ignore[attr-defined]
+                base_url=f"http://whiz-search-broker-{session_id}:8080",
             )
         argv = build_run_argv(
             prof,
@@ -506,6 +532,31 @@ def _perform_launch(
         )
         mediated_network = broker_handle.internal_network
 
+    # D-194 Phase C: contained web search. Bring up the search broker — a second
+    # broker instance pinned to api.firecrawl.dev — on the cell's internal net
+    # (owned by the model broker, guaranteed present since web_search_enabled was
+    # validated to require mediated/hybrid). The cell reaches only this broker
+    # for search; the broker holds the real Firecrawl key and its own egress net.
+    search_handle = None
+    if web_search_enabled:
+        assert broker_handle is not None  # mediated/hybrid ⇒ model broker is up
+        try:
+            search_handle = start_search_broker(
+                session_id, broker_handle.internal_network
+            )
+        except BrokerError as e:
+            # We're past the model-broker start but before the run_shell try
+            # whose finally does teardown — so unwind what's up by hand here
+            # (search broker cleaned up its own partial state on failure).
+            if onecli_handle is not None:
+                stop_onecli_route(onecli_handle)
+            stop_broker(broker_handle)
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(code=125) from e
+        adapter.search = SearchContext(  # type: ignore[attr-defined]
+            base_url=search_handle.base_url,
+        )
+
     launch_started = time.monotonic()
     try:
         result = run_shell(
@@ -538,6 +589,13 @@ def _perform_launch(
         # (pure onecli), so the broker keeps ownership of its own net in hybrid.
         if onecli_handle is not None:
             stop_onecli_route(onecli_handle)
+        # D-194 Phase C: tear the search broker down BEFORE the model broker —
+        # it sits on the model broker's internal net, and docker refuses to
+        # remove a net that still has the search broker attached. It removes its
+        # own egress net + key dir here; the model broker removes the shared
+        # internal net in stop_broker below.
+        if search_handle is not None:
+            stop_search_broker(search_handle)
         if broker_handle is not None:
             stop_broker(broker_handle)
         # D-194: remove this session's read-only managed-scope config dir.
