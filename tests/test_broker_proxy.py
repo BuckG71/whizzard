@@ -80,6 +80,16 @@ def test_bearer_scheme_preserves_client_beta_flags():
     assert "oauth-2025-04-20" in out["anthropic-beta"]
 
 
+def test_bearer_plain_scheme_injects_authorization_without_beta():
+    # D-194: non-Anthropic upstream (Firecrawl web search). Authorization:
+    # Bearer, NO anthropic-beta header injected (that's Anthropic-specific).
+    headers = {"authorization": "Bearer placeholder", "content-type": "application/json"}
+    out = proxy.rewrite_request_headers(headers, "fc-REAL-key", scheme="bearer_plain")
+    assert out["authorization"] == "Bearer fc-REAL-key"
+    assert "x-api-key" not in {k.lower() for k in out}
+    assert "anthropic-beta" not in {k.lower() for k in out}
+
+
 def test_client_authorization_header_is_stripped():
     headers = {"authorization": "Bearer whatever", "content-type": "application/json"}
     out = proxy.rewrite_request_headers(headers, "sk-REAL")
