@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from whizzard import config as whiz_config
 from whizzard._platform import is_windows
 from whizzard.adapters._credentials import (
     fetch_secret,
@@ -106,6 +107,72 @@ _GATEWAY_LOCK_FILENAME = "gateway.lock"
 # the host hermes_home here lets in-cell Hermes find its profile under its
 # default lookup, no flag plumbing required.
 _IN_CELL_HERMES_HOME = "/home/whizzard/.hermes"
+
+# --- Managed-scope config authoring (D-194) --------------------------------
+# Hermes reads a root-owned "managed scope" dir ($HERMES_MANAGED_DIR) whose
+# config.yaml deep-merges OVER the user's config, per-leaf, and re-wins on
+# every config read. Whizzard authors that dir HOST-SIDE and bind-mounts it
+# READ-ONLY into the cell, so the values the agent can't override:
+#   - mcp_servers.whiz : auto-registers the in-cell Whiz MCP server (retires
+#     the D-167 manual step). The cell has python3 only (no `python`).
+#   - web.backend      : set when the profile enables web search; the harness
+#     fails closed (no fabrication) when absent.
+# The file is written as JSON, which is a valid YAML subset — so no YAML
+# runtime dependency is needed and the fixed structure can't mis-escape.
+_IN_CELL_MANAGED_DIR = "/opt/whiz/hermes-managed"
+_IN_CELL_MCP_SERVER_PATH = "/opt/whiz/mcp_server.py"
+ENV_HERMES_MANAGED_DIR = "HERMES_MANAGED_DIR"
+
+
+def _managed_root() -> Path:
+    """Root dir for per-session managed-scope config. Reads config.STATE_DIR
+    *live* (not captured at import) so tests / isolated homes that repoint
+    STATE_DIR don't write into the real ~/.whizzard/state."""
+    return whiz_config.STATE_DIR / "hermes-managed"
+
+
+def _managed_slug(session_id: str) -> str:
+    """Filesystem-safe per-session dir name (session_id is a uuid, but guard
+    anyway — mirrors broker._slug's intent)."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+
+
+def _compose_managed_config(web_search: str) -> dict:
+    """The Hermes managed-scope config fragment Whizzard authors. Always
+    registers the in-cell Whiz MCP server; adds a web backend when web search
+    is enabled for the profile (D-194)."""
+    config: dict = {
+        "mcp_servers": {
+            "whiz": {
+                "command": "python3",
+                "args": [_IN_CELL_MCP_SERVER_PATH],
+            }
+        }
+    }
+    if web_search != "off":
+        config["web"] = {"backend": web_search}
+    return config
+
+
+def _write_managed_dir(session_id: str, web_search: str) -> Path:
+    """Write this session's managed-scope config and return the host dir.
+    Serialized as JSON (valid YAML) so no YAML dep is needed. Read-only-ness is
+    enforced by the :ro bind mount + the agent having no writable handle; Hermes
+    re-merges the managed leaves on every read, so the agent can't override
+    mcp_servers.whiz / web.backend even by rewriting its own config.yaml."""
+    managed_dir = _managed_root() / _managed_slug(session_id)
+    managed_dir.mkdir(parents=True, exist_ok=True)
+    (managed_dir / "config.yaml").write_text(
+        json.dumps(_compose_managed_config(web_search), indent=2),
+        encoding="utf-8",
+    )
+    return managed_dir
+
+
+def cleanup_managed_dir(session_id: str) -> None:
+    """Remove a session's managed-scope dir at teardown. Best-effort; the dir
+    holds no secrets (config structure only), so a leftover is low-risk."""
+    shutil.rmtree(_managed_root() / _managed_slug(session_id), ignore_errors=True)
 
 
 # --- Profile creation (D-86) -----------------------------------------------
@@ -597,6 +664,10 @@ class HermesAdapter:
                 if broker_host:
                     env["NO_PROXY"] = broker_host
                     env["no_proxy"] = broker_host
+        # D-194: point Hermes at the read-only managed-scope dir (mounted by
+        # container_mounts) so its authored leaves win over the agent's config.
+        if getattr(self, "session_id", None) is not None:
+            env[ENV_HERMES_MANAGED_DIR] = _IN_CELL_MANAGED_DIR
         return env
 
     def credential_env_keys(self) -> set[str]:
@@ -803,6 +874,21 @@ class HermesAdapter:
                 ContainerMount(
                     host_path=Path(onecli.ca_host_path).expanduser(),
                     container_path=_IN_CELL_ONECLI_CA,
+                    mode="ro",
+                )
+            )
+        # D-194: author the read-only managed-scope config (Whiz MCP
+        # auto-registration + optional web backend) and mount it read-only.
+        # session_id / web_search are stashed on the adapter by _perform_launch.
+        session_id = getattr(self, "session_id", None)
+        if session_id is not None:
+            managed_dir = _write_managed_dir(
+                session_id, getattr(self, "web_search", "off")
+            )
+            mounts.append(
+                ContainerMount(
+                    host_path=managed_dir,
+                    container_path=_IN_CELL_MANAGED_DIR,
                     mode="ro",
                 )
             )

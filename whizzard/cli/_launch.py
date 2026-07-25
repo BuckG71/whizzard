@@ -24,6 +24,7 @@ from whizzard.adapters.hermes import (
     MEDIATION_PLACEHOLDER,
     MediationContext,
     OneCLIContext,
+    cleanup_managed_dir,
 )
 from whizzard.broker import BrokerError, start_broker, stop_broker
 from whizzard.cli._shared import console
@@ -253,6 +254,13 @@ def _perform_launch(
 
     duration = "unlimited" if prof.duration_seconds is None else f"{prof.duration_seconds // 60} min"
     session_id = new_session_id()
+    # D-194: stash launch state the Hermes adapter needs to author the read-only
+    # managed-scope config (Whiz MCP auto-registration + web backend) in
+    # container_mounts/container_env. Set BEFORE any build_run_argv call — incl.
+    # the dry-run path below — so the dry-run argv reflects the real launch.
+    # Harmless on adapters that ignore it.
+    adapter.session_id = session_id  # type: ignore[attr-defined]
+    adapter.web_search = prof.web_search  # type: ignore[attr-defined]
     if dry_run:
         console.print("[yellow]DRY RUN[/yellow] — no container will be launched.\n")
     else:
@@ -356,6 +364,10 @@ def _perform_launch(
         # Note: image existence is NOT checked here — dry-run reports intent.
         # If the image is missing, an actual `whizzard run` would surface that.
         # Dry-run does NOT write to the session log.
+        # D-194: building the argv above authored the managed-scope dir as a
+        # side effect (container_mounts); dry-run exits before the finally that
+        # normally reaps it, so remove it here to avoid accumulating cruft.
+        cleanup_managed_dir(session_id)
         raise typer.Exit(code=0)
 
     # Pre-flight checks before launch — surfaced via the same red-error path
@@ -522,6 +534,9 @@ def _perform_launch(
             stop_onecli_route(onecli_handle)
         if broker_handle is not None:
             stop_broker(broker_handle)
+        # D-194: remove this session's read-only managed-scope config dir.
+        # Best-effort; holds no secrets (config structure only).
+        cleanup_managed_dir(session_id)
 
     # The container has exited — the user is back on the host shell. Announce
     # the boundary so a silent return can't be mistaken for still being inside.

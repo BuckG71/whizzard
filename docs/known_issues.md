@@ -64,13 +64,14 @@ Hermes-state files); the smoke doesn't currently provision one.
 heavier smoke needs the user's `~/.hermes-whizzard-sandbox`. Tracked as the
 "next-level Hermes-integration smoke."
 
-### Hermes `config.yaml` MCP auto-wiring is manual
-The Hermes adapter sets the WHIZ_* env vars for the in-sandbox MCP server, but
-the harness-side `config.yaml` MCP-client entry pointing at
-`python /opt/whiz/mcp_server.py` is still a manual user step.
-*Source:* maintainer working notes.
-*Disposition:* add a `whiz hermes profile sync-mcp` verb or fold into
-`whiz hermes profile create`.
+### ~~Hermes `config.yaml` MCP auto-wiring is manual~~ — RESOLVED (D-194)
+Was: the harness-side `config.yaml` MCP-client entry was a manual user step.
+Resolved by D-194 — the adapter now auto-authors an `mcp_servers.whiz` entry
+(`command: python3`, not the previously-documented `python`, which does not
+exist in the cell image) into a **read-only managed-scope** config Whizzard
+delivers at launch. No manual step, and the agent can't edit it (also closes
+`risk_register` §391 for authored config leaves).
+*Source:* maintainer working notes; resolved 2026-07-24 (D-194).
 
 ### Maintainer's personal config predates schema additions
 The maintainer's personal `~/.whizzard/config/profiles.json` predates several

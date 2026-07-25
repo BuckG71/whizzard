@@ -313,3 +313,20 @@ def test_preset_launch_dry_run_propagates_platform_restriction(
     # The Hermes adapter's mcp_env should appear in the docker invocation
     # because the harness type is 'agent' and session_id is present
     assert "WHIZ_SESSION_ID" in out
+
+
+def test_dry_run_reflects_and_cleans_up_managed_scope(fake_credential_fetch):
+    """D-194 regression: a dry-run must (a) show the managed-scope mount + the
+    HERMES_MANAGED_DIR env that a real launch adds (fidelity), and (b) not leak
+    the authored dir — container_mounts writes it as a side effect, and dry-run
+    exits before the finally that normally reaps it."""
+    from whizzard.adapters import hermes as hermes_module
+
+    result = runner.invoke(app, ["r", "hermes", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    # fidelity: the argv the user is shown includes the managed mount + env
+    assert hermes_module._IN_CELL_MANAGED_DIR in result.output
+    assert hermes_module.ENV_HERMES_MANAGED_DIR in result.output
+    # no leak: the per-session managed dir was cleaned up on the dry-run exit
+    root = hermes_module._managed_root()
+    assert not root.exists() or list(root.iterdir()) == []

@@ -1113,3 +1113,75 @@ def test_preflight_reports_truthfully_when_unlink_fails(tmp_path, monkeypatch):
     assert result.ok is True  # not blocking, just informational
     assert "could not unlink" in result.cleanup_note.lower()
     assert "Read-only filesystem" in result.cleanup_note
+
+
+# --- Managed-scope config authoring (D-194) --------------------------------
+
+def test_compose_managed_config_off_registers_only_whiz_mcp():
+    cfg = hermes_module._compose_managed_config("off")
+    # Whiz MCP server auto-registered (retires D-167 manual step); python3
+    # because the cell image has no `python` alias.
+    assert cfg["mcp_servers"]["whiz"]["command"] == "python3"
+    assert cfg["mcp_servers"]["whiz"]["args"] == ["/opt/whiz/mcp_server.py"]
+    # No web config when search is off → harness fails closed, no fabrication.
+    assert "web" not in cfg
+
+
+def test_compose_managed_config_web_adds_backend():
+    cfg = hermes_module._compose_managed_config("firecrawl")
+    assert cfg["web"] == {"backend": "firecrawl"}
+    assert "whiz" in cfg["mcp_servers"]  # still always present
+
+
+def test_managed_config_file_roundtrips(tmp_path, monkeypatch):
+    """The file is named config.yaml but written as JSON (a valid YAML subset,
+    so no YAML dep). Verify the serialization round-trips to the composed dict.
+    That JSON is actually valid YAML to the REAL Hermes loader is asserted by
+    the integration smoke (test_managed_scope_smoke), not here — this stays
+    dependency-free."""
+    monkeypatch.setattr(hermes_module.whiz_config, "STATE_DIR", tmp_path)
+    d = hermes_module._write_managed_dir("sess-1", "firecrawl")
+    loaded = json.loads((d / "config.yaml").read_text())
+    assert loaded == hermes_module._compose_managed_config("firecrawl")
+
+
+def test_container_mounts_adds_readonly_managed_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(hermes_module.whiz_config, "STATE_DIR", tmp_path)
+    adapter = HermesAdapter()
+    adapter.session_id = "sess-xyz"
+    adapter.web_search = "firecrawl"
+    mounts = adapter.container_mounts()
+    managed = [m for m in mounts if m.container_path == hermes_module._IN_CELL_MANAGED_DIR]
+    assert len(managed) == 1
+    assert managed[0].mode == "ro"  # agent cannot edit the authored config
+    # the composed config landed on disk and names the whiz MCP server
+    written = json.loads((managed[0].host_path / "config.yaml").read_text())
+    assert written["mcp_servers"]["whiz"]["command"] == "python3"
+    assert written["web"]["backend"] == "firecrawl"
+
+
+def test_container_env_sets_managed_dir_pointer(tmp_path, monkeypatch):
+    monkeypatch.setattr(hermes_module.whiz_config, "STATE_DIR", tmp_path)
+    adapter = HermesAdapter()
+    adapter.session_id = "sess-xyz"
+    env = adapter.container_env()
+    assert env[hermes_module.ENV_HERMES_MANAGED_DIR] == hermes_module._IN_CELL_MANAGED_DIR
+
+
+def test_no_managed_scope_without_session_id():
+    # An adapter never given a session_id (e.g. non-launch call paths) must not
+    # emit a managed mount or the env pointer — no crash, no side effects.
+    adapter = HermesAdapter()
+    assert not any(
+        m.container_path == hermes_module._IN_CELL_MANAGED_DIR
+        for m in adapter.container_mounts()
+    )
+    assert hermes_module.ENV_HERMES_MANAGED_DIR not in adapter.container_env()
+
+
+def test_cleanup_removes_managed_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(hermes_module.whiz_config, "STATE_DIR", tmp_path)
+    d = hermes_module._write_managed_dir("sess-gone", "off")
+    assert d.exists()
+    hermes_module.cleanup_managed_dir("sess-gone")
+    assert not d.exists()

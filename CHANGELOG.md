@@ -24,6 +24,12 @@ the container. See [ROADMAP.md](ROADMAP.md) for what's planned through v1.0.
   [OneCLI](https://onecli.sh) — `hybrid` is required when you sign in to your
   model provider with OAuth, which OneCLI can't inject. The wizard asks which
   fits, in plain language, and writes it as the default.
+- **In-cell Whiz MCP server auto-registers.** The cooperation layer that lets
+  the agent query its own sandbox capabilities is now wired automatically —
+  no manual `config.yaml` edit. Whizzard authors the harness config host-side
+  and delivers it as a **read-only** overlay the agent can't modify (so a
+  compromised agent can't repoint its own MCP config), laying the groundwork
+  for per-profile web search.
 - **Per-profile resource caps.** Each profile can bound container memory, CPU,
   and process count via `memory_limit`, `memory_swap`, `cpus`, and `pids_limit`
   in `profiles.json` (all optional; absent = no cap). Defaults scale by trust —
