@@ -3209,6 +3209,46 @@ The bump required a **build fix**: v0.19.0's dependency tree wants a different `
 
 ---
 
+### D-195: Bifurcate network egress from credential handling
+
+**Type:** architecture
+
+**Tags:** profiles, safety
+
+**Door Type:** two-way — a refactor; the current five `network_mode` names become presets over the two axes, so existing profiles keep working.
+
+**Decision:** _(proposed, open)_ Split the single `network_mode` enum into two independent fields — **egress** (`none` / `allowlist` / `open` / proxied-broad) and **credential handling** (`raw` / `broker` / `onecli` / `broker+onecli`). The five current modes become presets over the pair (e.g. `native` = broker-only egress + broker creds). Not yet decided or implemented.
+
+**Rationale:** One field fuses two concerns, so no profile can express *broad egress + private model key* without OneCLI. Keeping the model key out of the cell does not depend on narrow egress (the key lives on the broker, injected on the outbound hop), so `egress: open + credentials: broker` is coherent — the dev cell the fused enum can't express. Honest coupling: *service*-token privacy without OneCLI still needs raw injection or a per-service broker (a later-scope axis).
+
+**Notes:** Full design in `docs/network_egress_design.md`. Depends on the new `allowlist` egress mode (ROADMAP goal 11).
+
+**Source:** network-egress design discussion, 2026-07-24.
+
+**Status:** open.
+
+---
+
+### D-196: Intended network posture for the `default` and `build` profiles
+
+**Type:** architecture
+
+**Tags:** profiles, safety
+
+**Door Type:** one-way-ish — changes the default security posture users rely on.
+
+**Decision:** _(open)_ Two coupled questions. (a) Should the bundled `default` fallback be `mediated` so credential-privacy is install-independent? Today it derives `open`; `whiz init` writes `mediated`, so posture differs by install state. (b) Should `build` be credential-private or an explicitly open dev profile? Today it is `open` in every install, yet the README calls it "native," and `open` injects no model key (so an open `build` can't reach the model without a raw key via `secrets:`).
+
+**Rationale:** Security posture should not silently depend on install state, and docs should match code (`known_issues.md` findings 1–2). Leaning: fix the bundled `default` → `mediated` regardless (fail-safe, install-independent); the `build` posture is pending the bifurcation direction (D-195) — an `allowlist + broker` mode would let `build` be both broad-egress-for-dev and model-key-private, dissolving the tension.
+
+**Notes:** See `known_issues.md` findings 1–2 and `docs/network_egress_design.md`.
+
+**Source:** network-egress design discussion, 2026-07-24.
+
+**Status:** open.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.

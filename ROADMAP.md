@@ -127,6 +127,13 @@ to anywhere. Allowlist mode needs an explicit answer for DNS (resolve
 only listed hostnames? proxy DNS through the host?). See the README
 "DNS-based exfiltration" residual-risk entry.
 
+**Design:** the full target model — the `allowlist` network mode, the
+allowlist-proxy topology, adoptable dev bundles + learn mode, and the proposed
+egress × credential-handling bifurcation — is in
+[`docs/network_egress_design.md`](docs/network_egress_design.md) (open decisions
+D-195/D-196). The allowlist proxy resolves DNS itself, which answers the
+sub-track above.
+
 ---
 
 ## How sequencing will evolve

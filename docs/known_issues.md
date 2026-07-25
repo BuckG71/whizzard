@@ -499,6 +499,58 @@ A compromised cell could drive the gateway for anything its policy allows.
 scope/lifetime and, if OneCLI supports it, move to a per-session-scoped token or
 per-attached-network gateway policy. See D-187 Notes.
 
+### Doc↔code alignment gaps (found 2026-07-24, reconcile before/at launch)
+
+Surfaced tracing every profile posture and doc claim against source during the
+network-egress design discussion. Bias is to change the README/docs to match
+code, except finding 1 (a security-behavior gap → fix code).
+
+**1. `default` profile is credential-private only *after* `whiz init`.** The
+bundled `_DEFAULT_PROFILES["default"]` sets no `network_mode` → derives `open`
+(`config.py __post_init__`); `whiz init` overwrites it to `mediated`
+(`init_wizard.py`). `load_profiles()` falls back to the bundled dict when no
+`profiles.json` exists (`config.py`), so the `open` fallback is launch-reachable
+(e.g. profiles.json deleted). The README calls `default` "native." *Disposition:*
+**fix code** — set the bundled `default` to `network_mode="mediated"` so posture
+is install-independent and fail-safe (the bundled `hermes-cell` harness already
+carries `model_credential`). Note: `test_config.py::test_network_mode_derives_from_network_enabled`
+asserts the bundled default is `open` — update it with the fix. Tied to D-196.
+
+**2. `build` profile is `open` in every install, but the README table calls it
+"native."** `init` only overrides `network_mode` for `default`, never other
+profiles, so `build` stays derived `open` — and `open` injects no model key, so
+`build` can't reach the model unless a key is placed raw in the cell via
+`secrets:`. *Disposition:* **decision needed** (D-196) — either make `build`
+credential-private (a broker-backed egress mode) or accept it's an open dev
+profile and correct the README.
+
+**3. README over-claims blanket credential privacy.** Headline: "No credential
+of any kind ever enters the sandbox — not your model key, not your service
+tokens." In `native` mode a profile with `secrets:`/`platforms:` injects the
+*real* service token as `-e KEY=VALUE`; mediation strips only the model key
+(D-191 documents this). *Disposition:* **fix README** — soften to: `native`
+keeps the *model* key out; keeping *service tokens* out is `onecli`/`hybrid`.
+
+**4. `threat_model.md` §4.2 frames OneCLI as the credential-mediation "current
+integration."** The native bar-C broker (`broker.py`) is the default,
+zero-dependency path; OneCLI is opt-in (D-183/D-191). *Disposition:* **fix doc.**
+
+**5. `threat_model.md` §4.3 says "boolean only / unrestricted egress."** Five
+`network_mode`s ship; `mediated`/`onecli`/`hybrid` restrict egress to the proxy
+peer today. Doc last reviewed 2026-05-29, predates the broker work.
+*Disposition:* **fix doc** — refresh to the shipped network-mode model; keep
+per-destination allowlist as the v1.0 item (goal 11).
+
+**6. README web-search "firecrawl (contained)" oversells.** True at the network
+layer, but Firecrawl server-side-fetches any URL the agent names — an
+arbitrary-web-read/exfil channel through one allowlisted host; the search broker
+is also unauthenticated on the internal net. *Disposition:* **fix README** — add
+a one-line caveat. (Also cosmetic: threat_model says "sandbox" while
+README/architecture say "cell.")
+
+*Source:* network-egress design discussion, 2026-07-24. See
+`docs/network_egress_design.md` and D-195/D-196.
+
 ## How to keep this doc useful
 
 Add an entry when:
