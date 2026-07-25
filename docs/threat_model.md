@@ -222,7 +222,7 @@ that establishes it.
 
 | Defense | Reference |
 |---|---|
-| Host-side credential mediation: credentials never enter the sandbox as plaintext env vars; sandbox-side HTTP traffic to model and platform endpoints is mediated by a host-side proxy (current integration is OneCLI) that injects credentials at the moment of the outbound request | D-91 / D-98 / D-134 |
+| Host-side credential mediation: the **model** credential never enters the sandbox — the default `native` path runs a host-side **broker** (D-184) that holds the real key and injects it on the outbound model request; the sandbox holds only a placeholder. **OneCLI** (opt-in) extends this to every service credential via `onecli`/`hybrid` (D-187/D-188). Caveat: service tokens a profile declares in a `secrets:`/`platforms:` block are injected as env vars under `native` (kept out only under `onecli`/`hybrid`) | D-184 / D-187 / D-134 |
 | Host env fallback path emits a warning visible in `active_capabilities()` so operators see when credentials originate from less-protected sources | D-89 / D-90 |
 | Hermes `auth.json` and per-instance runtime state are excluded from profile clones (D-80); known bypass paths closed in prior internal review | D-80 / D-86 |
 | Whizzard's own config directory (`~/.whizzard/config/`) is structurally unreachable from the sandbox — no symlink, no parent-mount, no traversal trick reaches it | D-12 (config write-protection invariant) |
@@ -231,10 +231,14 @@ that establishes it.
 
 ### 4.3 Network destinations
 
-**v0.1.0 ships a boolean only**, not a per-destination allowlist. Profiles
-declare `network_enabled: true | false`; off-network profiles launch with
-`--network none` (no outbound, no DNS). On-network profiles get full
-unrestricted egress.
+**v0.1.0 ships five network modes** (`none`, `open`, `mediated`, `onecli`,
+`hybrid`), not an arbitrary per-destination allowlist. `none` launches with
+`--network none` (no outbound, no DNS); `open` gives full unrestricted egress;
+`mediated`/`onecli`/`hybrid` put the sandbox on a per-session `--internal`
+network whose only peers are host-side proxy sidecars — restricted egress
+today (the sandbox has no direct route out). A profile-declared **allowlist**
+of arbitrary destinations is the v1.0 item (ROADMAP goal 11); see
+[`network_egress_design.md`](network_egress_design.md).
 
 | Defense | Reference |
 |---|---|
