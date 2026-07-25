@@ -19,6 +19,7 @@ Schema for profiles.json:
           "memory_swap": "<size>" | null,          # optional; == memory_limit disables swap; null = Docker default
           "cpus": <number> | null,                 # optional; e.g. 2 or 1.5; null = no cap
           "pids_limit": <int> | null,              # optional; fork-bomb guard; null = no cap
+          "web_search": "off" | "firecrawl",       # optional; default "off"
           "description": "..."                      # default ""
         },
         ...
@@ -53,6 +54,15 @@ PROFILES_FILE = CONFIG_DIR / "profiles.json"
 #: the audit log and never exposes a raw provider secret.)
 NETWORK_MODES = ("none", "open", "mediated", "onecli", "hybrid")
 
+#: Web-search backends a profile may enable (D-194). "off" (default) authors no
+#: web config into the cell and the harness's web_search fails closed rather
+#: than fabricating results. "firecrawl" is the contained-rung backend (single
+#: allowlistable endpoint, brokered credential). More backends (e.g. a keyless
+#: open-rung provider, a sidecar) are added here as those rungs ship — the set
+#: is intentionally small so a profile can only name a mode Whizzard actually
+#: wires end-to-end.
+WEB_SEARCH_MODES = ("off", "firecrawl")
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -75,6 +85,12 @@ class Profile:
     memory_swap: str | None = None
     cpus: float | None = None      # fractional CPUs allowed (e.g. 1.5)
     pids_limit: int | None = None  # fork-bomb guard
+    #: Web-search backend for this profile (D-194); one of WEB_SEARCH_MODES.
+    #: "off" (default) = no web config authored into the cell, harness search
+    #: fails closed. The adapter authors the matching Hermes `web.backend` into
+    #: the read-only managed-scope config at launch; the credential is brokered
+    #: host-side (never lands in the cell).
+    web_search: str = "off"
 
     def __post_init__(self) -> None:
         if self.network_mode is None:
@@ -370,6 +386,14 @@ def _parse_profile(name: str, spec: dict) -> Profile:
         error_cls=ProfileConfigError,
     )
 
+    # web_search (D-194): optional; absent → "off". Must name a wired backend.
+    web_search = spec.get("web_search", "off")
+    if web_search not in WEB_SEARCH_MODES:
+        raise ProfileConfigError(
+            f"profile {name!r}: web_search must be one of "
+            f"{', '.join(WEB_SEARCH_MODES)} (got {web_search!r})"
+        )
+
     return Profile(
         name=name,
         network_enabled=network_enabled,
@@ -382,6 +406,7 @@ def _parse_profile(name: str, spec: dict) -> Profile:
         memory_swap=memory_swap,
         cpus=float(cpus) if cpus is not None else None,
         pids_limit=pids_limit,
+        web_search=web_search,
     )
 
 

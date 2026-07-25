@@ -3187,6 +3187,28 @@ The bump required a **build fix**: v0.19.0's dependency tree wants a different `
 
 ---
 
+### D-194: Host-authored read-only cell config via Hermes managed scope; per-profile `web_search`
+
+**Type:** architecture
+
+**Tags:** hermes, safety, profiles
+
+**Door Type:** two-way for the mechanism (managed-scope authoring is additive and removable); one-way-ish for the `web_search` config surface once users build on it.
+
+**Decision:** Whizzard authors the cell's Hermes config **host-side** and delivers it via Hermes's **managed-scope** mechanism — a directory pointed to by `HERMES_MANAGED_DIR` whose `config.yaml` deep-merges *over* the user's config per-leaf and re-wins on **every** config read. Whizzard writes a per-session dir under `STATE_DIR/hermes-managed/<slug>`, bind-mounts it **read-only** into the cell at `/opt/whiz/hermes-managed`, sets `HERMES_MANAGED_DIR`, and removes it at teardown. The file is serialized as **JSON — a valid YAML subset** — so no YAML runtime dependency is added and the fixed structure can't mis-escape (verified: real Hermes 0.19 parses it). Two things get authored: (1) **`mcp_servers.whiz`** always — auto-registering the in-cell Whiz MCP server (`command: python3` — the cell has no `python` alias), which **retires the D-167 manual step**; (2) **`web.backend`** when the profile's new `web_search` field (`WEB_SEARCH_MODES`, currently `off | firecrawl`) is enabled. `web_search` defaults `off`, authoring no web config so the harness fails **closed** (Hermes returns a clean "not configured" error — there is no Whizzard-side fabrication to fix; the earlier "fabrication" was a specific local model hallucinating, out of scope).
+
+**Rationale:** The cell mounts `HERMES_HOME` **read-write** (memories/skills/state), so any config there is agent-editable — the `risk_register` §391 attack (agent poisons its own `mcp_servers`). Managed scope is Hermes's purpose-built answer: root-owned/read-only, re-merged on every read, so the agent cannot override the authored leaves even by rewriting its own `config.yaml`. This is the shared linchpin for the web-search build (all rungs author config the same way) **and** closes two standing items independent of search — §391 and the D-167 manual MCP wiring. Web search itself is model/provider-agnostic by design (Hermes's `web_search` is a client tool routed to a configured backend, identical across Claude/local/other providers — there is no Anthropic server-side path to piggyback, so we build the backend). Backend policy (per [[project-websearch-model-agnostic]]): contained keyed backend = default (single allowlisted endpoint, brokered key, key-required notice); `ddgs` keyless = the easy alternative (open-rung, expanded-security-surface notice). Backend wiring (image client + key brokering + egress allowlist) is Phase C.
+
+**Notes:**
+- Delivery-mechanism alternatives considered and rejected: merging into the rw `HERMES_HOME` (agent-editable, reopens §391); read-only bind-mount of the whole composed `config.yaml` (forces host-composition of the entire config, fights the writable-HERMES_HOME requirement). Managed scope is Hermes-native and per-leaf, so it composes with the user's own config. Confirmed present in the cell's 0.19.0 (`hermes_cli/managed_scope.py`), not just the 0.17.0 host reference.
+- Verified end-to-end by an integration smoke driving the real writer + the real Hermes 0.19 loader (managed config merges; whiz MCP registers; mount is read-only in the cell).
+
+**Source:** conversation 2026-07-24 (web-search build, Phase B; config-loading + web-search-mechanism investigations).
+
+**Status:** active. Retires the D-167 manual-MCP-wiring step; closes `risk_register` §391 for authored leaves.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
