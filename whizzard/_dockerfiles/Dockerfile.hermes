@@ -44,8 +44,19 @@ RUN apt-get update && \
 # Pinned to a full 40-char commit SHA for build determinism (Codex #7): a
 # short ref is theoretically ambiguous and can drift, a full SHA cannot.
 # Bump deliberately + re-run the acceptance smoke (D-189).
-ARG HERMES_REF=e8b9369a9d2df36139a5055cae3ed3c15691e03e
-RUN pip install --no-cache-dir --break-system-packages \
+# Current: release v0.19.0, git tag v2026.7.20 (2026-07-20). NOTE: the repo
+# uses date-based git tags (vYYYY.M.D); "v0.19.0" is the release name in that
+# tag's commit. Prev: e8b9369 (untagged, 2026-05-28).
+#
+# --ignore-installed: v0.19.0's dependency tree wants a different `packaging`
+# than the one Debian ships preinstalled (via apt, without a pip RECORD file),
+# and pip cannot uninstall a no-RECORD distribution — a clean build otherwise
+# fails with `uninstall-no-record-file: Cannot uninstall packaging`. In this
+# single-purpose container (no other system Python user, per the note above)
+# it is safe to let pip install its required versions into site-packages
+# without uninstalling the shadowed system copies.
+ARG HERMES_REF=3ef6bbd201263d354fd83ec55b3c306ded2eb72a
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
     "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
 
 # Anthropic provider SDK. Hermes treats provider packages as optional extras,
