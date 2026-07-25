@@ -4,7 +4,7 @@
 
 **Run powerful agent harnesses inside explicit, temporary, auditable permission boundaries — on your own machine.**
 
-Whizzard wraps an *agent harness* — a tool that drives an LLM through real work (Hermes today; Claude Code, Cursor, and others to follow) — in a hardened, time-bounded Docker sandbox. Inside it, the agent reaches only the files you mounted and the network you allowed. It never holds your model or service credentials; those stay on your machine. And you stay in the loop: capabilities only narrow after launch, any escalation needs your approval, and every session leaves an audit trail you can read back.
+Whizzard wraps an *agent harness* — a tool that drives an LLM through real work (Hermes today; Claude Code, Cursor, and others to follow) — in a hardened, time-bounded Docker sandbox. Inside it, the agent reaches only the files you mounted and the network you allowed. It never holds your model credential — and, with OneCLI, your service tokens either; those stay on your machine. And you stay in the loop: capabilities only narrow after launch, any escalation needs your approval, and every session leaves an audit trail you can read back.
 
 > **Status:** v0.1.0 OSS launch in preparation. Jump to [Quickstart](#quickstart).
 
@@ -50,7 +50,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 ## What you get
 
 - **Filesystem is opt-in.** The agent reaches only the paths you mounted — no parent-directory traversal, symlink, or glob trick reaches your home directory. The mount list *is* the permission model. Closes the whole "an agent ran `find ~ -name '*.pem'`" class.
-- **Credentials never enter the sandbox.** A credential broker on your machine holds your real model key/login and attaches it only when forwarding to the model provider; the sandbox never sees the real value. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected on your machine too. A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
+- **Your model credential never enters the sandbox.** A credential broker on your machine holds your real model key/login and attaches it only when forwarding to the model provider; the sandbox never sees the real value. If you use [OneCLI](https://onecli.sh), *every* service credential (GitHub, Slack, tool APIs) is injected on your machine too; without it, the `native` path still keeps your model key out (service tokens a profile declares are injected — see below). A fully-compromised agent can neither read nor exfiltrate a secret it never holds. → [Credential privacy](#credential-privacy)
 - **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `native` / `onecli` / `hybrid` = on, but outbound is routed so credentials stay out of the sandbox (see [Credential privacy](#credential-privacy)). `off` closes data exfiltration entirely.
 - **The container is hardened.** Non-root user, all Linux capabilities dropped, read-only container root, `no-new-privileges`, Docker socket unreachable. A vulnerable tool the agent invokes gets no root, no host, no escape hatch.
 - **Escalation is one-way, and you decide.** Permissions only narrow after launch. An agent that needs more surfaces a request to a file-mailbox you monitor; you approve or deny. No silent self-upgrade.
@@ -59,7 +59,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 
 ## Credential privacy
 
-**No credential of any kind ever enters the sandbox** — not your model key, not your service tokens. Whatever the agent uses, the real value stays on your machine and is attached to a request only as it leaves the sandbox for its real destination; inside the container there is only a placeholder. A fully-compromised agent cannot read or exfiltrate a secret it never holds.
+**Your model credential never enters the sandbox** — the real key stays on your machine and is attached to a request only as it leaves the sandbox for the model provider; inside the container there is only a placeholder. Service tokens (GitHub, Slack, tool APIs) are kept out too when you use `onecli` or `hybrid`. The zero-dependency `native` path keeps your **model** key out; if a profile declares service tokens (a `secrets:` block, e.g. a platform bot token) those are injected into the sandbox under `native` — choose `onecli`/`hybrid` to keep them out as well. A fully-compromised agent cannot read or exfiltrate a secret it never holds.
 
 You choose **how** credentials are handled, based on how you sign in. Pick one of three — `whiz init` walks you through it, or set it per session with `--credential-handling`:
 
