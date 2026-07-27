@@ -28,6 +28,14 @@ updates:
       - "ci"
     commit-message:
       prefix: "ci"
+    # github/codeql-action ships init + analyze as separate sub-actions that
+    # MUST stay on the same version (a mismatch fails the analyze step with
+    # "Loaded a configuration file for version X, but running version Y").
+    # Grouping keeps both sub-action pins in a single PR so they never split.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
 
   # The bundled execution-image Dockerfiles live under whizzard/_dockerfiles/.
   # Dependabot bumps the digest-pinned base image when a new debian:12-slim
