@@ -513,6 +513,35 @@ expectations.
 **Mitigation roadmap:** decision deferred to v1.0 implementation
 time; currently held open (per `launch_readiness.md`).
 
+### 6.9 Reachable intermediaries as egress bridges
+
+**Risk:** a network policy bounds the *declared* egress surface, not
+the full *reachable* dependency graph. Even a `--network none` cell —
+or one pinned to a single brokered host — can reach the internet
+*indirectly* through an intermediary it is permitted to talk to: a
+package cache or artifact repository, an update service, an internal
+proxy, or Whizzard's own credential / search broker, if that
+intermediary is itself exploitable or misconfigured. "No direct
+internet access" is not equivalent to containment — the July 2026
+OpenAI evaluation-sandbox incident escaped this way, exploiting a
+reachable Artifactory instance rather than any nominal network hole.
+
+**What Whizzard bounds today:** the broker is a single-upstream
+reverse proxy pinned to one host and holds no secret the cell can
+read; time-caps and teardown are enforced host-side, independent of
+the (possibly compromised) cell — a circuit breaker the agent cannot
+disable from inside. These narrow the reachable set but do not model
+its transitive reachability.
+
+**Mitigation roadmap:** out of scope for v0.1.0 as active detection.
+The v1.0 network-allowlist (ROADMAP.md goal 11) shrinks the reachable
+set to explicitly-declared destinations; modeling whether an *allowed*
+destination is itself an egress bridge, and adding a
+"containment-escape attempt" audit event class, are tracked on the
+ROADMAP "Agent-security research track." Provenance: agent-security
+brief 2026-07-31, item 4 (the OpenAI / Hugging Face containment
+incident).
+
 ---
 
 ## 7. References

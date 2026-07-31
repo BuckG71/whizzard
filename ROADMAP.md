@@ -136,6 +136,53 @@ sub-track above.
 
 ---
 
+## Agent-security research track (watch list)
+
+Not committed v1.0 goals — a dated watch list of external work that
+should shape the secure-ingestion and containment direction. Entries
+are captured for provenance and revisited as they mature; see D-197.
+
+A useful framing that organizes this track: Whizzard needs **two
+complementary enforcement loops**, and v0.1.0 substantially ships only
+the first.
+
+- **Execution lifecycle loop** (what v0.1.0 is) — authorize, isolate,
+  observe, narrow-only, terminate on divergence. This is Whizzard's
+  runtime-containment core today.
+- **Artifact lifecycle loop** (future) — scan, quarantine, approve,
+  sign, monitor, rescan, revoke the *tools and skills* an agent loads.
+  Whizzard does no admission scanning of harness-loaded MCP tools or
+  skills in v0.1.0; that surface is the user's responsibility today.
+
+Neither static admission scanning nor runtime mediation is sufficient
+alone — the two loops are complementary.
+
+Inputs on the watch list (2026-07-31 brief):
+
+- **Skill/tool admission scanning** — the two-stage pattern (fast
+  deterministic prefilter → LLM judge on only the flagged windows,
+  quarantine-on-ambiguous, retain scanner evidence) from *SkillGate*
+  (preprint, 2026-07-28) is the most deployable reference for the
+  artifact-lifecycle loop. Feeds a future secure-ingestion capability.
+- **Runtime tool-behavior monitoring** — *MTGuard* (preprint,
+  2026-07-28) argues admission scanning alone is insufficient: compare
+  an MCP tool's observed runtime behavior (network destinations, FS
+  access, subprocesses, credential reads) against its declared profile
+  and require renewed approval on divergence. Feeds the execution-loop
+  side of tool governance and the MCP gateway direction (goal 4).
+- **MCP spec 2026-07-28** — the stateless core, per-request capability
+  metadata, handles/task IDs (treat as bearer credentials unless
+  cryptographically bound), and MCP Apps (server-supplied renderable/
+  interactive content in a privileged channel) change the enforcement
+  boundary. Relevant when Whizzard brokers *third-party* MCP servers or
+  renders MCP-Apps content — not the in-sandbox `whiz` server's surface
+  today. Track the protocol version the `whiz` server targets.
+- **Reachable-graph containment** — model transitive reachability, not
+  just nominal network policy, and add a containment-escape audit event
+  class (threat_model §6.9, from the OpenAI / Hugging Face incident).
+
+---
+
 ## How sequencing will evolve
 
 Some of the v1.0 goals are loosely coupled; others share architecture.
