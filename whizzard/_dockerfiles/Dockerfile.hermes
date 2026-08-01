@@ -1,1 +1,83 @@
-IyBXaGl6emFyZCBleGVjdXRpb24gY2VsbCB3aXRoIEhlcm1lcyBwcmUtaW5zdGFsbGVkLgojCiMgRGVyaXZlZCBmcm9tIHdoaXp6YXJkLWJhc2U6bGF0ZXN0IChTdGFnZSAxIGhhcmRlbmVkIGJhc2UpLiBBZGRzIFB5dGhvbiAzLjExKwojIGFuZCBpbnN0YWxscyBIZXJtZXMgdmlhIHBpcCBmcm9tIHRoZSBOb3VzUmVzZWFyY2gvaGVybWVzLWFnZW50IEdpdEh1YiByZXBvCiMgYXQgYSBwaW5uZWQgY29tbWl0LiBCdWlsZCB3aXRoOgojCiMgICBkb2NrZXIgYnVpbGQgLWYgd2hpenphcmQvX2RvY2tlcmZpbGVzL0RvY2tlcmZpbGUuaGVybWVzIC10IHdoaXp6YXJkLWhlcm1lczpsYXRlc3QgLgojCiMgVXNlZCBmb3IgU3RhZ2UgOCBNNyBtYW51YWwgc21va2UuIFRoZSBwaW5uZWQgSEVSTUVTX1JFRiBtYXRjaGVzIHRoZQojIG1haW50YWluZXIncyBob3N0IHZlcnNpb24gc28gdGhlIHNtb2tlIHZhbGlkYXRlcyBhZ2FpbnN0IHRoZQojIGtub3duLWdvb2QgSGVybWVzIHNoYXBlLgojCiMgVGhpcyBpbWFnZSBpcyB0aGUgTVZQLXNoYXBlIGRlcml2ZWQgdGFyZ2V0OyBTdGFnZSA4IE04IChwYWNrYWdpbmcgY2xvc2VvdXQpCiMgd2lsbCBmb3JtYWxpemUgdGhlIEhlcm1lcyBkaXN0cmlidXRpb24gcGluIHZpYSBweXByb2plY3QudG9tbCBleHRyYXMuCiMKIyBBbHNvIGNhcnJpZXMgdGhlIFdoaXogaW4tY2VsbCBNQ1AgY29vcGVyYXRpb24gbGF5ZXIgcGVyIEQtMTY3OiBgbWNwX3NlcnZlci5weWAKIyBpcyBDT1BZJ2QgaW4gYXMgYSBzdGFuZGFsb25lIHNjcmlwdCBhbmQgdGhlIGBtY3BgIFNESyBpcyBpbnN0YWxsZWQsIHNvIGEKIyBjb250YWluZWQgSGVybWVzIGNhbiBydW4gdGhlIGluLWNlbGwgV2hpeiBNQ1Agc2VydmVyLiBUaGUgZnVsbCBgd2hpenphcmRgCiMgcGFja2FnZSBpcyBkZWxpYmVyYXRlbHkgTk9UIGluc3RhbGxlZCAtLSBpdCB3b3VsZCBleHBvc2UgdGhlIHBvbGljeS1sYXllcgojIGltcGxlbWVudGF0aW9uIChzYWZldHkgLyBlbmZvcmNlbWVudCAvIGFkanVzdCkgdG8gYSBjb21wcm9taXNlZCBhZ2VudC4KCkZST00gd2hpenphcmQtYmFzZTpsYXRlc3QKClVTRVIgcm9vdAoKIyBTeXN0ZW0gZGVwZW5kZW5jaWVzLiBUcmltbWVkIGZyb20gSGVybWVzJ3Mgb3duIERvY2tlcmZpbGUgdG8gdGhlIG1pbmltdW0KIyBleHBlY3RlZCBmb3IgYGhlcm1lcyBnYXRld2F5IHJ1bmAuIEFkZCBtb3JlIGhlcmUgKG5vZGVqcywgbnBtLCBmZm1wZWcsCiMgcmlwZ3JlcCkgaWYgc3BlY2lmaWMgSGVybWVzIGZlYXR1cmVzIHJlcXVpcmUgdGhlbSBhdCBydW50aW1lLgpSVU4gYXB0LWdldCB1cGRhdGUgJiYgXAogICAgYXB0LWdldCBpbnN0YWxsIC15IC0tbm8taW5zdGFsbC1yZWNvbW1lbmRzIFwKICAgICAgICBidWlsZC1lc3NlbnRpYWwgXAogICAgICAgIGdjYyBcCiAgICAgICAgZ2l0IFwKICAgICAgICBsaWJmZmktZGV2IFwKICAgICAgICBweXRob24zIFwKICAgICAgICBweXRob24zLWRldiBcCiAgICAgICAgcHl0aG9uMy1waXAgXAogICAgICAgIHB5dGhvbjMtdmVudiBcCiAgICAmJiBybSAtcmYgL3Zhci9saWIvYXB0L2xpc3RzLyoKCiMgSW5zdGFsbCBIZXJtZXMgdmlhIHBpcCBmcm9tIEdpdEh1YiBhdCBhIHBpbm5lZCBjb21taXQuCiMgLS1icmVhay1zeXN0ZW0tcGFja2FnZXM6IFBFUCA2NjggbWFya2VyIG9uIERlYmlhbiAxMisgYWNjZXB0YWJsZSBpbiBhCiMgc2luZ2xlLXB1cnBvc2UgY29udGFpbmVyIHdoZXJlIHRoZXJlIGlzIG5vIG90aGVyIHN5c3RlbSBQeXRob24gdXNlci4KIyBQaW5uZWQgdG8gYSBmdWxsIDQwLWNoYXIgY29tbWl0IFNIQSBmb3IgYnVpbGQgZGV0ZXJtaW5pc20gKENvZGV4ICM3KTogYQojIHNob3J0IHJlZiBpcyB0aGVvcmV0aWNhbGx5IGFtYmlndW91cyBhbmQgY2FuIGRyaWZ0LCBhIGZ1bGwgU0hBIGNhbm5vdC4KIyBCdW1wIGRlbGliZXJhdGVseSArIHJlLXJ1biB0aGUgYWNjZXB0YW5jZSBzbW9rZSAoRC0xODkpLgojIEN1cnJlbnQ6IHJlbGVhc2UgdjAuMTkuMCwgZ2l0IHRhZyB2MjAyNi43LjIwICgyMDI2LTA3LTIwKS4gTk9URTogdGhlIHJlcG8KIyB1c2VzIGRhdGUtYmFzZWQgZ2l0IHRhZ3MgKHZZWVlZLk0uRCk7ICJ2MC4xOS4wIiBpcyB0aGUgcmVsZWFzZSBuYW1lIGluIHRoYXQKIyB0YWcncyBjb21taXQuIFByZXY6IGU4YjkzNjkgKHVudGFnZ2VkLCAyMDI2LTA1LTI4KS4KIwojIC0taWdub3JlLWluc3RhbGxlZDogdjAuMTkuMCdzIGRlcGVuZGVuY3kgdHJlZSB3YW50cyBhIGRpZmZlcmVudCBgcGFja2FnaW5nYAojIHRoYW4gdGhlIG9uZSBEZWJpYW4gc2hpcHMgcHJlaW5zdGFsbGVkICh2aWEgYXB0LCB3aXRob3V0IGEgcGlwIFJFQ09SRCBmaWxlKSwKIyBhbmQgcGlwIGNhbm5vdCB1bmluc3RhbGwgYSBuby1SRUNPUkQgZGlzdHJpYnV0aW9uIC0tIGEgY2xlYW4gYnVpbGQgb3RoZXJ3aXNlCiMgZmFpbHMgd2l0aCBgdW5pbnN0YWxsLW5vLXJlY29yZC1maWxlOiBDYW5ub3QgdW5pbnN0YWxsIHBhY2thZ2luZ2AuIEluIHRoaXMKIyBzaW5nbGUtcHVycG9zZSBjb250YWluZXIgKG5vIG90aGVyIHN5c3RlbSBQeXRob24gdXNlciwgcGVyIHRoZSBub3RlIGFib3ZlKQojIGl0IGlzIHNhZmUgdG8gbGV0IHBpcCBpbnN0YWxsIGl0cyByZXF1aXJlZCB2ZXJzaW9ucyBpbnRvIHNpdGUtcGFja2FnZXMKIyB3aXRob3V0IHVuaW5zdGFsbGluZyB0aGUgc2hhZG93ZWQgc3lzdGVtIGNvcGllcy4KQVJHIEhFUk1FU19SRUY9M2VmNmJiZDIwMTI2M2QzNTRmZDgzZWM1NWIzYzMwNmRlZDJlYjcyYQpSVU4gcGlwIGluc3RhbGwgLS1uby1jYWNoZS1kaXIgLS1icmVhay1zeXN0ZW0tcGFja2FnZXMgLS1pZ25vcmUtaW5zdGFsbGVkIFwKICAgICJnaXQraHR0cHM6Ly9naXRodWIuY29tL05vdXNSZXNlYXJjaC9oZXJtZXMtYWdlbnQuZ2l0QCR7SEVSTUVTX1JFRn0iCgojIEFudGhyb3BpYyBwcm92aWRlciBTREsuIEhlcm1lcyB0cmVhdHMgcHJvdmlkZXIgcGFja2FnZXMgYXMgb3B0aW9uYWwgZXh0cmFzLAojIHNvIHRoZSBiYXJlIGluc3RhbGwgYWJvdmUgZG9lcyBub3QgcHVsbCBpdCBpbiAtLSB3aXRob3V0IGl0IHRoZSBjZWxsIGNhbid0CiMgdGFsayB0byBDbGF1ZGUgKHRoZSBkZWZhdWx0L3JlY29tbWVuZGVkIG1vZGVsKS4gUGlubmVkIGZsb29yIG1hdGNoZXMgSGVybWVzJ3MKIyBvd24gcmVxdWlyZW1lbnQuIE90aGVyIHByb3ZpZGVycycgU0RLcyB3b3VsZCBiZSBhZGRlZCB0aGUgc2FtZSB3YXkuClJVTiBwaXAgaW5zdGFsbCAtLW5vLWNhY2hlLWRpciAtLWJyZWFrLXN5c3RlbS1wYWNrYWdlcyAiYW50aHJvcGljPj0wLjM5LjAiCgojIFdoaXogaW4tY2VsbCBNQ1AgY29vcGVyYXRpb24gbGF5ZXIgKEQtMTY3KS4KIyAtIGBtY3BgIFNESyBzbyBtY3Bfc2VydmVyLnB5J3MgYEZhc3RNQ1BgIGltcG9ydCB3b3JrcyBpbnNpZGUgdGhlIGNlbGwuCiMgLSBgbWNwX3NlcnZlci5weWAgYXMgYSBzdGFuZGFsb25lIHNjcmlwdC4gU2VsZi1jb250YWluZWQgKHN0ZGxpYiArIGxhenkKIyAgIG1jcCk7IGRvZXMgbm90IHJlcXVpcmUgdGhlIHdoaXp6YXJkIHBhY2thZ2UuIFRoZSBoYXJuZXNzJ3MgTUNQLWNsaWVudAojICAgY29uZmlnIGludm9rZXMgYHB5dGhvbiAvb3B0L3doaXovbWNwX3NlcnZlci5weWAgd2l0aCB0aGUgV0hJWl8qIGVudiB2YXJzCiMgICB0aGUgYWRhcHRlcidzIGBtY3BfZW52YCBzZXRzLgojIFBpbm5lZCA8Mi4wOiBtY3AgMi4wLjAgKDIwMjYtMDctMjgpIGlzIGEgYnJlYWtpbmcgcmV3b3JrIHRoYXQgZHJvcHMgdGhlCiMgYG1jcC5zZXJ2ZXIuZmFzdG1jcGAgbW9kdWxlIG1jcF9zZXJ2ZXIucHkgaW1wb3J0cyAoRmFzdE1DUCBtb3ZlZCBvdXQgdG8KIyB0aGUgc3RhbmRhbG9uZSBgZmFzdG1jcGAgcGFja2FnZSkuClJVTiBwaXAgaW5zdGFsbCAtLW5vLWNhY2hlLWRpciAtLWJyZWFrLXN5c3RlbS1wYWNrYWdlcyAibWNwPT0xLjI5LjAiCkNPUFkgd2hpenphcmQvbWNwX3NlcnZlci5weSAvb3B0L3doaXovbWNwX3NlcnZlci5weQoKVVNFUiB3aGl6emFyZApXT1JLRElSIC9ob21lL3doaXp6YXJkCgpDTUQgWyIvYmluL2Jhc2giXQo=
+# Whizzard execution cell with Hermes pre-installed.
+#
+# Derived from whizzard-base:latest (Stage 1 hardened base). Adds Python 3.11+
+# and installs Hermes via pip from the NousResearch/hermes-agent GitHub repo
+# at a pinned commit. Build with:
+#
+#   docker build -f whizzard/_dockerfiles/Dockerfile.hermes -t whizzard-hermes:latest .
+#
+# Used for Stage 8 M7 manual smoke. The pinned HERMES_REF matches the
+# maintainer's host version so the smoke validates against the
+# known-good Hermes shape.
+#
+# This image is the MVP-shape derived target; Stage 8 M8 (packaging closeout)
+# will formalize the Hermes distribution pin via pyproject.toml extras.
+#
+# Also carries the Whiz in-cell MCP cooperation layer per D-167: `mcp_server.py`
+# is COPY'd in as a standalone script and the `mcp` SDK is installed, so a
+# contained Hermes can run the in-cell Whiz MCP server. The full `whizzard`
+# package is deliberately NOT installed — it would expose the policy-layer
+# implementation (safety / enforcement / adjust) to a compromised agent.
+
+FROM whizzard-base:latest
+
+USER root
+
+# System dependencies. Trimmed from Hermes's own Dockerfile to the minimum
+# expected for `hermes gateway run`. Add more here (nodejs, npm, ffmpeg,
+# ripgrep) if specific Hermes features require them at runtime.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        git \
+        libffi-dev \
+        python3 \
+        python3-dev \
+        python3-pip \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Hermes via pip from GitHub at a pinned commit.
+# --break-system-packages: PEP 668 marker on Debian 12+; acceptable in a
+# single-purpose container where there is no other system Python user.
+# Pinned to a full 40-char commit SHA for build determinism (Codex #7): a
+# short ref is theoretically ambiguous and can drift, a full SHA cannot.
+# Bump deliberately + re-run the acceptance smoke (D-189).
+# Current: release v0.19.0, git tag v2026.7.20 (2026-07-20). NOTE: the repo
+# uses date-based git tags (vYYYY.M.D); "v0.19.0" is the release name in that
+# tag's commit. Prev: e8b9369 (untagged, 2026-05-28).
+#
+# --ignore-installed: v0.19.0's dependency tree wants a different `packaging`
+# than the one Debian ships preinstalled (via apt, without a pip RECORD file),
+# and pip cannot uninstall a no-RECORD distribution — a clean build otherwise
+# fails with `uninstall-no-record-file: Cannot uninstall packaging`. In this
+# single-purpose container (no other system Python user, per the note above)
+# it is safe to let pip install its required versions into site-packages
+# without uninstalling the shadowed system copies.
+ARG HERMES_REF=3ef6bbd201263d354fd83ec55b3c306ded2eb72a
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
+    "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
+
+# Anthropic provider SDK. Hermes treats provider packages as optional extras,
+# so the bare install above does not pull it in — without it the cell can't
+# talk to Claude (the default/recommended model). Pinned floor matches Hermes's
+# own requirement. Other providers' SDKs would be added the same way.
+RUN pip install --no-cache-dir --break-system-packages "anthropic>=0.39.0"
+
+# Whiz in-cell MCP cooperation layer (D-167).
+# - `mcp` SDK so mcp_server.py's `FastMCP` import works inside the cell.
+# - `mcp_server.py` as a standalone script. Self-contained (stdlib + lazy
+#   mcp); does not require the whizzard package. The harness's MCP-client
+#   config invokes `python /opt/whiz/mcp_server.py` with the WHIZ_* env vars
+#   the adapter's `mcp_env` sets.
+# Pinned <2.0: mcp 2.0.0 (2026-07-28) is a breaking rework that drops the
+# `mcp.server.fastmcp` module mcp_server.py imports (FastMCP moved out to
+# the standalone `fastmcp` package). 1.29.0 is the last 1.x release.
+RUN pip install --no-cache-dir --break-system-packages "mcp==1.29.0"
+COPY whizzard/mcp_server.py /opt/whiz/mcp_server.py
+
+USER whizzard
+WORKDIR /home/whizzard
+
+CMD ["/bin/bash"]
