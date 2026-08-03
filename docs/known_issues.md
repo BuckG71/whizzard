@@ -25,8 +25,12 @@ install resolved to 2.0.0, so the MCP server failed to start
 (`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`). `main` looked
 green only because its last CI predated the release; the break was latent.
 
-**Fix (shipped):** pin `mcp>=1.0,<2`. Verified: 1.29.0 (the last 1.x) still
-exposes `mcp.server.fastmcp` / `FastMCP`; 2.0.0 does not.
+**Fix (shipped):** pin `mcp>=1.0,<2` in **both** install sites — `pyproject.toml`
+(host) *and* `whizzard/_dockerfiles/Dockerfile.hermes` (the cell image, where the
+whiz MCP server actually runs). The host pin alone is insufficient: the cell
+installs `mcp` independently, so the cell is where the crash lands. Verified:
+1.29.0 (the last 1.x) still exposes `mcp.server.fastmcp` / `FastMCP`; 2.0.0 does
+not. Keep the two pins in lockstep.
 
 **Deferred:** migrate the whiz MCP server to the mcp 2.x API to move off the 1.x
 line — tracked on the ROADMAP "Agent-security research track" (MCP 2026-07-28
