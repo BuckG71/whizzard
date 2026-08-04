@@ -16,6 +16,27 @@ Categories:
 
 ## Functional gaps
 
+### `mcp` was unpinned above 2.0 — the 2026-07-28 SDK rework broke the whiz MCP server (fixed by pin)
+`whizzard/mcp_server.py` imports `from mcp.server.fastmcp import FastMCP` — the
+in-sandbox `whiz` cooperation-layer server. The dependency was `mcp>=1.0`
+(unbounded), and **mcp 2.0.0** (released 2026-07-28 alongside the 2026-07-28 MCP
+spec, "a major rework of the SDK") **removed `mcp.server.fastmcp`**. Any fresh
+install resolved to 2.0.0, so the MCP server failed to start
+(`ModuleNotFoundError: No module named 'mcp.server.fastmcp'`). `main` looked
+green only because its last CI predated the release; the break was latent.
+
+**Fix (shipped):** pin `mcp>=1.0,<2` in **both** install sites — `pyproject.toml`
+(host) *and* `whizzard/_dockerfiles/Dockerfile.hermes` (the cell image, where the
+whiz MCP server actually runs). The host pin alone is insufficient: the cell
+installs `mcp` independently, so the cell is where the crash lands. Verified:
+1.29.0 (the last 1.x) still exposes `mcp.server.fastmcp` / `FastMCP`; 2.0.0 does
+not. Keep the two pins in lockstep.
+
+**Deferred:** migrate the whiz MCP server to the mcp 2.x API to move off the 1.x
+line — tracked on the ROADMAP "Agent-security research track" (MCP 2026-07-28
+entry). Until then, hold Dependabot `mcp` 2.x bumps; the daily CI monitor will
+catch a regression.
+
 ### Windows support is unverified end-to-end (not yet run on a real Windows box)
 The codebase was developed and tested on macOS, with Ubuntu + macOS CI.
 Addressed on the `windows-portability` branch:
