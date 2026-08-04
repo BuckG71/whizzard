@@ -71,7 +71,9 @@ RUN pip install --no-cache-dir --break-system-packages "anthropic>=0.39.0"
 #   mcp); does not require the whizzard package. The harness's MCP-client
 #   config invokes `python /opt/whiz/mcp_server.py` with the WHIZ_* env vars
 #   the adapter's `mcp_env` sets.
-RUN pip install --no-cache-dir --break-system-packages mcp
+# Pin <2 to match pyproject: mcp 2.0.0 (2026-07-28) removed `mcp.server.fastmcp`
+# that mcp_server.py imports. Keep in lockstep with the host pin.
+RUN pip install --no-cache-dir --break-system-packages "mcp>=1.0,<2"
 COPY whizzard/mcp_server.py /opt/whiz/mcp_server.py
 
 USER whizzard
