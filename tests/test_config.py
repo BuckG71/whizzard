@@ -490,6 +490,17 @@ def test_web_search_firecrawl_parses(tmp_path: Path):
     assert load_profiles(f)["web"].web_search == "firecrawl"
 
 
+def test_web_search_ddgs_parses(tmp_path: Path):
+    f = _write_profiles_json(tmp_path / "profiles.json", {
+        "web": {
+            "network_enabled": True,
+            "duration_seconds": 600,
+            "web_search": "ddgs",
+        },
+    })
+    assert load_profiles(f)["web"].web_search == "ddgs"
+
+
 def test_web_search_absent_defaults_off(tmp_path: Path):
     f = _write_profiles_json(tmp_path / "profiles.json", {
         "bare": {"network_enabled": False, "duration_seconds": 600},
@@ -497,7 +508,7 @@ def test_web_search_absent_defaults_off(tmp_path: Path):
     assert load_profiles(f)["bare"].web_search == "off"
 
 
-@pytest.mark.parametrize("bad", ["ddgs", "on", "true", "firecrawl ", "FIRECRAWL", ""])
+@pytest.mark.parametrize("bad", ["exa", "on", "true", "firecrawl ", "FIRECRAWL", ""])
 def test_web_search_unwired_value_rejected(tmp_path: Path, bad):
     # Only modes Whizzard wires end-to-end are accepted — a profile can't name
     # a backend that isn't actually built (fail at config, not at launch).

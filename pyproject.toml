@@ -93,6 +93,7 @@ include = ["whizzard*"]
 "whizzard._dockerfiles" = [
     "Dockerfile",
     "Dockerfile.hermes",
+    "Dockerfile.hermes-search",
     "Dockerfile.broker",
     "broker/proxy.py",
     "Dockerfile.onecli-shim",

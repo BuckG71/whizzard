@@ -16,6 +16,13 @@ WHIZZARD_IMAGE = os.environ.get("WHIZZARD_IMAGE", "whizzard-base:latest")
 WHIZZARD_HERMES_IMAGE = os.environ.get(
     "WHIZZARD_HERMES_IMAGE", "whizzard-hermes:latest"
 )
+# Search-enabled Hermes cell (D-194 web_search; Phase C). Derived FROM the
+# hermes image with web-search client libs baked in (firecrawl-py + ddgs) —
+# an opt-in layer used only when a profile enables web search, so non-search
+# cells stay lean. See whizzard/_dockerfiles/Dockerfile.hermes-search.
+WHIZZARD_HERMES_SEARCH_IMAGE = os.environ.get(
+    "WHIZZARD_HERMES_SEARCH_IMAGE", "whizzard-hermes-search:latest"
+)
 # Credential-broker sidecar image (bar C / D-184).
 WHIZZARD_BROKER_IMAGE = os.environ.get(
     "WHIZZARD_BROKER_IMAGE", "whizzard-broker:latest"

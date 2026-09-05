@@ -93,6 +93,28 @@ class OneCLIContext:
     ca_host_path: str  # host path to the gateway CA cert (mounted into the cell)
 
 
+# Worthless value handed to the cell in place of the real Firecrawl key when a
+# session runs contained web search (D-194 Phase C). The real key lives only on
+# the search broker sidecar.
+SEARCH_PLACEHOLDER = "whiz-search-placeholder-not-a-real-key"
+# In-cell env the Hermes firecrawl backend reads: the base URL of the search
+# API (pointed at the broker, NOT api.firecrawl.dev) and its key (a placeholder
+# — the broker swaps in the real one).
+_FIRECRAWL_URL_ENV = "FIRECRAWL_API_URL"
+_FIRECRAWL_KEY_ENV = "FIRECRAWL_API_KEY"
+
+
+@dataclass(frozen=True)
+class SearchContext:
+    """Set on the adapter (by _perform_launch) for a contained-web-search launch
+    (D-194 Phase C). Points the harness's firecrawl backend at the search broker
+    (on the cell's internal net) and hands it a placeholder key; the real key
+    lives only on the broker, which forwards to api.firecrawl.dev."""
+
+    base_url: str  # e.g. http://whiz-search-broker-<sid>:8080
+    placeholder: str = SEARCH_PLACEHOLDER
+
+
 # Bare `hermes` drops the user into Hermes's interactive terminal chat — the
 # default cell invocation (D-181, amending D-88). Gateway mode (a messaging-
 # platform daemon that needs platform config and ignores stdin) is NOT the
@@ -640,6 +662,14 @@ class HermesAdapter:
             # with the placeholder; drop it from the credential-scrub set since
             # what the cell holds is no longer a real secret.
             self._credential_sources.pop(mediation.secret_name, None)
+        # D-194 Phase C: contained web search. Point the firecrawl backend at
+        # the search broker (a second broker instance on the cell's internal
+        # net) and hand it a placeholder key; the broker injects the real
+        # Firecrawl key and is the cell's only route to api.firecrawl.dev.
+        search = getattr(self, "search", None)
+        if search is not None:
+            env[_FIRECRAWL_URL_ENV] = search.base_url
+            env[_FIRECRAWL_KEY_ENV] = search.placeholder
         # onecli mode (D-187): route all egress through the OneCLI gateway,
         # which injects every configured credential host-side. Strip ALL fetched
         # secrets from the cell env (the cell holds none) and set only the proxy
@@ -659,11 +689,21 @@ class HermesAdapter:
             # the OneCLI proxy — exempt the broker host via NO_PROXY. The broker
             # then injects the model credential (incl. subscription-OAuth's two
             # headers, which OneCLI can't); OneCLI handles every other service.
+            # The search broker (D-194) is on the same internal net, so it must
+            # be exempted too — otherwise the cell's firecrawl call would be
+            # routed out through the OneCLI proxy instead of hitting the broker.
             if mediation is not None:
+                no_proxy_hosts: list[str] = []
                 broker_host = urlparse(mediation.base_url).hostname or ""
                 if broker_host:
-                    env["NO_PROXY"] = broker_host
-                    env["no_proxy"] = broker_host
+                    no_proxy_hosts.append(broker_host)
+                if search is not None:
+                    search_host = urlparse(search.base_url).hostname or ""
+                    if search_host:
+                        no_proxy_hosts.append(search_host)
+                if no_proxy_hosts:
+                    env["NO_PROXY"] = ",".join(no_proxy_hosts)
+                    env["no_proxy"] = ",".join(no_proxy_hosts)
         # D-194: point Hermes at the read-only managed-scope dir (mounted by
         # container_mounts) so its authored leaves win over the agent's config.
         if getattr(self, "session_id", None) is not None:
