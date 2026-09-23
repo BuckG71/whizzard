@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whizzard — Senior Architecture Review</title>
+<!-- Self-contained: no external fonts/JS/CSS. Opens by double-click, works offline.
+     Matches the house style of docs/reference/architecture-at-a-glance.html. -->
+<style>
+  :root{
+    --bg:#0e1014; --panel:#161922; --panel2:#1b1f29; --ink:#eef1f6; --muted:#a6afbe;
+    --faint:#6f7a8c; --line:#262b36; --line2:#313847; --accent:#8b85ff;
+    --crit:#f87171; --crit-bg:#2a1214; --crit-line:#7f2d33;
+    --warn:#e0a020; --warn-bg:#241d0d; --warn-line:#7a5c16;
+    --info:#3b82f6; --info-bg:#0e1a30; --info-line:#2c4f86;
+    --ok:#34d399; --ok-bg:#08221e; --ok-line:#1d6b57;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1100px 560px at 50% -8%,#191d28,transparent 62%),var(--bg);
+    color:var(--ink);font-family:var(--sans);line-height:1.58;font-size:15px;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+  code,.mono{font-family:var(--mono)}
+  code{background:#1c212d;padding:.08em .42em;border-radius:5px;color:#cdd5e3;font-size:.87em}
+  a{color:var(--accent)}
+  h1,h2,h3{letter-spacing:-.018em;text-wrap:balance}
+
+  header.hero{padding:64px 0 22px}
+  .badge{display:inline-block;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);border:1px solid #3a3570;background:#181630;border-radius:999px;
+    padding:.34em .9em;margin-bottom:1.3rem;font-weight:500}
+  header.hero h1{font-size:2.6rem;margin:.1rem 0 .7rem;font-weight:700;line-height:1.06}
+  header.hero p.lead{color:var(--muted);font-size:1.06rem;max-width:720px;margin:0;text-wrap:pretty}
+  .meta{color:var(--faint);font-size:.8rem;margin-top:1.4rem;font-family:var(--mono)}
+
+  nav.toc{display:flex;flex-wrap:wrap;gap:.5rem;margin:26px 0 8px;
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0}
+  nav.toc a{font-size:.85rem;text-decoration:none;color:var(--muted);border:1px solid var(--line2);
+    border-radius:999px;padding:.3em .85em;transition:.15s}
+  nav.toc a:hover{color:var(--ink);border-color:var(--accent);background:#181630}
+
+  section{margin:52px 0;scroll-margin-top:20px}
+  .eyebrow{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin-bottom:.35rem}
+  h2.t{font-size:1.55rem;margin:.1rem 0 1rem;font-weight:600}
+  h3{font-size:1.05rem;margin:1.8rem 0 .5rem;font-weight:600}
+
+  .verdict{background:linear-gradient(100deg,var(--info-bg),#1a1430);
+    border:1px solid var(--line2);border-radius:16px;padding:24px 26px;margin:22px 0}
+  .verdict p{margin:0 0 .85rem}
+  .verdict p:last-child{margin-bottom:0}
+  .verdict strong{color:#fff}
+
+  .scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:22px 0}
+  .score{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .score .lbl{font-size:.74rem;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin-bottom:.45rem}
+  .score .val{font-size:1.5rem;font-weight:700;line-height:1.1}
+  .score .sub{font-size:.82rem;color:var(--muted);margin-top:.3rem}
+  .g{color:var(--ok)} .y{color:var(--warn)} .r{color:var(--crit)}
+
+  .f{border:1px solid var(--line2);border-radius:13px;background:var(--panel);
+    margin:16px 0;overflow:hidden}
+  .f > summary{cursor:pointer;padding:15px 18px;display:flex;gap:12px;align-items:flex-start;
+    list-style:none;transition:.15s}
+  .f > summary::-webkit-details-marker{display:none}
+  .f > summary:hover{background:var(--panel2)}
+  .f[open] > summary{border-bottom:1px solid var(--line)}
+  .sev{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+    border-radius:5px;padding:.3em .55em;white-space:nowrap;flex-shrink:0;margin-top:.15rem;font-weight:600}
+  .sev.c{background:var(--crit-bg);color:var(--crit);border:1px solid var(--crit-line)}
+  .sev.w{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .sev.i{background:var(--info-bg);color:#8fb6f5;border:1px solid var(--info-line)}
+  .f summary .ttl{font-weight:600;flex:1}
+  .f summary .ttl .where{display:block;font-family:var(--mono);font-size:.78rem;
+    color:var(--faint);font-weight:400;margin-top:.25rem}
+  .f .body{padding:6px 18px 18px 18px;color:var(--muted)}
+  .f .body p{margin:.75rem 0}
+  .f .body strong{color:var(--ink)}
+  .f .body ul{margin:.6rem 0;padding-left:1.2rem}
+  .f .body li{margin:.3rem 0}
+  .fix{border-left:2px solid var(--ok);background:var(--ok-bg);padding:.7rem 1rem;
+    border-radius:0 8px 8px 0;margin-top:.9rem}
+  .fix b{color:var(--ok);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;
+    font-family:var(--mono);display:block;margin-bottom:.3rem}
+
+  pre{background:#11141c;border:1px solid var(--line);border-radius:10px;padding:13px 15px;
+    overflow-x:auto;font-family:var(--mono);font-size:.82rem;color:#cdd5e3;line-height:1.5;margin:.8rem 0}
+  pre .c{color:var(--faint)} pre .r{color:var(--crit)} pre .g{color:var(--ok)}
+
+  table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.89rem}
+  th{text-align:left;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);font-weight:500;padding:8px 10px;
+    border-bottom:1px solid var(--line2)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--muted)}
+  td:first-child{color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+
+  .good{background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:13px;padding:18px 22px}
+  .good ul{margin:.5rem 0 0;padding-left:1.15rem}
+  .good li{margin:.45rem 0;color:var(--muted)}
+  .good li b{color:var(--ink);font-weight:600}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.cols{grid-template-columns:1fr}header.hero h1{font-size:2rem}}
+
+  .tree{font-family:var(--mono);font-size:.82rem;line-height:1.65;color:var(--muted);
+    background:#11141c;border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto}
+  .tree .n{color:var(--accent)} .tree .cm{color:var(--faint)}
+
+  footer{border-top:1px solid var(--line);margin-top:60px;padding:24px 0 60px;
+    color:var(--faint);font-size:.83rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <span class="badge">Architecture &amp; Code Review</span>
+  <h1>Whizzard</h1>
+  <p class="lead">A senior-engineer read of architectural cohesion, file-tree organisation and code
+  quality at <code>v0.1.0</code>. The short version: the engineering discipline here is well above
+  what a solo pre-1.0 project normally shows — and the single most important rule the architecture
+  states about itself is the one the code breaks.</p>
+  <div class="meta">reviewed 2026-09-23 · commit 2712fa5 · 4,635 stmts / 863 tests / 83% cov · ruff + mypy clean</div>
+</header>
+
+<nav class="toc">
+  <a href="#verdict">Verdict</a>
+  <a href="#cohesion">Architectural cohesion</a>
+  <a href="#tree">File tree</a>
+  <a href="#quality">Code quality</a>
+  <a href="#good">What's genuinely good</a>
+  <a href="#plan">Sequenced plan</a>
+</nav>
+
+<section id="verdict">
+  <div class="eyebrow">Bottom line</div>
+  <h2 class="t">Verdict</h2>
+  <div class="verdict">
+    <p><strong>Ship it, then pay down one structural debt before the second harness lands.</strong>
+    Hygiene is top-decile: clean ruff and mypy, 863 fast tests in 13s, digest-pinned base images,
+    SHA-pinned CI actions, least-privilege workflow tokens, a supply-chain job, and a test suite that
+    locks <em>invariants</em> (dry-run/real-launch argv parity, allowlist-not-denylist for agent-initiated
+    changes) rather than just lines. Very little of this repo is accidental.</p>
+
+    <p><strong>The systemic problem is that harness-neutrality is aspirational, not enforced.</strong>
+    <code>docs/architecture.md</code> calls it "the most important architectural rule" and an
+    "architectural constant" that "cannot be relaxed." It is currently violated in eight core modules,
+    including the launch path, the credential broker and the bundled config defaults. This is cheap to
+    fix today and expensive the moment a second adapter exists — which is exactly the v1.0 plan.</p>
+
+    <p><strong>The second-order risk is process weight, not code.</strong> 6,000 lines of docs against
+    9,200 lines of source, with 253 <code>D-NNN</code>, 131 <code>F-X-NN</code> and 107 <code>Stage N</code>
+    references embedded in comments. The decision log earns its keep; the review-finding IDs and stage
+    numbers do not — 131 of them resolve to nothing a reader can look up.</p>
+  </div>
+
+  <div class="scores">
+    <div class="score"><div class="lbl">Cohesion</div><div class="val y">Compromised</div>
+      <div class="sub">Layer rule stated, not enforced; Hermes in 8 core modules</div></div>
+    <div class="score"><div class="lbl">File tree</div><div class="val y">Flat</div>
+      <div class="sub">20 top-level modules, no layer boundary; two 1000+ line files</div></div>
+    <div class="score"><div class="lbl">Code quality</div><div class="val g">Strong</div>
+      <div class="sub">Careful trust boundaries; localised defects, no rot</div></div>
+    <div class="score"><div class="lbl">Test &amp; CI</div><div class="val g">Excellent</div>
+      <div class="sub">Invariant tests, 3-OS matrix, supply-chain gate</div></div>
+    <div class="score"><div class="lbl">Docs</div><div class="val g">Exceptional</div>
+      <div class="sub">Validated decision log; honest known-issues register</div></div>
+    <div class="score"><div class="lbl">Risk-weighted coverage</div><div class="val r">Inverted</div>
+      <div class="sub">Broker 36%, launch 64% — lowest where stakes are highest</div></div>
+  </div>
+</section>
+
+<section id="cohesion">
+  <div class="eyebrow">Finding group 1</div>
+  <h2 class="t">Architectural cohesion</h2>
+  <p style="color:var(--muted);max-width:760px">The three-layer model (core / adapter / backend) is
+  the right decomposition for this problem and the control-layering write-up (enforcement /
+  behavioural / cooperation) is genuinely sharp thinking. The gap is between the model and its
+  realisation.</p>
+
+  <details class="f" open>
+    <summary><span class="sev c">Critical</span><span class="ttl">Harness-neutrality is violated across the core, including the launch path
+      <span class="where">cli/_launch.py · broker.py · images.py · harness_config.py · preset_config.py · init_wizard.py · wake.py · session_log.py</span></span></summary>
+    <div class="body">
+      <p><code>architecture.md</code>: <em>"Whizzard core must remain harness-neutral. It must know
+      nothing about Hermes internals. This is the most important architectural rule."</em> The launch
+      core opens by importing the Hermes adapter directly and branches on its concrete type:</p>
+      <pre><span class="c"># whizzard/cli/_launch.py</span>
+from whizzard.adapters.hermes import (
+    MEDIATION_PLACEHOLDER, MediationContext, OneCLIContext, cleanup_managed_dir,
+)
+...
+<span class="r">if isinstance(adapter, HermesAdapter):</span>
+    adapter.allow_ephemeral = allow_ephemeral</pre>
+      <p>It is not an isolated slip. The pattern repeats through the core:</p>
+      <ul>
+        <li><code>broker.py</code> hardcodes <code>ANTHROPIC_API_KEY</code> / <code>ANTHROPIC_TOKEN</code> /
+          <code>CLAUDE_CODE_OAUTH_TOKEN</code> in, per its own comment, <em>"Hermes's own priority order."</em>
+          The credential-resolution order of one harness lives in the policy engine.</li>
+        <li><code>images.py</code> exports <code>WHIZZARD_HERMES_IMAGE</code>; <code>docker_cmd.py</code>
+          re-exports it.</li>
+        <li><code>harness_config.py</code> and <code>preset_config.py</code> ship <code>hermes-cell</code> /
+          <code>hermes</code> as bundled defaults, including a <code>hermes_home</code> field the generic
+          schema does not model.</li>
+        <li><code>init_wizard.py</code> builds the Hermes image and clones <code>~/.hermes/</code> as core
+          setup flow.</li>
+        <li><code>MediationContext</code> and <code>OneCLIContext</code> — pure egress-plumbing types with
+          nothing Hermes-specific in them — are <em>defined inside the Hermes adapter</em> and imported
+          upward by core. The dependency arrow points the wrong way.</li>
+      </ul>
+      <p>Today this costs nothing because there is one adapter. It becomes the dominant refactor cost
+      the moment OpenClaw or NanoClaw lands, which the roadmap puts at v1.0 — and every one of these
+      sites is a place a second adapter will either fork the logic or silently inherit Hermes semantics.</p>
+      <div class="fix"><b>Fix</b>
+        Move <code>MediationContext</code>/<code>OneCLIContext</code> to <code>adapters/base.py</code> (or a new
+        <code>egress/</code> module) so core stops importing from <code>adapters.hermes</code>. Move the credential
+        candidate list behind an adapter method (<code>adapter.model_credential_candidates()</code>). Move
+        bundled Hermes config/preset/image defaults into the adapter package and have core ask the
+        registry for them. Then add a one-line fitness test:
+        <code>assert not grep("hermes", core_modules)</code> — the rule becomes enforced instead of asserted.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev c">Critical</span><span class="ttl">The adapter Protocol is a partial fiction — four attributes are set on adapters that the contract never declares
+      <span class="where">cli/_launch.py, docker_cmd.py vs adapters/base.py</span></span></summary>
+    <div class="body">
+      <p>Core writes <code>session_id</code>, <code>web_search</code>, <code>mediation</code>, <code>onecli</code> and
+      <code>allow_ephemeral</code> onto the adapter object. None appear in the <code>HarnessAdapter</code>
+      Protocol. Each write carries a suppression:</p>
+      <pre>adapter.session_id = session_id   <span class="r"># type: ignore[attr-defined]</span>
+adapter.web_search = prof.web_search   <span class="r"># type: ignore[attr-defined]</span>
+adapter.mediation = MediationContext(...)  <span class="r"># type: ignore[attr-defined]</span>
+<span class="c"># and, in docker_cmd.py:</span>
+allow_ephemeral=bool(<span class="r">getattr(adapter, "allow_ephemeral", False)</span>)</pre>
+      <p>The effect is that <code>mypy whizzard</code> passes while the real core↔adapter interface is
+      undocumented and unchecked. A third-party adapter written against the published Protocol —
+      which <code>docs/decisions.md</code> D-160 proposes shipping as a versioned contributor artifact —
+      would launch and then fail at runtime, because the Protocol omits the launch-state injection
+      core actually performs. This is the contract you are asking outside contributors to build against.</p>
+      <div class="fix"><b>Fix</b>
+        Replace the attribute injection with one explicit call: <code>adapter.bind_session(SessionContext(...))</code>,
+        declared on the Protocol, carrying <code>session_id</code>, <code>web_search</code>, <code>mediation</code>,
+        <code>onecli</code> and <code>allow_ephemeral</code>. Deletes five <code>type: ignore</code>s and makes the
+        adapter contract true.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl"><code>build_run_argv</code> mutates the host filesystem, which is why dry-run needs a cleanup call
+      <span class="where">docker_cmd.py:build_run_argv</span></span></summary>
+    <div class="body">
+      <p>A function named "build argv" creates directories and touches files:</p>
+      <pre>sess_dir.mkdir(parents=True, exist_ok=True)
+(sess_dir / "audit.jsonl").touch(exist_ok=True)
+request_dir(session_id).mkdir(parents=True, exist_ok=True)
+SESSIONS_LOG.touch(exist_ok=True)</pre>
+      <p>The consequence is visible in the dry-run path, which has to reach back and undo the side
+      effect it did not ask for:</p>
+      <pre><span class="c"># cli/_launch.py, dry-run branch</span>
+<span class="c"># building the argv above authored the managed-scope dir as a side effect;</span>
+<span class="c"># dry-run exits before the finally that normally reaps it, so remove it here</span>
+cleanup_managed_dir(session_id)</pre>
+      <p>That comment <em>is</em> the design smell, written out longhand. Worse, it is a security-relevant
+      surface: <code>--dry-run</code> is the command a cautious user runs to inspect containment
+      <em>without</em> side effects, and it currently has them.</p>
+      <div class="fix"><b>Fix</b>
+        Split into <code>prepare_session_state(session_id) -&gt; SessionPaths</code> (side-effecting, real
+        launches only) and <code>build_run_argv(..., paths)</code> (pure). Dry-run calls only the pure half
+        and needs no cleanup. The existing <code>test_dry_run_parity.py</code> already guards the argv
+        half — extend it to assert no filesystem writes.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl">The adapter factory maps a category to an implementation — <code>type: "agent"</code> always means Hermes
+      <span class="where">adapters/__init__.py:build_adapter</span></span></summary>
+    <div class="body">
+      <p><code>build_adapter</code> dispatches on <code>type</code>, where <code>"shell"</code> → generic and
+      <code>"agent"</code> → Hermes, with the honest comment <em>"When future agent adapters land, a
+      sub-discriminator will be needed."</em> But <code>type</code> is a user-editable field in
+      <code>harnesses.json</code>, so the config schema already has a public shape that cannot express
+      "which agent." Adding OpenClaw is therefore a breaking config change, not an additive one —
+      precisely the outcome the versioned <code>schema_version</code> machinery elsewhere in this repo
+      was built to avoid.</p>
+      <div class="fix"><b>Fix</b>
+        Add an optional <code>adapter: "hermes"</code> field now, defaulting to <code>hermes</code> when
+        <code>type=="agent"</code>, and dispatch on a registry dict. Backwards-compatible today, no
+        schema break later. Ten lines.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl"><code>Profile</code> encodes network posture twice, and the derived field is permanently typed <code>| None</code>
+      <span class="where">config.py:Profile</span></span></summary>
+    <div class="body">
+      <p><code>network_enabled: bool</code> and <code>network_mode: str | None</code> overlap.
+      <code>__post_init__</code> derives one from the other, so <code>network_mode</code> is never <code>None</code>
+      after construction — yet its type says otherwise forever, and every consumer compares it against
+      bare string literals with no exhaustiveness checking. The validator then has to re-couple them
+      by hand (<code>network_mode in ("mediated","onecli","hybrid") and not network_enabled</code> → error).</p>
+      <p>The cost showed up in <code>build_run_argv</code>, where the comment has to shout:</p>
+      <pre><span class="c"># NOTE: hybrid MUST be in this branch — omitting it makes the cell fall</span>
+<span class="c"># through to the default bridge (full egress), which fails OPEN.</span></pre>
+      <p>A five-member string union with a fail-open default branch is the wrong shape for the field
+      that decides whether a sandbox has unrestricted internet.</p>
+      <div class="fix"><b>Fix</b>
+        Make <code>network_mode: Literal["none","open","mediated","onecli","hybrid"]</code> the single source of
+        truth; derive <code>network_enabled</code> as a read-only property for the legacy JSON shape. Then make
+        the <code>build_run_argv</code> dispatch exhaustive with an <code>else: raise</code> so a future mode
+        cannot fail open.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev i">Minor</span><span class="ttl">Three parallel vocabularies for the same concepts
+      <span class="where">repo-wide</span></span></summary>
+    <div class="body">
+      <p>The sandbox is called <em>cell</em> in code, <em>sandbox</em> in the README and
+      <code>known_issues.md</code> (which needs a terminology note to reconcile them), and
+      <em>container</em> in <code>architecture.md</code>. The credential posture is <em>native</em> to users
+      and <em>mediated</em> internally — a deliberate, documented D-191 choice, but it means every
+      reader holds a translation table. And the abandoned Osmotiq rename left live artifacts: 8
+      <code>OIQ</code> references in tests and <code>pyproject.toml</code>, plus this in the adapter contract's
+      own docstring:</p>
+      <pre><span class="c">adapters/base.py</span>
+"The adapter is the seam between <span class="r">Whizzard</span> (which provides containment
+ and policy enforcement) and <span class="r">Whizzard</span> (which orchestrates an agent
+ harness inside the contained execution cell)."</pre>
+      <p>A sed sweep collapsed two distinct nouns into one and left the sentence meaningless — in the
+      file you intend to publish as the contributor-facing adapter contract.</p>
+      <div class="fix"><b>Fix</b>
+        Pick <em>sandbox</em> (the user-facing word) and sweep <code>cell</code> out of code and comments;
+        keep <em>native/mediated</em> but state the mapping once in <code>architecture.md</code> rather than
+        in six comments. Fix the <code>base.py</code> docstring and the stale <code>OIQ</code> strings.
+      </div>
+    </div>
+  </details>
+</section>
+
+<section id="tree">
+  <div class="eyebrow">Finding group 2</div>
+  <h2 class="t">File tree organisation</h2>
+
+  <p style="color:var(--muted);max-width:760px">The repo root is exemplary — LICENSE, SECURITY,
+  CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG, ROADMAP, a Makefile that actually works, example configs
+  under <code>config/</code>, and a <code>docs/</code> tree with a validated decision log. The problem is
+  one level down: <code>whizzard/</code> is 20 flat modules with no expression of the three layers the
+  architecture document spends its first page defining.</p>
+
+  <div class="cols">
+    <div>
+      <h3>Today — layers invisible</h3>
+      <div class="tree">whizzard/
+  <span class="cm">— policy core, egress plumbing, in-cell</span>
+  <span class="cm">   code and host orchestration, all peers —</span>
+  adjust.py        <span class="cm">908</span>
+  broker.py        <span class="cm">320  egress</span>
+  config.py        <span class="cm">466  policy + shared primitives</span>
+  docker_cmd.py    <span class="cm">684  5 responsibilities</span>
+  enforcement.py   <span class="cm">426  policy</span>
+  harness_config.py<span class="cm">258</span>
+  images.py        <span class="cm">27</span>
+  <span class="n">init_wizard.py</span>   <span class="cm">1805 ← largest file</span>
+  <span class="n">mcp_server.py</span>    <span class="cm">305  runs IN the sandbox</span>
+  mounts.py        <span class="cm">251</span>
+  onecli_gateway.py<span class="cm">372  egress</span>
+  preset_config.py <span class="cm">272</span>
+  requests.py      <span class="cm">559</span>
+  safety.py        <span class="cm">328  policy</span>
+  session_log.py   <span class="cm">356</span>
+  snapshot.py      <span class="cm">139</span>
+  wake.py          <span class="cm">376</span>
+  adapters/        <span class="cm">✓ good</span>
+  cli/             <span class="cm">✓ good — the pattern to copy</span>
+  _dockerfiles/
+    <span class="n">broker/proxy.py</span> <span class="cm">218  also runs IN a container</span></div>
+    </div>
+    <div>
+      <h3>Proposed — layers load-bearing</h3>
+      <div class="tree">whizzard/
+  <span class="n">core/</span>        <span class="cm">harness-neutral policy engine</span>
+    config.py  safety.py  mounts.py
+    enforcement.py  session_log.py
+    snapshot.py  preset.py
+  <span class="n">runtime/</span>     <span class="cm">execution backend (Docker today)</span>
+    docker_run.py   <span class="cm">argv only, pure</span>
+    docker_probe.py <span class="cm">daemon/image queries</span>
+    images.py
+  <span class="n">egress/</span>      <span class="cm">credential-privacy plumbing</span>
+    broker.py  onecli.py  context.py
+  <span class="n">adapters/</span>    <span class="cm">harness-specific, unchanged</span>
+    base.py  generic.py
+    hermes/  <span class="cm">adapter · profile · managed_scope</span>
+  <span class="n">sandbox/</span>     <span class="cm">code that runs INSIDE</span>
+    mcp_server.py   broker_proxy.py
+  <span class="n">setup/</span>       <span class="cm">was init_wizard.py</span>
+    steps/  prompts.py  writers.py
+  <span class="n">cli/</span>         <span class="cm">unchanged</span>
+  _dockerfiles/</div>
+      <p style="font-size:.85rem;color:var(--faint);margin-top:.7rem">The import rule then states
+      itself: <code>core/</code> may not import <code>adapters/</code> or <code>egress/</code>.
+      Enforceable in one test.</p>
+    </div>
+  </div>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl"><code>init_wizard.py</code> is 1,805 lines — 20% of the whole package in one file
+      <span class="where">whizzard/init_wizard.py</span></span></summary>
+    <div class="body">
+      <p>It holds prompt primitives, five wizard steps, three sub-flows, four config writers, the
+      Docker build runner, the Hermes profile cloner and the idempotency check. Its largest single
+      block (<code>_step_4_custom_preset_subflow</code> and neighbours) runs ~100 lines apiece. It is also
+      the module with the most untested lines in the package (123 missed).</p>
+      <p>You have already solved this problem once, well: <code>cli/</code> was split into
+      <code>_shared</code>, <code>_launch</code>, <code>_session</code> plus one module per sub-app, and it reads
+      cleanly. The wizard is the same shape of problem and should get the same treatment.</p>
+      <div class="fix"><b>Fix</b>
+        <code>whizzard/setup/</code> with <code>prompts.py</code>, <code>writers.py</code>, <code>state.py</code> and
+        <code>steps/step1_image.py …</code>, mirroring the <code>cli/</code> split. No behaviour change, and it
+        makes the untested branches individually reachable.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl"><code>docker_cmd.py</code> carries five unrelated responsibilities
+      <span class="where">whizzard/docker_cmd.py (684 lines)</span></span></summary>
+    <div class="body">
+      <p>Daemon health classification, image inspection, <em>Dockerfile text parsing</em>
+      (<code>parse_dockerfile_base_pin</code> — an image-provenance concern that belongs in
+      <code>images.py</code>), argv construction, audit-log credential scrubbing, and the blocking
+      session runner. Four of the five are read-only queries; one launches and supervises a
+      container. They change for different reasons and are tested by different files.</p>
+      <p>It also re-exports four image constants purely to dodge an import cycle
+      (<em>"avoids an import cycle: docker_cmd imports adapters, and the adapters now reference these
+      too"</em>), which is a cycle the layer split above dissolves.</p>
+      <div class="fix"><b>Fix</b>
+        Split into <code>runtime/docker_probe.py</code> (available / daemon_status / image_exists /
+        image_inspect), <code>runtime/docker_run.py</code> (build_run_argv + run_shell) and move
+        <code>parse_dockerfile_base_pin</code> + the scrubber to <code>images.py</code> and
+        <code>core/session_log.py</code> respectively.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev i">Minor</span><span class="ttl">In-sandbox code lives in two different places, neither of them obvious
+      <span class="where">whizzard/mcp_server.py vs whizzard/_dockerfiles/broker/proxy.py</span></span></summary>
+    <div class="body">
+      <p>Two files in this package never run on the host. <code>mcp_server.py</code> sits at the top
+      level among host modules and is <code>COPY</code>'d into the sandbox image;
+      <code>proxy.py</code> sits under <code>_dockerfiles/broker/</code>. Both are deliberately
+      dependency-free of the <code>whizzard</code> package for good reasons that the Dockerfile explains
+      — <em>"the full whizzard package is deliberately NOT installed — it would expose the policy layer
+      to a compromised agent"</em> — but nothing in the tree communicates that constraint. A future
+      contributor adding <code>from whizzard.config import …</code> to <code>mcp_server.py</code> would break
+      the sandbox image and pass every host test.</p>
+      <div class="fix"><b>Fix</b>
+        One <code>whizzard/sandbox/</code> package holding both, with a module docstring stating the
+        no-host-imports rule, plus a test asserting neither file imports <code>whizzard.*</code>.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev i">Minor</span><span class="ttl"><code>config.py</code> is both the profiles module and the shared-config toolbox
+      <span class="where">config.py ← preset_config.py, harness_config.py</span></span></summary>
+    <div class="body">
+      <p><code>preset_config.py</code> imports <code>validate_schema_version</code> and
+      <code>validate_positive_int_or_none</code> from <code>config.py</code>, so the preset loader depends on
+      the profile module for generic primitives. <code>config.py</code> also owns
+      <code>WHIZZARD_HOME</code>/<code>STATE_DIR</code>/<code>LOGS_DIR</code>, which every module needs. Three
+      distinct concerns — path constants, validation primitives, profile parsing — in one name.</p>
+      <p>Related: <code>tests/</code> is 36 flat files mirroring the flat source tree, so it inherits the
+      same lack of shape. Split the source and the test tree follows for free.</p>
+      <div class="fix"><b>Fix</b>
+        <code>core/paths.py</code> (constants), <code>core/_schema.py</code> (validators),
+        <code>core/profiles.py</code> (parsing).
+      </div>
+    </div>
+  </details>
+</section>
+
+<section id="quality">
+  <div class="eyebrow">Finding group 3</div>
+  <h2 class="t">Code quality</h2>
+
+  <details class="f" open>
+    <summary><span class="sev c">Critical</span><span class="ttl">The container holding the real credential is the only unhardened container Whizzard launches
+      <span class="where">broker.py:start_broker</span></span></summary>
+    <div class="body">
+      <p>The sandbox gets seven hardening flags. The broker — which reads your live Anthropic key off
+      disk and holds it in memory for the session — gets none:</p>
+      <pre><span class="c"># the sandbox (docker_cmd.build_run_argv)</span>
+<span class="g">--user … --cap-drop=ALL --security-opt no-new-privileges --read-only
+--tmpfs … --memory … --pids-limit …</span>
+
+<span class="c"># the broker (broker.start_broker)</span>
+docker run -d --name … --label … --network … --restart no
+           -e BROKER_AUTH_SCHEME=… -v <key>:/run/broker/key:ro  <span class="r">← that's all</span></pre>
+      <p>The image does set <code>USER nobody</code>, so this is defence-in-depth rather than an open
+      door — but the asymmetry is backwards relative to the threat model. The broker is also reachable
+      unauthenticated by anything on the per-session internal network, and in <code>hybrid</code> mode the
+      OneCLI shim shares that network with it. And <code>proxy.py</code> does
+      <code>body = await request.read()</code> with no size bound on a container with no
+      <code>--memory</code> cap, so a compromised sandbox can OOM the credential holder.</p>
+      <div class="fix"><b>Fix</b>
+        Apply the same baseline to the broker and shim: <code>--cap-drop=ALL</code>,
+        <code>--security-opt no-new-privileges</code>, <code>--read-only</code>, <code>--pids-limit</code>,
+        <code>--memory 256m</code>. Bound the proxy request body (<code>client_max_size</code> on the
+        aiohttp app). Roughly a ten-line change, and it makes the hardening story uniform.
+      </div>
+    </div>
+  </details>
+
+  <details class="f" open>
+    <summary><span class="sev c">Critical</span><span class="ttl">Auth scheme is inferred from a substring of the secret's <em>name</em>
+      <span class="where">broker.py:_infer_scheme</span></span></summary>
+    <div class="body">
+      <pre>def _infer_scheme(secret_name: str) -> str:
+    upper = secret_name.upper()
+    if "OAUTH" in upper or <span class="r">"TOKEN" in upper</span>:
+        return "bearer"
+    return "api_key"</pre>
+      <p>This decides whether the real credential is injected as <code>x-api-key</code> or as
+      <code>Authorization: Bearer</code>. A user whose <code>harnesses.json</code> names the secret
+      <code>ANTHROPIC_API_TOKEN</code> — an entirely natural name for an API key — gets it sent as a
+      Bearer token plus an unwanted <code>anthropic-beta: oauth-…</code> header, and the failure surfaces
+      as an opaque upstream 401 several layers away from the cause. The same string is carried across
+      a container boundary into <code>BROKER_AUTH_SCHEME</code>, so the wrong guess propagates.</p>
+      <p>Note the hardcoded candidate list in the same module <em>already</em> pairs each name with its
+      correct scheme explicitly. Only the user-declared <code>model_credential.secret</code> path falls
+      back to guessing.</p>
+      <div class="fix"><b>Fix</b>
+        Add an explicit <code>model_credential.scheme: "api_key" | "bearer"</code> to the harness schema,
+        validated in <code>harness_config.py</code>. Keep the heuristic only as an unvalidated default and
+        log which scheme was chosen at launch so a mismatch is diagnosable.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl">Test coverage is inverted against risk — the security-critical modules are the least covered
+      <span class="where">broker.py 36% · cli/_launch.py 64% · cli/adjust.py 18%</span></span></summary>
+    <div class="body">
+      <table>
+        <tr><th>Module</th><th>Cov</th><th>What it owns</th></tr>
+        <tr><td><code>broker.py</code></td><td class="r">36%</td><td>Resolves and holds the real model credential; owns the isolated-network setup that <em>is</em> the containment guarantee</td></tr>
+        <tr><td><code>cli/_launch.py</code></td><td class="y">64%</td><td>All credential-mode orchestration, fail-closed paths, teardown ordering</td></tr>
+        <tr><td><code>cli/adjust.py</code></td><td class="r">18%</td><td>Mid-session capability mutation surface</td></tr>
+        <tr><td><code>onecli_gateway.py</code></td><td class="y">80%</td><td>Service-credential egress route</td></tr>
+        <tr><td><code>safety.py</code></td><td class="g">92%</td><td>Mount blocklist — appropriately covered</td></tr>
+        <tr><td><code>enforcement.py</code></td><td class="g">93%</td><td>Time caps — appropriately covered</td></tr>
+      </table>
+      <p>An 80% global floor is a reasonable project-wide gate, but it lets the aggregate hide the
+      distribution. The uncovered lines in <code>broker.py</code> are specifically the rollback path
+      (<code>except Exception:</code> → tear down networks, container, key file) and
+      <code>_reap_orphans</code> — i.e. the code that runs only when something has already gone wrong,
+      and whose failure leaves a live credential-holding container and a plaintext key file on disk.</p>
+      <div class="fix"><b>Fix</b>
+        Set a per-module floor for the egress/launch group (say 85%) rather than raising the global
+        number. Prioritise: broker partial-start rollback, <code>stop_broker</code> teardown ordering in
+        hybrid, and the <code>_print_onecli_down</code> fail-closed branches.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl">Four near-identical config loaders, each re-implementing the same eight steps
+      <span class="where">config.py · mounts.py · harness_config.py · preset_config.py</span></span></summary>
+    <div class="body">
+      <p>Each of the four does: resolve path → exists-check → <code>json.loads</code> with its own
+      <code>JSONDecodeError</code> wrap → top-level-is-object check → <code>validate_schema_version</code> →
+      sub-key-is-object check → non-empty check → per-entry parse → its own <code>*ConfigError</code>.
+      That is ~40 lines of identical scaffolding duplicated four times, with four exception types that
+      callers must catch separately (<code>_launch.py</code> catches three of them in sequence).</p>
+      <p>The modelling is inconsistent too: profiles, mounts and presets return frozen dataclasses;
+      <code>harness_config.get_harness_config</code> returns a raw <code>dict</code>. That untyped dict is the
+      one core then <em>mutates</em> (<code>harness_cfg["platforms"] = …</code>) and reads
+      security-relevant keys from (<code>harness_cfg.get("model_credential")</code>) — so the least-typed
+      config is the most security-relevant one.</p>
+      <div class="fix"><b>Fix</b>
+        One <code>core/_schema.py</code> with <code>load_registry(path, section, parse_entry, error_cls)</code>;
+        each module keeps only its <code>parse_entry</code>. Give harnesses a frozen
+        <code>HarnessSpec</code> dataclass like its three siblings, with <code>platforms</code> handled by
+        <code>dataclasses.replace</code> instead of dict mutation. Have the four error types share a
+        <code>ConfigError</code> base so callers catch once.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev w">Major</span><span class="ttl">131 comment references that resolve to nothing, plus 107 build-order breadcrumbs
+      <span class="where">repo-wide, whizzard/**.py</span></span></summary>
+    <div class="body">
+      <p>Three reference systems are embedded in source comments:</p>
+      <ul>
+        <li><b>253 <code>D-NNN</code></b> — resolve to <code>docs/decisions.md</code>, validated in CI by
+          <code>scripts/validate_decisions.py</code>. <em>These earn their keep.</em> Keep them.</li>
+        <li><b>131 <code>F-X-NN</code></b> (<code>F-F-08</code>, <code>F-C-04</code>, <code>F-B-01</code>…) — review-round
+          finding IDs. <code>grep</code> across <code>docs/</code> and <code>CHANGELOG.md</code> returns
+          <em>zero</em> hits. They are unresolvable to anyone who wasn't in the review.</li>
+        <li><b>107 <code>Stage N</code></b> — build-order archaeology (<em>"Stage 8 M6"</em>,
+          <em>"Stage 15"</em>). Meaningless to a new reader and never updated when code moves.</li>
+      </ul>
+      <p>The underlying comments are frequently excellent — they explain <em>why</em>, which is the hard
+      part and which most codebases skip. The prefixes are the problem, not the prose. At ~22% comment
+      density the noise is load-bearing on readability.</p>
+      <div class="fix"><b>Fix</b>
+        Strip the <code>F-X-NN</code> and <code>Stage N</code> prefixes and keep the sentence that follows
+        (<em>"F-F-06: if the container just self-exited this tick…"</em> → <em>"If the container just
+        self-exited this tick…"</em>). Mechanical, ~250 edits, and it removes the whole class. Add a
+        CONTRIBUTING line: comments cite <code>D-NNN</code> or nothing.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev i">Minor</span><span class="ttl">Documentation drift: four statements that no longer match the code
+      <span class="where">README.md · Dockerfile · base.py · ci.yml</span></span></summary>
+    <div class="body">
+      <ul>
+        <li><b>README overclaims time-bounding.</b> <em>"Sessions are time-bounded. Every session
+          carries a duration cap and an idle cap."</em> The shipped <code>default</code> profile has
+          <code>duration_seconds=None</code> and <code>idle_timeout_seconds=None</code> — and
+          <code>monitor_and_enforce</code> short-circuits to a bare <code>proc.wait()</code> when both are
+          None, so the enforcement loop never runs for the default profile. The README's own profile
+          table says "none" in the Time-cap column, so the bullet contradicts the table three
+          screens above it. For a containment tool, that is the one kind of overstatement worth
+          zero tolerance.</li>
+        <li><b><code>Dockerfile</code> pin instructions name the wrong Debian.</b> <em>"To refresh the
+          pin: <code>docker pull debian:12-slim</code>"</em> — the <code>FROM</code> is
+          <code>debian:13-slim</code>. Following the comment re-pins you to the wrong major.</li>
+        <li><b>Supply-chain CI audits a different dependency set than ships.</b> <code>ci.yml</code>
+          installs <code>'mcp&gt;=1.0'</code> unpinned while <code>pyproject.toml</code> ships
+          <code>mcp&gt;=1.0,&lt;2</code> — so pip-audit resolves mcp 2.x, which
+          <code>known_issues.md</code> documents as the version that breaks the sandbox MCP server.</li>
+        <li><b><code>adapters/base.py</code> docstring</b> — the "Whizzard and Whizzard" sentence noted
+          above, in the file slated to become the contributor-facing contract.</li>
+      </ul>
+      <div class="fix"><b>Fix</b>
+        Reword the README bullet to <em>"Sessions can be time-bounded; every profile declares a duration
+        and idle cap, and <code>default</code> deliberately sets neither"</em>. Fix the other three inline.
+      </div>
+    </div>
+  </details>
+
+  <details class="f">
+    <summary><span class="sev i">Minor</span><span class="ttl">Cross-module private import, and import-time path binding
+      <span class="where">broker.py:35 · safety.py:47 · tests/conftest.py</span></span></summary>
+    <div class="body">
+      <p><code>from whizzard.docker_cmd import _docker_env</code> — a leading-underscore symbol consumed
+      across a module boundary. Three modules now shell out to Docker (<code>docker_cmd</code>,
+      <code>broker</code>, <code>onecli_gateway</code>), each with its own subprocess wrapper; that is a
+      shared <code>runtime/docker.py</code> asking to exist.</p>
+      <p>Separately, <code>safety.py</code> binds <code>HOME = Path.home()</code> and builds its blocklists at
+      import time, and mutates those module-level lists in an <code>if is_windows():</code> block at import.
+      The cost is visible in <code>tests/conftest.py</code>, which has to set <code>WHIZZARD_HOME</code>
+      <em>at conftest import</em> — before any test module's <code>from whizzard…</code> runs — and then adds
+      an autouse guard fixture to catch regressions. That is a workaround for a design choice, and it
+      is documented as such in the conftest docstring.</p>
+      <div class="fix"><b>Fix</b>
+        Promote <code>_docker_env</code> into a shared <code>runtime/docker.py</code> alongside a single
+        <code>run_docker()</code> helper. Make the safety blocklists a function of <code>home</code>
+        (<code>blocklists(home: Path) -&gt; Blocklists</code>) resolved per call, which also deletes the
+        Windows import-time mutation and most of the conftest gymnastics.
+      </div>
+    </div>
+  </details>
+</section>
+
+<section id="good">
+  <div class="eyebrow">Credit where due</div>
+  <h2 class="t">What's genuinely good — and rarer than it looks</h2>
+  <div class="good">
+    <ul>
+      <li><b>Invariant tests, not just coverage.</b> <code>test_dry_run_parity.py</code> asserts the
+        preview argv and the real argv differ only by an explicit allowlist, on the stated grounds
+        that <em>"a preview that lies is a security bug."</em> That is the right test to have written,
+        and almost nobody writes it.</li>
+      <li><b>Allowlist chosen over denylist, with the reasoning preserved.</b>
+        <code>AGENT_ALLOWED_CHANGES</code> replaced an earlier <code>AGENT_DENIED_CHANGES</code> because a
+        denylist means any newly-added field is agent-callable by default. The comment records the
+        replacement, so the next contributor can't quietly regress it.</li>
+      <li><b>The sandbox is not trusted to report its own state.</b> Request resolutions are written to
+        a host-only store under <code>STATE_DIR</code>, outside the sandbox-writable mount, specifically so
+        a sandbox-claimed status of <code>"applied"</code> can't bypass operator review — with a
+        path-traversal guard on the one identifier the sandbox influences. This is the correct
+        instinct applied in the right place.</li>
+      <li><b>Dependency injection where it buys testability.</b> <code>monitor_and_enforce</code> takes
+        <code>now</code>, <code>sampler</code> and <code>warner</code> as parameters, which is why the enforcement
+        module sits at 93% without a Docker daemon.</li>
+      <li><b>Monotonic vs wall clock, correctly separated.</b> The audit log gets <code>time.time()</code>;
+        the enforcement loop gets <code>time.monotonic()</code>, so laptop sleep and NTP steps can't fire
+        spurious expiry. Most projects find this in production.</li>
+      <li><b>Structural, not string, URL pinning in the proxy.</b> <code>URL.build(host=UPSTREAM_HOST, …)</code>
+        makes authority injection unrepresentable rather than filtered.</li>
+      <li><b>Supply chain taken seriously.</b> Digest-pinned base images with a CI check that they
+        <em>stay</em> pinned, SHA-pinned GitHub Actions, <code>persist-credentials: false</code>,
+        workflow-level <code>contents: read</code>, pip-audit with each ignore individually justified,
+        Debian packages over pip for the two security-critical containers.</li>
+      <li><b>An honest known-issues register.</b> <code>docs/known_issues.md</code> documents the
+        deferred-execution gap, DNS exfiltration, and unverified Windows support — and the README
+        repeats them under "Scope and limitations" rather than burying them. A security tool that
+        states what it does not do is worth more than one that doesn't.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="plan">
+  <div class="eyebrow">Sequencing</div>
+  <h2 class="t">What I'd do, in order</h2>
+  <table>
+    <tr><th style="width:52px">#</th><th>Action</th><th style="width:110px">Effort</th><th style="width:150px">Why now</th></tr>
+    <tr><td><b>1</b></td><td>Harden the broker and shim containers; bound the proxy request body</td><td>~1 hr</td><td>Smallest change, largest security delta; the credential holder should not be the soft target</td></tr>
+    <tr><td><b>2</b></td><td>Make <code>model_credential.scheme</code> explicit; keep the heuristic as a logged default</td><td>~2 hrs</td><td>Removes a latent auth failure that surfaces as an opaque upstream 401</td></tr>
+    <tr><td><b>3</b></td><td>Fix the four doc-drift items (README time-cap claim first)</td><td>~30 min</td><td>Pre-launch; an overclaim in a containment tool's README is the costliest kind of bug</td></tr>
+    <tr><td><b>4</b></td><td>Replace attribute injection with <code>adapter.bind_session(SessionContext)</code></td><td>~half day</td><td>Makes the published adapter contract true <em>before</em> third parties build against it</td></tr>
+    <tr><td><b>5</b></td><td>Move <code>MediationContext</code>/<code>OneCLIContext</code> and the credential-candidate list out of Hermes; add the <code>core/</code>-must-not-import-<code>adapters/</code> fitness test</td><td>~1 day</td><td>Turns the architecture's headline rule into something CI enforces</td></tr>
+    <tr><td><b>6</b></td><td>Split <code>build_run_argv</code> into <code>prepare_session_state</code> + pure builder</td><td>~half day</td><td>Removes the dry-run cleanup hack and makes <code>--dry-run</code> genuinely side-effect-free</td></tr>
+    <tr><td><b>7</b></td><td>Strip <code>F-X-NN</code> and <code>Stage N</code> prefixes, keep the prose</td><td>~2 hrs</td><td>Mechanical; removes 238 unresolvable references at once</td></tr>
+    <tr><td><b>8</b></td><td>Package split: <code>core/ runtime/ egress/ sandbox/ setup/</code>; <code>init_wizard</code> → <code>setup/steps/</code></td><td>~2 days</td><td>Do it while there is one adapter, not three. Tests follow the source split for free</td></tr>
+    <tr><td><b>9</b></td><td>Shared <code>load_registry</code>; <code>HarnessSpec</code> dataclass; per-module coverage floor for egress/launch</td><td>~1 day</td><td>Deletes ~120 duplicated lines and types the most security-relevant config</td></tr>
+    <tr><td><b>10</b></td><td>Add an <code>adapter</code> discriminator to <code>harnesses.json</code>, defaulting from <code>type</code></td><td>~1 hr</td><td>Additive today; a breaking config change if deferred past the second adapter</td></tr>
+  </table>
+  <p style="color:var(--muted);max-width:760px;margin-top:1.2rem">Items 1–3 are pre-launch. Items 4–6
+  are the ones that decide whether the v1.0 multi-adapter plan is a weekend or a quarter. Items 7–10
+  are quality-of-life that compound.</p>
+</section>
+
+<footer>
+  <div class="wrap" style="padding:0">
+    Review of <b>BuckG71/whizzard</b> @ <code>2712fa5</code> · 2026-09-23 · scope: architectural
+    cohesion, file-tree organisation, code quality. Not a formal security audit — findings marked
+    Critical are architectural and defence-in-depth issues surfaced by reading, not by testing against
+    a live deployment.
+  </div>
+</footer>
+
+</div>
+</body></html>
