@@ -3249,6 +3249,24 @@ The bump required a **build fix**: v0.19.0's dependency tree wants a different `
 
 ---
 
+### D-197: Agent-security brief (2026-07-31) — apply item 4 now, defer the rest to a research track
+
+**Type:** scope
+
+**Tags:** safety, post-mvp
+
+**Door Type:** two-way — a triage/scoping call, revisited as the cited work matures.
+
+**Decision:** Triage of the 2026-07-31 agent-security brief. **Applied to v0.1.x now:** the "reachable intermediary as egress bridge" insight from the OpenAI / Hugging Face containment incident, as a threat-model residual-risk entry (§6.9) — a doc-only, honest-scoping refinement of the existing network / DNS / supply-chain limitations. **Deferred** to the v1.0 **Agent-security research track** (ROADMAP), under a two-loops framing (artifact-lifecycle + execution-lifecycle): *SkillGate* (skill/tool admission scanning), *MTGuard* (runtime tool-behavior monitoring vs. declared profile), and the *MCP 2026-07-28* protocol changes (handles-as-bearer-credentials binding, per-request reauthorization, MCP-Apps isolation profile).
+
+**Rationale:** Whizzard v0.1.x is a runtime-isolation tool for one pinned harness; skill/tool admission and MCP-tool governance are the *planned* secure-ingestion architecture, not shipped scope. Item 4 maps directly onto existing containment claims and is a cheap, honest refinement; adopting the rest now would be platform-scope creep against MVP focus (see [[project-whizzard-is-portfolio-artifact]]). Captured for provenance and to keep the deferral explicit rather than implicit.
+
+**Source:** agent-security brief, 2026-07-31.
+
+**Status:** active.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
