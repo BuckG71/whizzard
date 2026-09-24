@@ -19,7 +19,7 @@ Schema for profiles.json:
           "memory_swap": "<size>" | null,          # optional; == memory_limit disables swap; null = Docker default
           "cpus": <number> | null,                 # optional; e.g. 2 or 1.5; null = no cap
           "pids_limit": <int> | null,              # optional; fork-bomb guard; null = no cap
-          "web_search": "off" | "firecrawl",       # optional; default "off"
+          "web_search": "off"|"firecrawl"|"ddgs",   # optional; default "off"
           "description": "..."                      # default ""
         },
         ...
@@ -56,12 +56,14 @@ NETWORK_MODES = ("none", "open", "mediated", "onecli", "hybrid")
 
 #: Web-search backends a profile may enable (D-194). "off" (default) authors no
 #: web config into the cell and the harness's web_search fails closed rather
-#: than fabricating results. "firecrawl" is the contained-rung backend (single
-#: allowlistable endpoint, brokered credential). More backends (e.g. a keyless
-#: open-rung provider, a sidecar) are added here as those rungs ship — the set
-#: is intentionally small so a profile can only name a mode Whizzard actually
-#: wires end-to-end.
-WEB_SEARCH_MODES = ("off", "firecrawl")
+#: than fabricating results. "firecrawl" is the CONTAINED rung (single
+#: allowlistable endpoint routed through a broker, credential brokered host-side
+#: — requires a mediated/hybrid network). "ddgs" is the OPEN rung: keyless, but
+#: it fans out directly to many search-engine hosts via TLS impersonation
+#: (primp) and so is un-brokerable — it requires open egress, an expanded
+#: security surface the profile opts into explicitly. The set is intentionally
+#: small so a profile can only name a mode Whizzard actually wires end-to-end.
+WEB_SEARCH_MODES = ("off", "firecrawl", "ddgs")
 
 
 @dataclass(frozen=True)

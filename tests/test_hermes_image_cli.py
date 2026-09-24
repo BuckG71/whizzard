@@ -44,7 +44,7 @@ def test_hermes_image_build_exits_2_when_dockerfile_missing(
 
     _patch_docker_available(monkeypatch, True)
     monkeypatch.setattr(
-        cli_hermes, "_hermes_dockerfile_path", lambda: tmp_path / "nope.hermes"
+        cli_hermes, "_hermes_dockerfile_path", lambda: tmp_path / "Dockerfile.hermes"
     )
     monkeypatch.setattr(
         cli_hermes.subprocess, "run",
@@ -123,6 +123,46 @@ def test_hermes_image_build_honors_custom_image_tag(monkeypatch, tmp_path: Path)
     )
     assert result.exit_code == 0
     assert "my-hermes:dev" in captured["argv"]
+
+
+def test_hermes_image_build_search_uses_search_dockerfile_and_tag(
+    monkeypatch, tmp_path: Path
+):
+    """D-194 Phase C: --search builds Dockerfile.hermes-search and tags the
+    search image by default (no --image needed)."""
+    from whizzard.cli import hermes as cli_hermes
+    from whizzard.images import WHIZZARD_HERMES_SEARCH_IMAGE
+
+    fake_search_df = tmp_path / "Dockerfile.hermes-search"
+    fake_search_df.write_text("FROM whizzard-hermes:latest\n")
+    # If the base-image path were used, the test would fail (wrong dockerfile).
+    monkeypatch.setattr(
+        cli_hermes, "_hermes_dockerfile_path",
+        lambda: tmp_path / "Dockerfile.hermes",  # deliberately absent
+    )
+    monkeypatch.setattr(
+        cli_hermes, "_hermes_search_dockerfile_path", lambda: fake_search_df
+    )
+    monkeypatch.setattr(cli_hermes, "_hermes_build_context", lambda: tmp_path)
+
+    captured: dict = {}
+
+    class _FakeProc:
+        returncode = 0
+
+    def _fake_run(argv, **kwargs):
+        captured["argv"] = argv
+        return _FakeProc()
+
+    _patch_docker_available(monkeypatch, True)
+    monkeypatch.setattr(cli_hermes.subprocess, "run", _fake_run)
+
+    result = runner.invoke(app, ["hermes", "image", "build", "--search"])
+    assert result.exit_code == 0, result.output
+    argv = captured["argv"]
+    f_idx = argv.index("-f")
+    assert argv[f_idx + 1] == str(fake_search_df)
+    assert WHIZZARD_HERMES_SEARCH_IMAGE in argv
 
 
 def test_hermes_image_build_returns_docker_exit_code(monkeypatch, tmp_path: Path):

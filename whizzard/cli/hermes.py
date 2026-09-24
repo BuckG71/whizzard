@@ -20,6 +20,7 @@ from whizzard.docker_cmd import (
     _docker_env,
     docker_available,
 )
+from whizzard.images import WHIZZARD_HERMES_SEARCH_IMAGE
 
 hermes_app = typer.Typer(help="Hermes harness operations.")
 hermes_profile_app = typer.Typer(help="Manage Hermes profiles for use in Whizzard cells.")
@@ -33,6 +34,15 @@ def _hermes_dockerfile_path() -> Path:
     from importlib.resources import files
 
     return Path(str(files("whizzard._dockerfiles") / "Dockerfile.hermes"))
+
+
+def _hermes_search_dockerfile_path() -> Path:
+    """Path to the bundled Dockerfile.hermes-search (D-194 Phase C). Builds the
+    web-search-enabled cell image (firecrawl/ddgs clients) FROM the base Hermes
+    image, so that image must exist first."""
+    from importlib.resources import files
+
+    return Path(str(files("whizzard._dockerfiles") / "Dockerfile.hermes-search"))
 
 
 def _hermes_build_context() -> Path:
@@ -110,20 +120,39 @@ def hermes_image_build_cmd(
     image: Annotated[
         str, typer.Option("--image", help="Image tag to build.")
     ] = WHIZZARD_HERMES_IMAGE,
+    search: Annotated[
+        bool,
+        typer.Option(
+            "--search",
+            help="Build the web-search-enabled cell image (adds the firecrawl "
+            "+ ddgs clients on top of the base Hermes image) instead of the "
+            "base image. Needs the base Hermes image built first.",
+        ),
+    ] = False,
 ) -> None:
     """Build the Hermes execution image from the bundled Dockerfile.hermes.
 
     Hermes is the only supported harness today; ``whiz init`` builds this
     image as part of its mandatory setup. Run-it-yourself path for users who
     want to rebuild after an upstream Hermes ref bump.
+
+    ``--search`` builds the web-search cell image (D-194) instead — the layer
+    that carries the firecrawl/ddgs clients a `web_search` profile needs. It is
+    ``FROM`` the base Hermes image, so build that one first.
     """
     if not docker_available():
         console.print("[red]error: docker not found on PATH[/red]")
         raise typer.Exit(code=127)
 
-    dockerfile = _hermes_dockerfile_path()
+    if search:
+        dockerfile = _hermes_search_dockerfile_path()
+        # Default tag → the search image (unless the user pinned --image).
+        if image == WHIZZARD_HERMES_IMAGE:
+            image = WHIZZARD_HERMES_SEARCH_IMAGE
+    else:
+        dockerfile = _hermes_dockerfile_path()
     if not dockerfile.exists():
-        console.print(f"[red]Dockerfile.hermes not found at {dockerfile}[/red]")
+        console.print(f"[red]{dockerfile.name} not found at {dockerfile}[/red]")
         raise typer.Exit(code=2)
 
     context = _hermes_build_context()
