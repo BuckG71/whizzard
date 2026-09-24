@@ -44,7 +44,7 @@ dependencies = [
     # <2: mcp 2.0.0 (2026-07-28) removed `mcp.server.fastmcp`, which the whiz
     # in-sandbox MCP server imports. 1.29.0 is the last 1.x that still has it.
     # Migration to the 2.x API is tracked (see docs/known_issues.md).
-    "mcp>=1.0,<2",
+    "mcp>=1.0,<3",
 ]
 
 [project.urls]
