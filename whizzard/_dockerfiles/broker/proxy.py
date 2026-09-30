@@ -56,6 +56,22 @@ AUTH_SCHEME = os.environ.get("BROKER_AUTH_SCHEME", "api_key")
 # Beta header Anthropic requires for OAuth-token (subscription) auth.
 _OAUTH_BETA = "oauth-2025-04-20"
 
+# Largest request body the broker will relay, in bytes.
+#
+# This MUST be set explicitly: aiohttp's `client_max_size` defaults to 1 MiB and
+# `request.read()` enforces it, so leaving it unset makes the broker reject any
+# request above 1 MiB with its own 413 — which the cell sees as if the provider
+# had sent it. The provider accepts up to 32 MB per request, so a 1 MiB ceiling
+# breaks every image, every PDF, and any long enough conversation, and only in
+# the mediated/hybrid modes (on `open` the cell talks to the provider directly).
+#
+# The value is deliberately ABOVE the provider's own limit: the broker is a relay
+# and should not be the binding constraint on request size. An oversized request
+# is forwarded and the provider returns its own, accurate error. The cap exists
+# only so a pathological client can't exhaust the broker's memory — the body is
+# buffered whole (see `handle`), so this bounds that buffer.
+MAX_REQUEST_BYTES = int(os.environ.get("BROKER_MAX_REQUEST_BYTES", 64 * 1024 * 1024))
+
 # Hop-by-hop headers (RFC 7230 §6.1) plus length/host — never forwarded as-is;
 # the client library recomputes length and we set host to the upstream.
 _HOP_BY_HOP = frozenset(
@@ -154,7 +170,9 @@ async def handle(request: web.Request) -> web.StreamResponse:
     req_headers = rewrite_request_headers(request.headers, real_key, scheme)
     # Read the request body fully (Anthropic requests are JSON, not streamed
     # uploads) so the length is exact; stream only the RESPONSE, which is where
-    # SSE / token streaming matters.
+    # SSE / token streaming matters. Bounded by MAX_REQUEST_BYTES, which the app
+    # sets via `client_max_size` — read() raises 413 past it, so that value has
+    # to stay above the provider's own request limit (see MAX_REQUEST_BYTES).
     body = await request.read()
 
     async with session.request(
@@ -191,7 +209,7 @@ async def _on_cleanup(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(client_max_size=MAX_REQUEST_BYTES)
     app["real_key"] = load_key(KEY_FILE)
     app["scheme"] = AUTH_SCHEME
     app.router.add_route("*", "/{tail:.*}", handle)

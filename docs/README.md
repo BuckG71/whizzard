@@ -15,6 +15,7 @@ Whizzard is a local capability-governance layer for AI agents. Code-level orient
 ## Architecture reference
 
 - **[reference/architecture-at-a-glance.html](reference/architecture-at-a-glance.html)** — self-contained visual overview, diagram-first. Companion to [architecture.md](architecture.md), which remains the canonical written source of truth.
+- **[reference/architecture-review-2026-09.html](reference/architecture-review-2026-09.html)** — point-in-time external review of architectural cohesion, file-tree organisation and code quality at `v0.1.0` (commit `2712fa5`). Findings are observations, not decisions: anything acted on should land as a `D-NN` entry in [decisions.md](decisions.md) and, where it's deferred, as an entry in [known_issues.md](known_issues.md).
 
 ## Conventions
 

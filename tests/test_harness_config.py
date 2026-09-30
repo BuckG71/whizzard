@@ -417,3 +417,52 @@ def test_load_accepts_normal_env_keys(tmp_path: Path):
     # Must not raise.
     harnesses = load_harnesses(f)
     assert harnesses["ok"]["env"]["HERMES_MODE"] == "contained"
+
+
+# --- model_credential.scheme (explicit auth-injection shape) ----------------
+
+
+def _mc_spec(**mc):
+    base = {"secret": "ANTHROPIC_API_KEY"}
+    base.update(mc)
+    return {
+        "schema_version": 1,
+        "harnesses": {
+            "h": {
+                "type": "agent",
+                "start_command": "run",
+                "model_credential": base,
+            }
+        },
+    }
+
+
+@pytest.mark.parametrize("scheme", ["api_key", "bearer"])
+def test_model_credential_scheme_accepts_the_valid_shapes(tmp_path, scheme):
+    path = tmp_path / "harnesses.json"
+    path.write_text(json.dumps(_mc_spec(scheme=scheme)))
+    cfg = load_harnesses(path)
+    assert cfg["h"]["model_credential"]["scheme"] == scheme
+
+
+def test_model_credential_scheme_is_optional(tmp_path):
+    # Undeclared is still valid — the broker then infers from the secret name.
+    path = tmp_path / "harnesses.json"
+    path.write_text(json.dumps(_mc_spec()))
+    assert "scheme" not in load_harnesses(path)["h"]["model_credential"]
+
+
+def test_model_credential_scheme_rejects_an_unknown_value(tmp_path):
+    # Fail at parse time rather than handing the broker a scheme it will pass
+    # to the proxy as BROKER_AUTH_SCHEME, where anything but "bearer" silently
+    # means x-api-key.
+    path = tmp_path / "harnesses.json"
+    path.write_text(json.dumps(_mc_spec(scheme="oauth")))
+    with pytest.raises(HarnessConfigError, match="scheme"):
+        load_harnesses(path)
+
+
+def test_bundled_hermes_default_declares_its_scheme():
+    # The shipped default should model the recommended shape, not rely on the
+    # name-based guess.
+    assert default_harnesses()["hermes-cell"]["model_credential"]["scheme"] == "api_key"

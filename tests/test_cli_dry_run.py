@@ -434,3 +434,65 @@ def test_onecli_down_banner_suggests_a_parseable_command():
         f"suggested recovery command does not parse: `whiz {m.group(1)}`\n"
         f"{result.output}"
     )
+
+
+# --- credential-resolution banner ------------------------------------------
+#
+# A wrong auth scheme surfaces upstream as a bare 401 with nothing naming the
+# cause, so the banner is the only place the operator can see what the broker
+# actually did. These pin that it reports the RESOLVED scheme (not the declared
+# one) and that it says when the scheme was guessed from the secret name.
+
+
+def _resolution_banner(*, scheme, secret, declared):
+    from whizzard.broker import BrokerHandle
+
+    console = Console(record=True, width=200)
+    handle = BrokerHandle(
+        internal_network="whiz-int-x",
+        egress_network="whiz-egress-x",
+        container_name="whiz-broker-x",
+        base_url="http://whiz-broker-x:8080",
+        auth_scheme=scheme,
+        secret_name=secret,
+        _key_dir="/tmp/nope",
+    )
+    with patch.object(_launch, "console", console):
+        _launch._print_credential_resolution(handle, declared=declared)
+    return console.export_text()
+
+
+def test_resolution_banner_names_the_header_for_api_key():
+    text = _resolution_banner(
+        scheme="api_key", secret="ANTHROPIC_API_KEY", declared="api_key"
+    )
+    assert "ANTHROPIC_API_KEY" in text
+    assert "x-api-key" in text
+    assert "declared" in text
+
+
+def test_resolution_banner_names_the_header_for_bearer():
+    text = _resolution_banner(
+        scheme="bearer", secret="CLAUDE_CODE_OAUTH_TOKEN", declared=None
+    )
+    assert "Authorization: Bearer" in text
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in text
+
+
+def test_resolution_banner_flags_an_inferred_scheme():
+    # The guess is the failure mode worth surfacing, so an undeclared scheme
+    # must say so rather than read like a deliberate choice.
+    text = _resolution_banner(
+        scheme="bearer", secret="ANTHROPIC_API_TOKEN", declared=None
+    )
+    assert "inferred" in text
+
+
+def test_resolution_banner_reports_what_resolved_not_what_was_declared():
+    # Resolution falls through to known candidates, so the declared secret is
+    # not necessarily the one in use; the banner must show reality.
+    text = _resolution_banner(
+        scheme="bearer", secret="CLAUDE_CODE_OAUTH_TOKEN", declared="api_key"
+    )
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in text
+    assert "Authorization: Bearer" in text
