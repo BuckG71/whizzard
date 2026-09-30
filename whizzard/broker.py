@@ -86,6 +86,14 @@ class BrokerHandle:
     egress_network: str  # broker-only; its route to the provider
     container_name: str
     base_url: str  # what the cell sets as ANTHROPIC_BASE_URL
+    #: Which injection shape the broker was actually started with ("api_key" or
+    #: "bearer"). Reported at launch so a wrong scheme is diagnosable from the
+    #: banner rather than only from an opaque upstream 401. This is the scheme
+    #: of the credential that RESOLVED, which is not necessarily the declared
+    #: one — resolution falls back through `_CREDENTIAL_CANDIDATES`.
+    auth_scheme: str
+    #: Which secret name resolved, for the same diagnostic reason.
+    secret_name: str
     _key_dir: str  # host dir holding the key file, removed on teardown
 
 
@@ -105,18 +113,35 @@ def _slug(session_id: str) -> str:
 
 
 def _infer_scheme(secret_name: str) -> str:
-    """A raw API key uses x-api-key; a subscription/OAuth token uses Bearer."""
+    """Guess the injection shape from the secret's NAME — the fallback for a
+    `model_credential` that declares no `scheme`.
+
+    This is a heuristic and it is wrong for names people actually choose: a raw
+    API key called ``ANTHROPIC_API_TOKEN`` matches on "TOKEN" and is sent as a
+    Bearer token with an unwanted OAuth beta header, which the upstream rejects
+    with a 401 that says nothing about the cause. Declare
+    ``model_credential.scheme`` (harness_config.AUTH_SCHEMES) and this is never
+    consulted for the declared secret.
+    """
     upper = secret_name.upper()
     if "OAUTH" in upper or "TOKEN" in upper:
         return "bearer"
     return "api_key"
 
 
-def _resolve_credential(primary_secret: str) -> tuple[str, str]:
+def _resolve_credential(
+    primary_secret: str, declared_scheme: str | None = None
+) -> tuple[str, str, str]:
     """Resolve the model credential host-side, trying the declared secret first
-    then Hermes's known fallbacks. Returns (value, scheme). Fail-closed: raises
-    BrokerError if nothing resolves; OneCLI *timeouts* propagate (D-134: no
-    fallback past a hung vault)."""
+    then Hermes's known fallbacks. Returns (value, scheme, resolved_secret_name).
+
+    `declared_scheme` is `model_credential.scheme` when the harness config states
+    it; it applies to `primary_secret` only. The fallback candidates keep their
+    own known schemes, since those names are ours rather than the user's. With no
+    declaration the primary falls back to `_infer_scheme`'s guess.
+
+    Fail-closed: raises BrokerError if nothing resolves; OneCLI *timeouts*
+    propagate (D-134: no fallback past a hung vault)."""
     ordered: list[tuple[str, str]] = []
     seen: set[str] = set()
 
@@ -125,14 +150,14 @@ def _resolve_credential(primary_secret: str) -> tuple[str, str]:
             ordered.append((name, scheme))
             seen.add(name)
 
-    add(primary_secret, _infer_scheme(primary_secret))
+    add(primary_secret, declared_scheme or _infer_scheme(primary_secret))
     for name, scheme in _CREDENTIAL_CANDIDATES:
         add(name, scheme)
 
     tried = ", ".join(n for n, _ in ordered)
     for name, scheme in ordered:
         try:
-            return fetch_secret(name).value, scheme
+            return fetch_secret(name).value, scheme, name
         except (CredentialUnavailableError, OneCLISecretMissingError,
                 OneCLINotInstalledError):
             continue  # not this one — try the next candidate
@@ -160,8 +185,15 @@ def _write_key_file(secret: str, session_id: str) -> str:
     return str(key_dir)
 
 
-def start_broker(session_id: str, secret_name: str) -> BrokerHandle:
+def start_broker(
+    session_id: str, secret_name: str, scheme: str | None = None
+) -> BrokerHandle:
     """Resolve the credential host-side and bring up the broker + its networks.
+
+    `scheme` is the harness's declared `model_credential.scheme` when it states
+    one; it applies to `secret_name` and is passed through to the broker as
+    BROKER_AUTH_SCHEME. Left None, the scheme is inferred from the secret's name
+    (see `_infer_scheme` for why declaring it is better).
 
     Raises BrokerError (fail-closed) on any failure, after cleaning up whatever
     was created. The caller must pass the resulting handle to stop_broker().
@@ -174,7 +206,7 @@ def start_broker(session_id: str, secret_name: str) -> BrokerHandle:
     container = f"whiz-broker-{slug}"
 
     try:
-        secret, scheme = _resolve_credential(secret_name)
+        secret, scheme, resolved_name = _resolve_credential(secret_name, scheme)
     except OneCLITimeoutError as e:
         raise BrokerError(f"credential vault timed out: {e}") from e
 
@@ -226,6 +258,8 @@ def start_broker(session_id: str, secret_name: str) -> BrokerHandle:
             egress_network=egress,
             container_name=container,
             base_url=f"http://{container}:{_BROKER_PORT}",
+            auth_scheme=scheme,
+            secret_name=resolved_name,
             _key_dir=key_dir,
         )
     except Exception:

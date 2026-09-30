@@ -26,7 +26,7 @@ from whizzard.adapters.hermes import (
     OneCLIContext,
     cleanup_managed_dir,
 )
-from whizzard.broker import BrokerError, start_broker, stop_broker
+from whizzard.broker import BrokerError, BrokerHandle, start_broker, stop_broker
 from whizzard.cli._shared import console
 from whizzard.config import ProfileConfigError, get_profile
 from whizzard.docker_cmd import (
@@ -85,6 +85,27 @@ def _print_onecli_down(err: object, *, harness: str, model_via_broker: bool) -> 
         f"    • Run this session model-only (no service credentials), keeping "
         f"your model key private:\n"
         f"        [bold]whiz run --harness {harness} --credential-handling native[/bold]"
+    )
+
+
+def _print_credential_resolution(
+    handle: BrokerHandle, *, declared: str | None
+) -> None:
+    """Say which secret resolved and how the broker will inject it.
+
+    A wrong injection shape surfaces upstream as a bare 401, several layers from
+    its cause, so the one thing that makes it diagnosable is seeing the scheme at
+    launch. When the harness declared no `model_credential.scheme` the value was
+    guessed from the secret's name, so say that too — that guess is the failure
+    mode this line exists to expose.
+    """
+    header = (
+        "x-api-key" if handle.auth_scheme == "api_key" else "Authorization: Bearer"
+    )
+    how = "declared" if declared else "inferred from the secret name"
+    console.print(
+        f"[bold]Model credential:[/bold] {handle.secret_name} → {header} "
+        f"[dim]({how})[/dim]"
     )
 
 
@@ -305,6 +326,7 @@ def _perform_launch(
     mediation_secret: str | None = None
     mediation_base_url_env = "ANTHROPIC_BASE_URL"
     mediation_placeholder = MEDIATION_PLACEHOLDER
+    mediation_scheme: str | None = None
     mediated_network: str | None = None
     if prof.network_mode in ("mediated", "hybrid"):
         mc = harness_cfg.get("model_credential") or {}
@@ -317,6 +339,9 @@ def _perform_launch(
             raise typer.Exit(code=2)
         mediation_base_url_env = mc.get("base_url_env", mediation_base_url_env)
         mediation_placeholder = mc.get("placeholder", mediation_placeholder)
+        # Optional; None means the broker infers the injection shape from the
+        # secret's name, which it can get wrong (harness_config.AUTH_SCHEMES).
+        mediation_scheme = mc.get("scheme")
 
     if dry_run:
         import shlex
@@ -435,10 +460,13 @@ def _perform_launch(
     if prof.network_mode == "mediated":
         assert mediation_secret is not None  # guaranteed by the check above
         try:
-            broker_handle = start_broker(session_id, mediation_secret)
+            broker_handle = start_broker(
+                session_id, mediation_secret, mediation_scheme
+            )
         except BrokerError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=125) from e
+        _print_credential_resolution(broker_handle, declared=mediation_scheme)
         adapter.mediation = MediationContext(  # type: ignore[attr-defined]
             base_url=broker_handle.base_url,
             base_url_env=mediation_base_url_env,
@@ -473,10 +501,13 @@ def _perform_launch(
         if _v_warn:
             console.print(f"[yellow]⚠ {_v_warn}[/yellow]")
         try:
-            broker_handle = start_broker(session_id, mediation_secret)
+            broker_handle = start_broker(
+                session_id, mediation_secret, mediation_scheme
+            )
         except BrokerError as e:
             console.print(f"[red]{e}[/red]")
             raise typer.Exit(code=125) from e
+        _print_credential_resolution(broker_handle, declared=mediation_scheme)
         try:
             onecli_handle = start_onecli_shim(
                 session_id, broker_handle.internal_network
