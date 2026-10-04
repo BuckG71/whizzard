@@ -11,6 +11,7 @@ imported by path.
 from __future__ import annotations
 
 import importlib.util
+import warnings
 from pathlib import Path
 
 import pytest
@@ -146,7 +147,11 @@ def test_request_ceiling_is_above_the_provider_limit():
 # proxy.py stores app state under plain string keys, which newer aiohttp warns
 # about. That predates this test; the test is just the first thing to build the
 # app on the host, so scope the filter here rather than imply it was fixed.
-@pytest.mark.filterwarnings("ignore::aiohttp.web.NotAppKeyWarning")
+# Filtered via a context manager rather than @pytest.mark.filterwarnings:
+# that marker resolves "aiohttp.web.NotAppKeyWarning" eagerly during test
+# setup, which imports aiohttp even on hosts where it's deliberately absent
+# (it ships only in the broker image) and crashes the whole run before the
+# skip below ever gets a chance to run.
 def test_app_applies_the_request_ceiling(tmp_path, monkeypatch):
     # The ceiling only takes effect if make_app() actually passes it to the
     # Application; a module constant nobody wires up is the bug this pins.
@@ -155,5 +160,7 @@ def test_app_applies_the_request_ceiling(tmp_path, monkeypatch):
     keyfile = tmp_path / "key"
     keyfile.write_text("sk-REAL")
     monkeypatch.setattr(proxy, "KEY_FILE", str(keyfile))
-    app = proxy.make_app()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", proxy.web.NotAppKeyWarning)
+        app = proxy.make_app()
     assert app._client_max_size == proxy.MAX_REQUEST_BYTES
