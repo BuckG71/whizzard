@@ -175,6 +175,55 @@ def test_hybrid_routes_model_to_broker_and_rest_to_onecli(monkeypatch):
     assert "HTTPS_PROXY" in adapter.credential_env_keys()
 
 
+def test_search_container_env_points_firecrawl_at_broker_with_placeholder():
+    """D-194 Phase C: a web-search launch points the firecrawl backend at the
+    search broker (not api.firecrawl.dev) and hands it a placeholder key — the
+    real key lives only on the broker, so it must never be in the scrub set
+    (there's nothing real to scrub)."""
+    from whizzard.adapters import hermes as hz
+
+    adapter = hz.HermesAdapter()
+    adapter.search = hz.SearchContext(base_url="http://whiz-search-broker-abc:8080")
+    env = adapter.container_env()
+    assert env["FIRECRAWL_API_URL"] == "http://whiz-search-broker-abc:8080"
+    assert env["FIRECRAWL_API_KEY"] == hz.SEARCH_PLACEHOLDER
+    assert "FIRECRAWL_API_KEY" not in adapter.credential_env_keys()
+
+
+def test_hybrid_search_exempts_both_brokers_from_onecli_proxy(monkeypatch):
+    """D-194 Phase C: with hybrid + web search, the cell must reach BOTH the
+    model broker and the search broker directly (they sit on the internal net),
+    not through the OneCLI proxy — so NO_PROXY lists both hosts. Otherwise the
+    firecrawl call would be routed out via the gateway and never hit the broker."""
+    import types
+
+    from whizzard.adapters import hermes as hz
+
+    monkeypatch.setattr(
+        hz, "fetch_secret",
+        lambda name: types.SimpleNamespace(value="real-" + name, source="host-env"),
+    )
+    adapter = hz.HermesAdapter(config={"secrets": ["DISCORD_BOT_TOKEN"]})
+    adapter.mediation = hz.MediationContext(
+        base_url="http://whiz-broker-abc:8080",
+        base_url_env="ANTHROPIC_BASE_URL",
+        secret_name="ANTHROPIC_API_KEY",
+    )
+    adapter.onecli = hz.OneCLIContext(
+        proxy_url="http://x:tok@onecli:10255", ca_host_path="/host/ca.pem"
+    )
+    adapter.search = hz.SearchContext(base_url="http://whiz-search-broker-abc:8080")
+    env = adapter.container_env()
+
+    no_proxy = env["NO_PROXY"].split(",")
+    assert "whiz-broker-abc" in no_proxy
+    assert "whiz-search-broker-abc" in no_proxy
+    assert env["no_proxy"] == env["NO_PROXY"]
+    # firecrawl still points at the broker + placeholder in hybrid
+    assert env["FIRECRAWL_API_URL"] == "http://whiz-search-broker-abc:8080"
+    assert env["FIRECRAWL_API_KEY"] == hz.SEARCH_PLACEHOLDER
+
+
 def test_hermes_container_env_fetches_platform_credentials(monkeypatch):
     fake_vault = {
         "DISCORD_BOT_TOKEN": "discord-secret-xyz",

@@ -1,0 +1,35 @@
+# Whizzard search-enabled Hermes cell (D-194 web_search; web-search build Phase C).
+#
+# Derived FROM whizzard-hermes so web-search client libraries are an OPT-IN
+# layer — non-search cells use the plain whizzard-hermes image and stay lean
+# (least-privilege; the search deps' supply-chain surface only ships when a
+# profile actually enables web search).
+#
+# Clients baked in (a contained cell has NO PyPI egress — only its backend
+# endpoint is allowlisted — so Hermes cannot lazy-install these at first use;
+# they must be present at build time):
+#   - firecrawl-py : the CONTAINED-rung default. Server-side search+scrape, so
+#     the cell reaches exactly one host (api.firecrawl.dev); thin client.
+#   - ddgs         : the KEYLESS open-rung alternative (DuckDuckGo). Pulls a
+#     TLS-impersonation client (primp) + lxml — acceptable ONLY on the open
+#     rung, where egress is already unconstrained.
+#
+# Containment is enforced at the NETWORK layer (per-profile egress allowlist),
+# NOT by withholding libraries: a contained (firecrawl) cell cannot reach
+# DuckDuckGo even though ddgs is installed, because egress is pinned to the
+# Firecrawl endpoint. Same principle as the base cell shipping curl (D-183).
+FROM whizzard-hermes:latest
+
+# --ignore-installed: same Debian pre-installed-`packaging` (no pip RECORD)
+# situation as the base Hermes install — let pip install its required versions
+# without trying to uninstall the shadowed system copies (single-purpose cell).
+# Version floors pinned per D-189 (smoke-gated bumps); tighten to exact pins if
+# reproducibility of the search tier ever needs it.
+USER root
+RUN pip install --no-cache-dir --break-system-packages --ignore-installed \
+    "firecrawl-py>=1.0" \
+    "ddgs>=6.0"
+USER whizzard
+WORKDIR /home/whizzard
+
+CMD ["/bin/bash"]

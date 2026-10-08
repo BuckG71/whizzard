@@ -297,6 +297,14 @@ def _reap_orphans() -> None:
             if not _older_than_grace(cname):
                 continue  # too young — its cell may still be coming up
             _docker(["rm", "-f", cname])
+            # D-194 Phase C: a search broker (if this session had web search)
+            # sits on this session's internal net — remove it + its own egress
+            # net FIRST, else the `whiz-int-<slug>` removal below fails because
+            # the search broker is still attached. Its key dir lives under a
+            # separate root (search-broker-keys) reaped here too.
+            _docker(["rm", "-f", f"whiz-search-broker-{slug}"])
+            _docker(["network", "rm", f"whiz-search-egress-{slug}"])
+            shutil.rmtree(STATE_DIR / "search-broker-keys" / slug, ignore_errors=True)
             _docker(["network", "rm", f"whiz-egress-{slug}"])
             _docker(["network", "rm", f"whiz-int-{slug}"])
             shutil.rmtree(_KEY_ROOT / slug, ignore_errors=True)

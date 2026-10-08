@@ -118,7 +118,10 @@ def rewrite_request_headers(headers, real_key: str, scheme: str = "api_key") -> 
     (anthropic-version, content-type, x-stainless-*, user-agent) passes through.
 
     scheme "api_key" → x-api-key: <key>. scheme "bearer" → Authorization:
-    Bearer <token> + the oauth beta header (Claude subscription / OAuth auth)."""
+    Bearer <token> + the oauth beta header (Claude subscription / OAuth auth).
+    scheme "bearer_plain" → Authorization: Bearer <key> with NO anthropic-beta
+    header — for non-Anthropic upstreams (Firecrawl web search, D-194 Phase C),
+    where the beta header would be spurious."""
     out: dict[str, str] = {}
     client_beta = ""
     for k, v in headers.items():
@@ -132,6 +135,10 @@ def rewrite_request_headers(headers, real_key: str, scheme: str = "api_key") -> 
     if scheme == "bearer":
         out["authorization"] = f"Bearer {real_key}"
         out["anthropic-beta"] = _oauth_beta(client_beta)
+    elif scheme == "bearer_plain":
+        out["authorization"] = f"Bearer {real_key}"
+        if client_beta:
+            out["anthropic-beta"] = client_beta
     else:
         out["x-api-key"] = real_key
         if client_beta:
