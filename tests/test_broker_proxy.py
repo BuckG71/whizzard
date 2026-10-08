@@ -11,6 +11,7 @@ imported by path.
 from __future__ import annotations
 
 import importlib.util
+import warnings
 from pathlib import Path
 
 import pytest
@@ -131,3 +132,35 @@ def test_load_key_fails_closed_on_empty(tmp_path):
     keyfile.write_text("   \n")
     with pytest.raises(RuntimeError):
         proxy.load_key(str(keyfile))
+
+
+def test_request_ceiling_is_above_the_provider_limit():
+    # aiohttp's client_max_size defaults to 1 MiB and request.read() enforces
+    # it, so an unset ceiling makes the broker 413 any request over 1 MiB and
+    # the cell sees that as if the provider sent it. The provider itself accepts
+    # 32 MB, so the broker's ceiling must sit ABOVE that — it is a memory guard
+    # on the buffered body, not a policy on request size.
+    assert proxy.MAX_REQUEST_BYTES > 32 * 1024 * 1024
+    assert proxy.MAX_REQUEST_BYTES > 1024 * 1024  # never aiohttp's default
+
+
+# proxy.py stores app state under plain string keys, which newer aiohttp warns
+# about. That predates this test; the test is just the first thing to build the
+# app on the host, so scope the filter here rather than imply it was fixed.
+# Filtered via a context manager rather than @pytest.mark.filterwarnings:
+# that marker resolves "aiohttp.web.NotAppKeyWarning" eagerly during test
+# setup, which imports aiohttp even on hosts where it's deliberately absent
+# (it ships only in the broker image) and crashes the whole run before the
+# skip below ever gets a chance to run.
+def test_app_applies_the_request_ceiling(tmp_path, monkeypatch):
+    # The ceiling only takes effect if make_app() actually passes it to the
+    # Application; a module constant nobody wires up is the bug this pins.
+    if proxy.web is None:
+        pytest.skip("aiohttp not installed on host (present in the broker image)")
+    keyfile = tmp_path / "key"
+    keyfile.write_text("sk-REAL")
+    monkeypatch.setattr(proxy, "KEY_FILE", str(keyfile))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", proxy.web.NotAppKeyWarning)
+        app = proxy.make_app()
+    assert app._client_max_size == proxy.MAX_REQUEST_BYTES

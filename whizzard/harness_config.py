@@ -63,6 +63,10 @@ _DEFAULT_HARNESSES: dict[str, dict] = {
             "provider": "anthropic",
             "secret": "ANTHROPIC_API_KEY",
             "base_url_env": "ANTHROPIC_BASE_URL",
+            # Stated, not inferred: a raw API key goes in `x-api-key`. Without
+            # this the scheme is guessed from the secret's name (see
+            # AUTH_SCHEMES for why that guess is worth avoiding).
+            "scheme": "api_key",
         },
     },
 }
@@ -91,6 +95,17 @@ _DENIED_ENV_KEYS: frozenset[str] = frozenset({
 
 # Standard env-var-name shape; a length cap keeps the argv sane.
 _VALID_ENV_NAME = re.compile(r"\A[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
+
+#: How the broker injects the resolved model credential upstream. "api_key" →
+#: the `x-api-key` header (a raw provider API key); "bearer" → `Authorization:
+#: Bearer` plus the OAuth beta header (a subscription / OAuth token).
+#:
+#: Declaring it is optional but recommended. Left undeclared, `broker.py` infers
+#: it from the secret's NAME, which is a heuristic that gets it wrong for
+#: perfectly reasonable names — a raw API key called `ANTHROPIC_API_TOKEN` is
+#: inferred as "bearer" because the name contains "TOKEN", and the upstream then
+#: rejects it with an opaque 401 several layers from the cause.
+AUTH_SCHEMES = ("api_key", "bearer")
 
 
 def _validate_env_name(name: object, *, harness: str, field_label: str) -> None:
@@ -199,6 +214,13 @@ def _validate_spec(name: str, spec: dict) -> None:
                 raise HarnessConfigError(
                     f"harness {name!r}: model_credential.{opt} must be a string"
                 )
+        # scheme: optional, but the only way to state the injection shape rather
+        # than have it guessed from the secret's name (see AUTH_SCHEMES).
+        if "scheme" in mc and mc["scheme"] not in AUTH_SCHEMES:
+            raise HarnessConfigError(
+                f"harness {name!r}: model_credential.scheme must be one of "
+                f"{', '.join(AUTH_SCHEMES)} (got {mc['scheme']!r})"
+            )
         # The model secret must NOT also be in `secrets`: that path injects the
         # real value, while mediation replaces it with a placeholder. Listing
         # it in both would leak the real key into the cell.

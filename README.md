@@ -54,7 +54,7 @@ The sandbox is the untrusted boundary. It never shares a network with anything h
 - **Network is a per-profile choice.** `off` = nothing (no DNS, no HTTP); `open` = full outbound access; `native` / `onecli` / `hybrid` = on, but outbound is routed so credentials stay out of the sandbox (see [Credential privacy](#credential-privacy)). `off` closes data exfiltration entirely.
 - **The container is hardened.** Non-root user, all Linux capabilities dropped, read-only container root, `no-new-privileges`, Docker socket unreachable. A vulnerable tool the agent invokes gets no root, no host, no escape hatch.
 - **Escalation is one-way, and you decide.** Permissions only narrow after launch. An agent that needs more surfaces a request to a file-mailbox you monitor; you approve or deny. No silent self-upgrade.
-- **Sessions are time-bounded.** Every session carries a duration cap and an idle cap; when they fire, the container stops. Blast radius is the declared window.
+- **Sessions are time-bounded when the profile says so — and the caps are enforced, not advisory.** A profile declares a duration cap and an idle cap; when either fires, the container stops and the reason lands in the audit log. Most bundled profiles set both. `default` deliberately sets neither, because it's the always-on baseline — so check the [table below](#profiles) before relying on a cap.
 - **Everything is audited.** An append-only log records what launched, with what profile and mounts, what was requested, how it resolved, and why it ended — and the sandbox can't reach the log to tamper with it.
 
 ## Credential privacy

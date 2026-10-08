@@ -3249,6 +3249,26 @@ The bump required a **build fix**: v0.19.0's dependency tree wants a different `
 
 ---
 
+### D-197: `model_credential.scheme` is declared, not inferred from the secret's name
+
+**Type:** architecture
+
+**Tags:** hermes, safety
+
+**Door Type:** two-way — an optional config field with a backwards-compatible default; removable without migrating existing configs.
+
+**Decision:** `harnesses.json` gains an optional `model_credential.scheme` field, one of `api_key` or `bearer`, validated at parse time (`harness_config.AUTH_SCHEMES`). It states how the broker injects the resolved model credential upstream: `api_key` → the `x-api-key` header, `bearer` → `Authorization: Bearer` plus the OAuth beta header. It applies to the harness's own declared secret only; when credential resolution falls through to one of `broker._CREDENTIAL_CANDIDATES`, that candidate's known scheme wins, since those names are ours rather than the user's. Undeclared, the scheme still falls back to `broker._infer_scheme`, so existing configs are unaffected. The bundled `hermes-cell` default now declares `api_key`. The launch banner reports the secret and scheme that actually resolved, and says explicitly when the scheme was inferred.
+
+**Rationale:** `_infer_scheme` guesses from the secret's NAME — any name containing `OAUTH` or `TOKEN` is treated as a bearer token. That is wrong for names people reasonably choose: a raw API key called `ANTHROPIC_API_TOKEN` matches on `TOKEN`, is sent as `Authorization: Bearer` with an unwanted `anthropic-beta: oauth-…` header, and the provider rejects it with a 401 that names nothing about the cause — several layers from the mistake, across a container boundary, in the credential path where debugging is hardest. The scheme is also carried into the broker as `BROKER_AUTH_SCHEME`, where anything other than `bearer` silently means `x-api-key`, so a bad guess propagates rather than failing loudly. Note that `_CREDENTIAL_CANDIDATES` already pairs each name with its correct scheme explicitly; only the user-declared secret was left to a heuristic. Declaring it costs one config line and removes a whole class of opaque auth failure. Keeping the inference as the undeclared fallback preserves backwards compatibility, and reporting it in the banner makes the remaining guess visible instead of silent.
+
+**Notes:** Surfaced by an architecture review of the repo at v0.1.0 (`docs/reference/architecture-review-2026-09.html`). Landed alongside two unrelated fixes from the same review: the broker's request-size ceiling (`BROKER_MAX_REQUEST_BYTES`, which had been left at aiohttp's 1 MiB default against a 32 MB provider limit) and a README overstatement about universal session time caps.
+
+**Source:** architecture review + follow-up discussion, 2026-09-30.
+
+**Status:** active.
+
+---
+
 ## Tag vocabulary
 
 Tags are drawn from a curated canonical vocabulary, not invented per entry. Free-form tagging defeats grep-based browse: a future search for "API decisions" misses entries tagged `library-surface` instead of `api`, and a vocabulary that grows by accretion ends up with 50 near-synonyms after 150 entries.
